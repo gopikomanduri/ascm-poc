@@ -46,11 +46,13 @@ class GoCoderAgent(BaseAgent):
             "{\"operations.go\": \"<complete code>\", \"operations_test.go\": \"<complete code>\"}."
         )
 
-    def run(self, existing_code: str, selected_arch: str, source_filename: str, test_filename: str) -> Dict[str, str]:
+    def run(self, existing_code: str, selected_arch: str, source_filename: str, test_filename: str, contract: str) -> Dict[str, str]:
         prompt = (
             f"Existing Go code:\n{existing_code}\n"
+            f"Repository contract:\n{contract}\n"
             f"Selected Design:\n{selected_arch}\n"
-            f"Generate updated '{source_filename}' and comprehensive unit tests in '{test_filename}'."
+            f"Generate a JSON object mapping repository-relative allowlisted paths to complete source strings. "
+            f"At minimum update '{source_filename}' and comprehensive tests in '{test_filename}'."
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)

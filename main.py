@@ -1,218 +1,141 @@
-import os
-import sys
-import yaml
 import argparse
+import sys
 from pathlib import Path
-from typing import List
 
-from orchestrator.state import SharedBlackboard, RepoContract
-from orchestrator.engine.sandbox import SandboxEngine
-from orchestrator.engine.verifier import VerifierEngine
 from orchestrator.agents.all_agents import (
-    DiscoveryAgent,
-    NFRThinkingAgent,
     ArchitectureAgent,
+    DiscoveryAgent,
     GoCoderAgent,
-    SecurityAuditorAgent
+    NFRThinkingAgent,
+    SecurityAuditorAgent,
 )
+from orchestrator.contracts import parse_skill_contract
+from orchestrator.engine.sandbox import PathViolationError, SandboxEngine
+from orchestrator.engine.verifier import VerifierEngine
+from orchestrator.git_service import GitService
+from orchestrator.state import SharedBlackboard
 
-def parse_skill_contract(repo_path: str) -> RepoContract:
-    """Finds and parses either SKILL.md or SKILLS.md with YAML frontmatter."""
-    p = Path(repo_path).resolve()
-    skill_file = p / "SKILL.md" if (p / "SKILL.md").exists() else p / "SKILLS.md"
-    
-    if not skill_file.exists():
-        print(f"    [!] Warning: No SKILL.md or SKILLS.md found in {p.name}")
-        return RepoContract(repo_path=str(p), name=p.name)
-    
-    # raw = skill_file.read_text(encoding="utf-8")
-    # meta = {}
-    # if raw.startswith("---"):
-    #     parts = raw.split("---", 2)
-    #     if len(parts) >= 3:
-    #         meta = yaml.safe_load(parts[1]) or {}
-    raw = skill_file.read_text(encoding="utf-8")
-    meta = {}
-    if raw.startswith("---"):
-            parts = raw.split("---", 2)
-            if len(parts) >= 3:
-                try:
-                    meta = yaml.safe_load(parts[1]) or {}
-                except yaml.YAMLError as e:
-                    print(f"    [!] Warning: Failed to parse YAML frontmatter in {skill_file.name}: {e}")
-                    meta = {}
-    
-    return RepoContract(
-        repo_path=str(p),
-        name=meta.get("name", p.name),
-        role=meta.get("role", "unaffected"),
-        allowed_paths=meta.get("allowed_paths", []),
-        raw_content=raw
-    )
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Autonomous Cross-Repo Service Contribution Orchestrator (ASCM CLI)"
+        description="Human-governed cross-repository change orchestrator"
     )
-    parser.add_argument(
-        "-r", "--repos",
-        nargs="+",
-        required=True,
-        help="List of local repository paths (e.g. -r ../simplecalculatorproject ../repo_client)"
-    )
-    parser.add_argument(
-        "-g", "--goal",
-        type=str,
-        default=None,
-        help="Stakeholder goal or requirement (if omitted, the CLI will prompt for it)"
-    )
+    parser.add_argument("-r", "--repos", nargs="+", required=True, help="Local repository paths")
+    parser.add_argument("-g", "--goal", help="Stakeholder requirement")
     args = parser.parse_args()
 
-    print("=" * 70)
-    print("   AUTONOMOUS CROSS-REPO AGENT ORCHESTRATOR (ASCM CLI)   ")
-    print("=" * 70)
-
-    # Validate that repository directories exist
-    valid_repos = []
-    for r in args.repos:
-        p = Path(r).resolve()
-        if not p.exists() or not p.is_dir():
-            print(f"[!] Error: Repository path does not exist or is not a directory: {r}")
-            sys.exit(1)
-        valid_repos.append(str(p))
-
-    goal = args.goal
+    valid_repos = _validate_repositories(args.repos)
+    goal = args.goal or input("Stakeholder requirement: ").strip()
     if not goal:
-        goal = input("\n[?] Enter Stakeholder Requirement: ").strip()
-        if not goal:
-            print("[!] Requirement cannot be empty.")
-            sys.exit(1)
+        sys.exit("Requirement cannot be empty.")
 
     state = SharedBlackboard(user_goal=goal, target_repos=valid_repos)
+    for repo in valid_repos:
+        contract = parse_skill_contract(repo)
+        state.contracts[repo] = contract
+        print(f"Ingested {contract.name}: {len(contract.allowed_paths)} allowed paths")
 
-    print(f"\n[*] Ingesting capability contracts across {len(valid_repos)} repos...")
-    for r in valid_repos:
-        contract = parse_skill_contract(r)
-        state.contracts[r] = contract
-        print(f"    -> Ingested: {contract.name} ({r})")
-
-    # Phase 1: Discovery & Dependency Mapping
-    print("\n[Phase 1: Discovery Agent running...]")
-    contracts_summary = {k: v.model_dump() for k, v in state.contracts.items()}
-    topology = DiscoveryAgent().run(contracts_summary, state.user_goal)
-    
-    providers = topology.get("providers", [])
-    consumers = topology.get("consumers", [])
+    topology = DiscoveryAgent().run(
+        {path: contract.model_dump() for path, contract in state.contracts.items()}, goal
+    )
+    providers = [path for path in topology.get("providers", []) if path in state.contracts]
+    consumers = [path for path in topology.get("consumers", []) if path in state.contracts]
     state.discovery_summary = topology.get("analysis", "")
-
-    print(f"\nTopology Breakdown:")
-    print(f"  • Providers (needs implementation): {[Path(p).name for p in providers]}")
-    print(f"  • Consumers (callers):              {[Path(c).name for c in consumers]}")
-    print(f"  • Analysis: {state.discovery_summary}")
+    print(f"Providers: {[Path(path).name for path in providers]}")
+    print(f"Consumers: {[Path(path).name for path in consumers]}")
 
     if not providers:
-        print("\n[!] Discovery Agent found no provider repos needing modification.")
-        sys.exit(0)
+        return print("No provider repositories require modification.")
 
-    # Phase 2: NFR Thinking Agent
-    print("\n[Phase 2: NFR Thinking Agent running...]")
-    nfr_questions = NFRThinkingAgent().run(state.user_goal, state.discovery_summary)
-    print("\n" + nfr_questions)
+    state.nfr_answers = _approval_prompt(
+        "NFR decisions", NFRThinkingAgent().run(goal, state.discovery_summary)
+    )
+    state.selected_architecture = _approval_prompt(
+        "Architecture selection", ArchitectureAgent().run(goal, state.nfr_answers)
+    )
 
-    # HITL Gate 1: NFR Decisions
-    print("-" * 70)
-    state.nfr_answers = input("[HITL GATE 1] Enter NFR answers & edge case decisions: ")
+    pending_changes = _generate_pending_changes(providers, state)
+    if not pending_changes:
+        return print("No audited, allowlisted changes are ready for approval.")
 
-    # Phase 3: Architecture Agent
-    print("\n[Phase 3: Architecture Agent running...]")
-    arch_options = ArchitectureAgent().run(state.user_goal, state.nfr_answers)
-    print("\n" + arch_options)
+    print("Pending changes:")
+    for contract, files in pending_changes:
+        print(f"- {contract.name}: {', '.join(files)}")
+    if input("Type APPROVE to write, verify, and commit local branches: ").strip().upper() != "APPROVE":
+        return print("Aborted before writing changes.")
 
-    # HITL Gate 2: Architecture Selection
-    print("-" * 70)
-    state.selected_architecture = input("[HITL GATE 2] Choose alternative (e.g. 'Proceed with Alternative 1'): ")
+    for contract, files in pending_changes:
+        _apply_and_commit(contract.repo_path, contract.allowed_paths, goal, files)
 
-    # Phase 4 & 5: Code Generation, Security Audit & Sandboxed Write for ALL Providers
-    for prov_path in providers:
-        prov_name = Path(prov_path).name
-        print(f"\n{'=' * 70}")
-        print(f"[*] Processing Provider: {prov_name} ({prov_path})")
-        print(f"{'=' * 70}")
 
-        provider_contract = state.contracts.get(prov_path)
-        if not provider_contract or not provider_contract.allowed_paths:
-            print(f"[!] Error: No allowed_paths configured in SKILL.md for {prov_name}. Skipping for safety.")
+def _validate_repositories(repositories: list[str]) -> list[str]:
+    valid_repos = []
+    for value in repositories:
+        path = Path(value).resolve()
+        if not path.is_dir():
+            sys.exit(f"Repository path does not exist or is not a directory: {value}")
+        valid_repos.append(str(path))
+    return valid_repos
+
+
+def _approval_prompt(label: str, content: str) -> str:
+    print(f"\n{label}:\n{content}")
+    return input(f"Enter {label.lower()}: ").strip()
+
+
+def _generate_pending_changes(providers: list[str], state: SharedBlackboard) -> list[tuple]:
+    pending_changes = []
+    for provider in providers:
+        contract = state.contracts[provider]
+        if not contract.allowed_paths:
+            print(f"Skipping {contract.name}: no editable path allowlist.")
+            continue
+        source_files = [path for path in Path(provider).rglob("*.go") if not path.name.endswith("_test.go")]
+        if not source_files:
+            print(f"Skipping {contract.name}: no Go source files found.")
             continue
 
-        go_files = list(Path(prov_path).glob("*.go"))
-        src_files = [f for f in go_files if not f.name.endswith("_test.go")]
-        if not src_files:
-            print(f"[!] Warning: No source Go files found in {prov_name}. Skipping.")
-            continue
-
-        src_file = src_files[0]
-        test_filename = src_file.stem + "_test.go"
-        existing_code = src_file.read_text(encoding="utf-8")
-
-        # Generate Code
-        print(f"\n[Phase 4: Go Coder Agent generating code for {src_file.name}...]")
-        generated = GoCoderAgent().run(
-            existing_code=existing_code,
-            selected_arch=state.selected_architecture,
-            source_filename=src_file.name,
-            test_filename=test_filename
-        )
-
-        # Security Audit
-        print("\n[Phase 5: Security Auditor scanning diffs...]")
-        sec_report = SecurityAuditorAgent().run(generated)
-        sec_passed = sec_report.get("passed", False)
-        sec_issues = sec_report.get("issues", [])
-
-        if not sec_passed:
-            print(f"[!] Security Flags Raised: {sec_issues}")
-        else:
-            print("    [✔] Security Audit Passed Cleanly.")
-
-        # Sandboxed Disk Write
-        print(f"\n[*] Enforcing file allowlist for {prov_name}...")
+        source = source_files[0]
+        source_path = source.relative_to(provider).as_posix()
+        test_path = source.with_name(f"{source.stem}_test.go").relative_to(provider).as_posix()
         try:
-            SandboxEngine.validate_and_write(
-                provider_contract.repo_path,
-                provider_contract.allowed_paths,
-                generated
+            generated = GoCoderAgent().run(
+                source.read_text(encoding="utf-8"),
+                state.selected_architecture,
+                source_path,
+                test_path,
+                contract.raw_content,
             )
-        except Exception as e:
-            print(f"\n[!] Sandboxing Violation Aborted Execution: {e}")
-            sys.exit(1)
+            SandboxEngine.validate(provider, contract.allowed_paths, generated)
+            report = SecurityAuditorAgent().run(generated)
+            if not isinstance(report, dict):
+                raise ValueError("security audit did not return an object")
+        except (OSError, PathViolationError, TypeError, ValueError) as error:
+            print(f"Skipping {contract.name}: generated patch rejected: {error}")
+            continue
 
-        # Phase 6: Run Go Test & Go Vet
-        print(f"\n[Phase 6: Verifier running 'go test' & 'go vet' in {prov_name}...]")
-        verification = VerifierEngine.run_go_checks(prov_path)
+        if not report.get("passed", False):
+            print(f"Skipping {contract.name}: security audit failed: {report.get('issues', [])}")
+            continue
+        pending_changes.append((contract, generated))
+    return pending_changes
 
-        if verification.tests_passed:
-            print("    [✔] 'go test -v ./...' PASSED!")
-        else:
-            print(f"    [✖] 'go test' FAILED:\n{verification.test_output}")
 
-        if verification.vet_passed:
-            print("    [✔] 'go vet ./...' PASSED!")
-        else:
-            print(f"    [!] 'go vet' warnings:\n{verification.vet_output}")
+def _apply_and_commit(repo_path: str, allowed_paths: list[str], goal: str, files: dict[str, str]) -> None:
+    try:
+        GitService.ensure_clean_repo(repo_path)
+        branch = GitService.create_branch(repo_path, goal)
+        SandboxEngine.validate_and_write(repo_path, allowed_paths, files)
+        verification = VerifierEngine.run_go_checks(repo_path)
+        if not verification.tests_passed or not verification.vet_passed:
+            print(f"Verification failed on {branch}; changes remain uncommitted for review.")
+            print(verification.test_output or verification.vet_output)
+            return
+        GitService.commit(repo_path, goal, list(files))
+        print(f"Committed verified changes on {branch}.")
+    except (OSError, RuntimeError) as error:
+        print(f"Unable to apply changes in {repo_path}: {error}")
 
-    # HITL Gate 3: Final Approval
-    print("\n" + "=" * 70)
-    print("FINAL SUMMARY AUDIT ACROSS REPOSITORIES:")
-    print(f"- Providers Modified: {[Path(p).name for p in providers]}")
-    print(f"- Consumers Observed: {[Path(c).name for c in consumers]}")
-    print("=" * 70)
-
-    decision = input("[HITL GATE 3] Type 'APPROVE' to stage simulated Git branch & PRs: ")
-    if decision.strip().upper() == "APPROVE":
-        state.approved_for_pr = True
-        print("\n[✔] SUCCESS: Staged feature branches across all modified repos and generated PRs!")
-    else:
-        print("\n[!] Aborted by user.")
 
 if __name__ == "__main__":
     main()
