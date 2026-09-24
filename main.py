@@ -36,7 +36,19 @@ def main():
     parser.add_argument("--dashboard-only", action="store_true", help="Launch standalone web dashboard to view persistent run histories")
     parser.add_argument("--port", type=int, default=8080, help="Port for web dashboard (default: 8080)")
     parser.add_argument("-y", "--yes", "--auto-approve", action="store_true", dest="auto_approve", help="Auto-approve non-functional requirements and final patches")
+    parser.add_argument("--provider", choices=["gemini", "openai", "anthropic", "ollama"], help="LLM Provider for BYOK (default: auto-detected from environment)")
+    parser.add_argument("--model", help="Specific model name (e.g., gpt-4o, claude-3-5-sonnet-20241022, qwen2.5-coder:32b, gemini-2.5-flash)")
+    parser.add_argument("--base-url", help="Custom base URL for OpenAI-compatible, Azure, Groq, or Ollama endpoints")
     args = parser.parse_args()
+
+    import os
+    if args.provider:
+        os.environ["LLM_PROVIDER"] = args.provider
+    if args.model:
+        os.environ["LLM_MODEL"] = args.model
+    if args.base_url:
+        os.environ["OPENAI_BASE_URL"] = args.base_url
+        os.environ["OLLAMA_HOST"] = args.base_url
 
     if args.dashboard_only:
         server = DashboardServer(port=args.port)
