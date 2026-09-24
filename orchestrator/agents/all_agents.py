@@ -296,7 +296,7 @@ class RevenueROIAgent(BaseAgent):
             tier="primary",
         )
 
-    def run(self, user_goal: str, clarified_prd: str, business_strategy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def run(self, user_goal: str, clarified_prd: str = "", business_strategy: Optional[Dict[str, Any]] = None, contracts: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
         prompt = (
             f"Feature Goal:\n{user_goal}\n\n"
             f"Clarified PRD:\n{clarified_prd}\n\n"
@@ -338,12 +338,16 @@ class ArchitectureReviewAgent(BaseAgent):
             tier="primary",
         )
 
-    def run(self, hld: str, lld: str, contracts: Optional[Dict[str, Any]] = None, user_goal: str = "") -> Dict[str, Any]:
+    def run(self, hld: str = "", lld: str = "", contracts: Optional[Dict[str, Any]] = None, user_goal: str = "", **kwargs) -> Dict[str, Any]:
+        hld_val = hld or kwargs.get("hld_spec", "")
+        lld_val = lld or kwargs.get("lld_tasks", "")
+        if isinstance(lld_val, list):
+            lld_val = json.dumps(lld_val, indent=2)
         prompt = (
             f"User Goal: {user_goal}\n\n"
             f"Repository Contracts:\n{json.dumps(contracts or {}, indent=2)}\n\n"
-            f"High-Level Design (HLD):\n{hld}\n\n"
-            f"Low-Level Design (LLD):\n{lld}\n\n"
+            f"High-Level Design (HLD):\n{hld_val}\n\n"
+            f"Low-Level Design (LLD):\n{lld_val}\n\n"
             "Conduct an adversarial architecture critique. Identify gaps, SPOF risks, validate NFRs (0-100), "
             "and decide verdict (APPROVE, APPROVE_WITH_REMARKS, REWORK_REQUIRED)."
         )
@@ -378,11 +382,21 @@ class CodeReviewAgent(BaseAgent):
             tier="primary",
         )
 
-    def run(self, files: Dict[str, str], hld: str = "", lld: str = "", contracts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def run(self, files: Optional[Dict[str, str]] = None, hld: str = "", lld: str = "", contracts: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        file_map = files or {}
+        if not file_map and "generated_diff" in kwargs:
+            target_files = kwargs.get("target_files", ["solution_diff.patch"])
+            if isinstance(target_files, list):
+                for f in target_files:
+                    file_map[f] = kwargs.get("generated_diff", "")
+            test_content = kwargs.get("test_content", "")
+            if test_content:
+                file_map["tests/test_solution.py"] = test_content
+        hld_val = hld or kwargs.get("hld_spec", "")
         prompt = (
-            f"HLD Context:\n{hld[:1500]}\n\n"
+            f"HLD Context:\n{hld_val[:1500]}\n\n"
             f"LLD Context:\n{lld[:1500]}\n\n"
-            f"Generated Files & Unit Tests:\n{json.dumps(files, indent=2)}\n\n"
+            f"Generated Files & Unit Tests:\n{json.dumps(file_map, indent=2)}\n\n"
             "Perform an adversarial, unbiased code review. Check syntax, error handling, security, performance, and unit test assertions. "
             "Compute overall_score (0-100), security_grade, test_coverage_assessment, findings, and decide if approved."
         )

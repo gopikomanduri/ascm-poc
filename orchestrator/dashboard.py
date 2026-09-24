@@ -268,6 +268,27 @@ class DashboardState:
             })
             self._flush_to_disk()
 
+    def record_unit_tests(
+        self,
+        test_cases: List[Dict[str, Any]],
+        repo: str = "api-gateway",
+        language: str = "python",
+        framework: str = "unittest",
+    ) -> None:
+        passed = all(tc.get("status") == "passed" for tc in test_cases)
+        total = len(test_cases)
+        passed_count = sum(1 for tc in test_cases if tc.get("status") == "passed")
+        self.record_test_result(
+            repo=repo,
+            language=language,
+            passed=passed,
+            total_tests=total,
+            passed_count=passed_count,
+            failed_count=total - passed_count,
+            test_cases=test_cases,
+            sandboxed=True,
+            framework=framework,
+        )
 
     def request_approval(self, pending_changes: List[Dict[str, Any]]) -> None:
         with self.lock:
@@ -498,12 +519,14 @@ class DashboardState:
 
 
     def _flush_to_disk(self) -> None:
+        if not self.file_path:
+            return
         try:
             snapshot = self._build_snapshot_dict()
             temp_path = self.file_path.with_suffix(".tmp")
             temp_path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
             temp_path.replace(self.file_path)
-        except OSError:
+        except (OSError, AttributeError):
             pass
 
 
