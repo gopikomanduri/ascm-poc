@@ -1,15 +1,17 @@
 import json
-from typing import Dict, Any, List
-from orchestrator.agents.base import BaseAgent
+from typing import Dict, Any, List, Optional
+from orchestrator.agents.base import BaseAgent, BaseLLMProvider
 
 
 class DiscoveryAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             "You are a Systems Topology Engineer. Analyze the user's functional goal against repo capability contracts. "
             "Classify every repo as 'provider', 'consumer', or 'unaffected'. "
             "Output JSON with this exact schema: "
-            '{"providers": ["repo_path"], "consumers": ["repo_path"], "unaffected": ["repo_path"], "analysis": "concise summary"}'
+            '{"providers": ["repo_path"], "consumers": ["repo_path"], "unaffected": ["repo_path"], "analysis": "concise summary"}',
+            provider=provider,
+            tier="fast",
         )
 
     def run(self, contracts: Dict[str, Any], goal: str) -> Dict[str, Any]:
@@ -19,7 +21,7 @@ class DiscoveryAgent(BaseAgent):
 
 
 class ProductAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             "You are a Principal Product Manager & Systems Analyst. "
             "Rigorously evaluate user requirements against both Functional Features and "
@@ -48,7 +50,9 @@ class ProductAgent(BaseAgent):
             '  "checkpoint_clarification_items": [\n'
             '     {"checkpoint": "module_or_task", "question": "specific deferred question", "default_assumption": "standard assumption"}\n'
             '  ]\n'
-            "}"
+            "}",
+            provider=provider,
+            tier="fast",
         )
 
     def run(self, user_input: str, conversation_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -71,12 +75,14 @@ class ProductAgent(BaseAgent):
 
 
 class DesignAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             "You are a Lead Software Architect. Generate High-Level Design (HLD) and Low-Level Design (LLD) "
             "documents for the feature request given the repository context.\n"
             "Output JSON with this exact schema:\n"
-            '{\n  "hld": "markdown string for HLD",\n  "lld": "markdown string for LLD"\n}'
+            '{\n  "hld": "markdown string for HLD",\n  "lld": "markdown string for LLD"\n}',
+            provider=provider,
+            tier="primary",
         )
 
     def run(self, clarified_prd: str, contracts: Dict[str, Any]) -> Dict[str, str]:
@@ -90,12 +96,14 @@ class DesignAgent(BaseAgent):
 
 
 class ArchitectAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             "You are a Principal Systems Architect. Break down the user requirement and design specs into discrete execution sub-tasks. "
             "Output JSON with this exact schema:\n"
             '{\n  "tasks": [\n'
-            '    {\n      "id": "TASK-1",\n      "title": "short title",\n      "description": "detailed instructions",\n      "assigned_agent": "coder|database|security",\n      "target_file": "relative/file/path.go"\n    }\n  ]\n}'
+            '    {\n      "id": "TASK-1",\n      "title": "short title",\n      "description": "detailed instructions",\n      "assigned_agent": "coder|database|security",\n      "target_file": "relative/file/path.go"\n    }\n  ]\n}',
+            provider=provider,
+            tier="primary",
         )
 
     def run(self, clarified_prd: str, hld: str, lld: str, contracts: Dict[str, Any]) -> Dict[str, Any]:
@@ -111,12 +119,14 @@ class ArchitectAgent(BaseAgent):
 
 
 class PlannerAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             "You are a Master Orchestrator Planner. Analyze a specific sub-task and decide which specialized agent "
             "should execute it and construct the detailed invocation payload.\n"
             "Output JSON:\n"
-            '{\n  "agent_type": "coder|database|security",\n  "reasoning": "why this agent was chosen",\n  "instructions": "specific task prompt for agent"\n}'
+            '{\n  "agent_type": "coder|database|security",\n  "reasoning": "why this agent was chosen",\n  "instructions": "specific task prompt for agent"\n}',
+            provider=provider,
+            tier="fast",
         )
 
     def run(self, task: Dict[str, Any], context: str) -> Dict[str, Any]:
@@ -126,11 +136,13 @@ class PlannerAgent(BaseAgent):
 
 
 class DatabaseAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             "You are a Database Engineer. Generate schema, SQL migration, or database access code for the task. "
             "Output JSON mapping repository-relative allowed file paths to complete file content strings:\n"
-            '{"internal/db/schema.go": "<complete code>"}'
+            '{"internal/db/schema.go": "<complete code>"}',
+            provider=provider,
+            tier="primary",
         )
 
     def run(self, instructions: str, contract: str, target_file: str) -> Dict[str, str]:
@@ -145,11 +157,13 @@ class DatabaseAgent(BaseAgent):
 
 
 class GoCoderAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             "You are a Staff Go Developer. Generate clean, idiomatic Go code and complete unit tests covering positive, negative, and edge cases. "
             "Output JSON mapping repository-relative allowed file paths to complete source strings:\n"
-            '{"operations.go": "<complete code>", "operations_test.go": "<complete code>"}'
+            '{"operations.go": "<complete code>", "operations_test.go": "<complete code>"}',
+            provider=provider,
+            tier="primary",
         )
 
     def run(self, existing_code: str, selected_arch: str, source_filename: str, test_filename: str, contract: str) -> Dict[str, str]:
@@ -178,10 +192,12 @@ class GoCoderAgent(BaseAgent):
 
 
 class SecurityAuditorAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             "You are an Application Security Auditor for Go. Inspect code for overflow, DoS, zero division, or resource leaks. "
-            'Output JSON: {"passed": bool, "issues": [str]}.'
+            'Output JSON: {"passed": bool, "issues": [str]}.',
+            provider=provider,
+            tier="fast",
         )
 
     def run(self, files: Dict[str, str]) -> Dict[str, Any]:
@@ -191,11 +207,13 @@ class SecurityAuditorAgent(BaseAgent):
 
 
 class CodeReviewAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             "You are a Senior Code Reviewer. Inspect generated code patches against design specs, Go best practices, "
             "and edge case handling.\n"
-            'Output JSON:\n{\n  "approved": bool,\n  "comments": ["comment 1", "comment 2"]\n}'
+            'Output JSON:\n{\n  "approved": bool,\n  "comments": ["comment 1", "comment 2"]\n}',
+            provider=provider,
+            tier="fast",
         )
 
     def run(self, files: Dict[str, str], hld: str, lld: str) -> Dict[str, Any]:
@@ -207,4 +225,5 @@ class CodeReviewAgent(BaseAgent):
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
+
 

@@ -440,6 +440,7 @@ class OrchestratorEngine:
 
         coder_agent = GoCoderAgent()
         max_healing_attempts = 3
+        committed_records = []
 
         for contract, files in pending_changes:
             try:
@@ -490,8 +491,46 @@ class OrchestratorEngine:
 
                 GitService.commit(contract.repo_path, self.state.user_goal, list(files))
                 self._log(f"[ SUCCESS ] Committed verified changes on branch '{branch}' for repo '{contract.name}'.")
+                committed_records.append({
+                    "contract": contract,
+                    "branch": branch,
+                    "files": files,
+                })
             except (OSError, RuntimeError) as error:
                 self._log(f"Error applying changes to '{contract.name}': {error}")
+
+        # Phase 6b: Coordinated Linked Cross-Repository PR Generation
+        if committed_records:
+            self._log(f"\n--- Coordinated Cross-Repository Pull Request Artifacts ---")
+            for record in committed_records:
+                c = record["contract"]
+                b = record["branch"]
+                f_list = list(record["files"].keys())
+                companions = [
+                    {"name": other["contract"].name, "branch": other["branch"], "role": "companion"}
+                    for other in committed_records
+                    if other["contract"].repo_path != c.repo_path
+                ]
+                pr_desc = GitService.generate_pr_description(
+                    goal=self.state.user_goal,
+                    files=f_list,
+                    role="provider",
+                    linked_repos=companions,
+                    prd_summary=self.state.prd,
+                )
+                artifact_path = GitService.write_pr_artifact(c.repo_path, pr_desc)
+                self._log(f"[+] Generated linked PR draft for '{c.name}': {artifact_path}")
+
+                # If remote push / PR creation is enabled
+                if os.environ.get("AUTO_PUSH_REMOTE", "").lower() in ("true", "1", "yes") or os.environ.get("CREATE_PR", "").lower() in ("true", "1", "yes"):
+                    if GitService.push_branch(c.repo_path, b):
+                        self._log(f"[+] Pushed branch '{b}' to origin for '{c.name}'.")
+                        pr_url = GitService.create_github_pr(
+                            c.repo_path, b, f"feat: {self.state.user_goal}", pr_desc
+                        )
+                        if pr_url:
+                            self._log(f"[+] Successfully opened GitHub Pull Request: {pr_url}")
+
 
     def _notify_phase(self, phase_name: str) -> None:
         print(f"\n--- {phase_name} ---")

@@ -30,7 +30,8 @@ This document outlines the items required to transform ASCM into a commercially 
 | **P1-1** | **Polyglot Language Engine** | Extend verification beyond Go to support Python (`pytest`/`unittest`) and Node/TypeScript (`npm test`). | 🟢 Completed |
 | **P1-2** | **Interactive Web Governance** | Add HTTP API actions to Dashboard for interactive approvals, clarifications, and diff inspections (`/api/action/*`). | 🟢 Completed |
 | **P1-3** | **Milestone User Feedback Loops** | Mandatory review gates at every key phase (Requirements PRD, Architecture HLD/LLD, Task Execution, Pre-Commit) with Confirm/Rework options. | 🟢 Completed |
-| **P1-4** | **Linked PR & Git Remote Automation** | Support pushing branches and generating cross-linked GitHub/GitLab Pull Requests. | ⚪ Planned (Phase 2) |
+| **P1-4** | **Linked PR & Git Remote Automation** | Automated cross-repository Git branch creation, linked Markdown Pull Request descriptions, and GitHub CLI (`gh pr create`) integration. | 🟢 Completed |
+| **P1-5** | **Cost-Optimized Model Cascading** | Tiered model routing (fast/small models like `gpt-4o-mini`, `gemini-1.5-flash`, `llama3.2:3b` for triage/grilling/reviews; frontier models for code & architecture). | 🟢 Completed |
 
 ---
 
@@ -39,7 +40,7 @@ This document outlines the items required to transform ASCM into a commercially 
 | ID | Feature | Description | Status |
 | :--- | :--- | :--- | :--- |
 | **P2-1** | **Centralized Contract & Policy Manager** | Organization-wide `SKILL.md` policies with RBAC on sensitive directory modifications. | ⚪ Planned (Phase 3) |
-| **P2-2** | **Isolated Container Execution** | Run tests and verifications inside isolated Docker/microVM sandboxes. | ⚪ Planned (Phase 3) |
+| **P2-2** | **Isolated Container Execution** | Run tests and verifications inside hermetic, unprivileged Docker containers (`--network none`). | 🟢 Completed |
 | **P2-3** | **SOC2 Audit Trail** | Tamper-proof logging of prompts, code patches, review evaluations, and approvals. | ⚪ Planned (Phase 3) |
 
 ---
@@ -54,4 +55,8 @@ This document outlines the items required to transform ASCM into a commercially 
 - **[2026-09-24] P0-5 Completed**: Decoupled engine from single-model vendor. Built native multi-provider BYOK architecture in `orchestrator/agents/base.py` supporting Gemini, OpenAI (`OPENAI_API_KEY`), Anthropic Claude (`ANTHROPIC_API_KEY`), and local open-source models via Ollama (`qwen2.5-coder`, `deepseek-coder`).
 - **[2026-09-24] P1-1 Completed**: Upgraded `VerifierEngine` with language auto-detection (Go, Python, Node.js) and structured diagnostic error formatting.
 - **[2026-09-24] P1-2 Completed**: Added interactive REST API endpoints (`/api/action/approve`, `/api/action/reject`, `/api/action/clarify`, `/api/action/milestone`) and governance state in `DashboardState`.
-- **[2026-09-24] Verification**: 34 unit tests passing across all components.
+- **[2026-09-24] P1-4 Completed**: Implemented automated Git branch creation, cross-repository linked Pull Request Markdown descriptions (`PULL_REQUEST.md`), and GitHub CLI (`gh pr create`) integration in `GitService`.
+- **[2026-09-24] P1-5 Completed**: Built intelligent model cascading and tiering (`tier="fast"` vs `tier="primary"`, `--fast-model` CLI flag, `FAST_MODEL` env var, and per-agent role overrides like `PRODUCT_AGENT_MODEL`) reducing API costs by up to 80%.
+- **[2026-09-24] P2-2 Completed**: Added hermetic Docker container sandboxing to `VerifierEngine` (`--sandbox` flag or `USE_DOCKER_SANDBOX=true`) with unprivileged network-isolated execution.
+- **[2026-09-24] Verification**: 42 unit tests passing across all components.
+

@@ -26,7 +26,8 @@ class MultiProviderBYOKTests(unittest.TestCase):
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key", "LLM_PROVIDER": "openai"}):
             provider = get_configured_provider()
             self.assertIsInstance(provider, OpenAICompatibleProvider)
-            self.assertEqual(provider.model, "gpt-4o-mini")
+            self.assertEqual(provider.model, "gpt-4o")
+
 
     def test_provider_explicit_anthropic(self):
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test-key", "LLM_PROVIDER": "anthropic"}):

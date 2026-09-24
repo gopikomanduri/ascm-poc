@@ -200,45 +200,83 @@ def get_configured_provider(
     provider_name: Optional[str] = None,
     model: Optional[str] = None,
     base_url: Optional[str] = None,
+    tier: str = "primary",
+    agent_name: Optional[str] = None,
 ) -> BaseLLMProvider:
     _load_dotenv()
     name = (provider_name or os.environ.get("LLM_PROVIDER", "")).lower().strip()
+
+    # Agent or Tier model resolution
+    resolved_model = model
+    if not resolved_model and agent_name:
+        # Check specific agent override: e.g. PRODUCT_AGENT_MODEL or PRODUCTAGENT_MODEL
+        resolved_model = os.environ.get(f"{agent_name.upper()}_MODEL") or os.environ.get(
+            f"{agent_name.upper().replace('AGENT', '_AGENT')}_MODEL"
+        )
+
+    if not resolved_model and tier == "fast":
+        resolved_model = os.environ.get("FAST_MODEL") or os.environ.get("FAST_LLM_MODEL")
 
     # 1. Explicit provider selection
     if name == "gemini":
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key:
             raise RuntimeError("GEMINI_API_KEY is required for 'gemini' provider.")
-        return GeminiProvider(api_key=key, model=model)
+        target_model = resolved_model or (
+            "gemini-1.5-flash" if tier == "fast" else os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-2.5-flash")
+        )
+        return GeminiProvider(api_key=key, model=target_model)
 
     if name == "openai":
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
             raise RuntimeError("OPENAI_API_KEY is required for 'openai' provider.")
-        return OpenAICompatibleProvider(api_key=key, base_url=base_url, model=model)
+        target_model = resolved_model or (
+            "gpt-4o-mini" if tier == "fast" else os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
+        )
+        return OpenAICompatibleProvider(api_key=key, base_url=base_url, model=target_model)
 
     if name == "anthropic":
         key = os.environ.get("ANTHROPIC_API_KEY")
         if not key:
             raise RuntimeError("ANTHROPIC_API_KEY is required for 'anthropic' provider.")
-        return AnthropicProvider(api_key=key, model=model)
+        target_model = resolved_model or (
+            "claude-3-5-haiku-latest" if tier == "fast" else os.environ.get("ANTHROPIC_MODEL") or os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20241022")
+        )
+        return AnthropicProvider(api_key=key, model=target_model)
 
     if name == "ollama":
-        return OllamaProvider(host=base_url or os.environ.get("OLLAMA_HOST"), model=model)
+        target_model = resolved_model or (
+            os.environ.get("OLLAMA_FAST_MODEL", "llama3.2:3b") if tier == "fast" else os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:latest")
+        )
+        return OllamaProvider(host=base_url or os.environ.get("OLLAMA_HOST"), model=target_model)
 
     # 2. Auto-detection based on present environment keys (BYOK)
     if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        return GeminiProvider(api_key=key, model=model)
+        target_model = resolved_model or (
+            "gemini-1.5-flash" if tier == "fast" else os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-2.5-flash")
+        )
+        return GeminiProvider(api_key=key, model=target_model)
 
     if os.environ.get("OPENAI_API_KEY"):
-        return OpenAICompatibleProvider(api_key=os.environ["OPENAI_API_KEY"], base_url=base_url, model=model)
+        target_model = resolved_model or (
+            "gpt-4o-mini" if tier == "fast" else os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
+        )
+        return OpenAICompatibleProvider(api_key=os.environ["OPENAI_API_KEY"], base_url=base_url, model=target_model)
 
     if os.environ.get("ANTHROPIC_API_KEY"):
-        return AnthropicProvider(api_key=os.environ["ANTHROPIC_API_KEY"], model=model)
+        target_model = resolved_model or (
+            "claude-3-5-haiku-latest" if tier == "fast" else os.environ.get("ANTHROPIC_MODEL") or os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20241022")
+        )
+        return AnthropicProvider(api_key=os.environ["ANTHROPIC_API_KEY"], model=target_model)
 
     if os.environ.get("OLLAMA_HOST") or os.environ.get("OLLAMA_MODEL"):
-        return OllamaProvider(host=base_url, model=model)
+        target_model = resolved_model or (
+            os.environ.get("OLLAMA_FAST_MODEL", "llama3.2:3b") if tier == "fast" else os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:latest")
+        )
+        return OllamaProvider(host=base_url, model=target_model)
+
 
     # 3. None configured - helpful BYOK prompt
     raise RuntimeError(
@@ -253,9 +291,16 @@ def get_configured_provider(
 
 
 class BaseAgent:
-    def __init__(self, system_instruction: str, provider: Optional[BaseLLMProvider] = None):
+    def __init__(
+        self,
+        system_instruction: str,
+        provider: Optional[BaseLLMProvider] = None,
+        tier: str = "primary",
+    ):
         self.system_instruction = system_instruction
-        self.provider = provider or get_configured_provider()
+        self.tier = tier
+        agent_name = self.__class__.__name__
+        self.provider = provider or get_configured_provider(tier=self.tier, agent_name=agent_name)
 
     def call(self, prompt: str, json_mode: bool = False) -> str:
         return self.provider.generate(
@@ -263,3 +308,4 @@ class BaseAgent:
             system_instruction=self.system_instruction,
             json_mode=json_mode,
         )
+

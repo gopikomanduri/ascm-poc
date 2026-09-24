@@ -1,6 +1,8 @@
+import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 class VerificationResult(BaseModel):
@@ -9,6 +11,7 @@ class VerificationResult(BaseModel):
     vet_passed: bool = True
     vet_output: str = ""
     language: str = "go"
+    sandboxed: bool = False
 
     @property
     def passed(self) -> bool:
@@ -35,6 +38,44 @@ class VerifierEngine:
         return "generic"
 
     @staticmethod
+    def is_docker_sandboxing_enabled() -> bool:
+        flag = os.environ.get("USE_DOCKER_SANDBOX", "").lower().strip()
+        return flag in ("true", "1", "yes") and shutil.which("docker") is not None
+
+    @staticmethod
+    def _execute(
+        cmd: List[str],
+        repo_path: str,
+        docker_image: Optional[str] = None,
+    ) -> tuple[subprocess.CompletedProcess, bool]:
+        """
+        Executes a command either in a sandboxed Docker container (if enabled and available)
+        or natively on the host system. Returns (CompletedProcess, is_sandboxed).
+        """
+        sandboxed = False
+        final_cmd = cmd
+        abs_repo = str(Path(repo_path).resolve())
+
+        if VerifierEngine.is_docker_sandboxing_enabled() and docker_image:
+            final_cmd = [
+                "docker", "run", "--rm",
+                "--network", "none",
+                "-v", f"{abs_repo}:/workspace",
+                "-w", "/workspace",
+                docker_image,
+                *cmd
+            ]
+            sandboxed = True
+
+        result = subprocess.run(
+            final_cmd,
+            cwd=repo_path if not sandboxed else None,
+            capture_output=True,
+            text=True,
+        )
+        return result, sandboxed
+
+    @staticmethod
     def run_checks(repo_path: str) -> VerificationResult:
         lang = VerifierEngine.detect_language(repo_path)
         if lang == "go":
@@ -48,68 +89,58 @@ class VerifierEngine:
 
     @staticmethod
     def run_go_checks(repo_path: str) -> VerificationResult:
-        if not shutil.which("go"):
+        sandboxed_enabled = VerifierEngine.is_docker_sandboxing_enabled()
+        if not sandboxed_enabled and not shutil.which("go"):
             return VerificationResult(
                 tests_passed=False,
                 test_output="Go executable not found on system PATH",
                 vet_passed=False,
                 vet_output="Go executable not found",
                 language="go",
+                sandboxed=False,
             )
-        # 1. Run native Go unit tests
-        test_run = subprocess.run(
-            ["go", "test", "-v", "./..."],
-            cwd=repo_path,
-            capture_output=True,
-            text=True
-        )
-        
-        # 2. Run static analysis via go vet
-        vet_run = subprocess.run(
-            ["go", "vet", "./..."],
-            cwd=repo_path,
-            capture_output=True,
-            text=True
-        )
-        
+
+        docker_img = "golang:1.22-alpine"
+        test_run, is_sandboxed = VerifierEngine._execute(["go", "test", "-v", "./..."], repo_path, docker_img)
+        vet_run, _ = VerifierEngine._execute(["go", "vet", "./..."], repo_path, docker_img)
+
         return VerificationResult(
             tests_passed=(test_run.returncode == 0),
             test_output=test_run.stdout or test_run.stderr,
             vet_passed=(vet_run.returncode == 0),
             vet_output=vet_run.stderr,
             language="go",
+            sandboxed=is_sandboxed,
         )
 
     @staticmethod
     def run_python_checks(repo_path: str) -> VerificationResult:
+        docker_img = "python:3.11-alpine"
         python_bin = shutil.which("python3") or shutil.which("python") or "python"
-        test_run = subprocess.run(
-            [python_bin, "-m", "unittest", "discover", "-s", ".", "-v"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True
-        )
+        cmd = [python_bin, "-m", "unittest", "discover", "-s", ".", "-v"]
+        test_run, is_sandboxed = VerifierEngine._execute(cmd, repo_path, docker_img)
+
         return VerificationResult(
             tests_passed=(test_run.returncode == 0),
             test_output=test_run.stdout or test_run.stderr,
             vet_passed=True,
             vet_output="",
             language="python",
+            sandboxed=is_sandboxed,
         )
 
     @staticmethod
     def run_node_checks(repo_path: str) -> VerificationResult:
+        docker_img = "node:20-alpine"
         npm_bin = shutil.which("npm") or "npm"
-        test_run = subprocess.run(
-            [npm_bin, "test", "--", "--passWithNoTests"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True
-        )
+        cmd = [npm_bin, "test", "--", "--passWithNoTests"]
+        test_run, is_sandboxed = VerifierEngine._execute(cmd, repo_path, docker_img)
+
         return VerificationResult(
             tests_passed=(test_run.returncode == 0),
             test_output=test_run.stdout or test_run.stderr,
             vet_passed=True,
             vet_output="",
             language="node",
+            sandboxed=is_sandboxed,
         )

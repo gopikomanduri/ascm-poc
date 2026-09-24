@@ -38,7 +38,10 @@ def main():
     parser.add_argument("-y", "--yes", "--auto-approve", action="store_true", dest="auto_approve", help="Auto-approve non-functional requirements and final patches")
     parser.add_argument("--provider", choices=["gemini", "openai", "anthropic", "ollama"], help="LLM Provider for BYOK (default: auto-detected from environment)")
     parser.add_argument("--model", help="Specific model name (e.g., gpt-4o, claude-3-5-sonnet-20241022, qwen2.5-coder:32b, gemini-2.5-flash)")
+    parser.add_argument("--fast-model", help="Small/fast model for triage, grilling & review (e.g., gpt-4o-mini, gemini-1.5-flash, llama3.2:3b)")
     parser.add_argument("--base-url", help="Custom base URL for OpenAI-compatible, Azure, Groq, or Ollama endpoints")
+    parser.add_argument("--create-pr", action="store_true", help="Push branches and generate linked Pull Requests on GitHub")
+    parser.add_argument("--sandbox", action="store_true", help="Execute test verifications inside hermetic Docker containers")
     args = parser.parse_args()
 
     import os
@@ -46,9 +49,17 @@ def main():
         os.environ["LLM_PROVIDER"] = args.provider
     if args.model:
         os.environ["LLM_MODEL"] = args.model
+    if args.fast_model:
+        os.environ["FAST_MODEL"] = args.fast_model
     if args.base_url:
         os.environ["OPENAI_BASE_URL"] = args.base_url
         os.environ["OLLAMA_HOST"] = args.base_url
+    if args.create_pr:
+        os.environ["CREATE_PR"] = "true"
+        os.environ["AUTO_PUSH_REMOTE"] = "true"
+    if args.sandbox:
+        os.environ["USE_DOCKER_SANDBOX"] = "true"
+
 
     if args.dashboard_only:
         server = DashboardServer(port=args.port)
