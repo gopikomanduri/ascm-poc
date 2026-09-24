@@ -162,6 +162,35 @@ class UserManager:
                     "avatar": f"https://api.dicebear.com/7.x/identicon/svg?seed={ident}",
                     "created_at": now_iso,
                     "last_login": now_iso,
+                    "onboarding_completed": False,
+                    "developed_apps": [
+                        {
+                            "id": "app-stripe-gw",
+                            "name": "Distributed Stripe Payment Gateway",
+                            "description": "Multi-repo payment processing with idempotency keys, Stripe webhooks, and client SDKs.",
+                            "archetype": "talking_to_existing_repos",
+                            "is_internal": False,
+                            "repos": ["repos/payment-service", "repos/consumer-portal"],
+                            "skills_status": "present",
+                            "skills_path": "SKILLS.md",
+                            "agents": ["ProductManager", "Architect", "BusinessStrategy", "RevenueROI", "ArchitectureReview", "Coder", "CodeReview", "SecurityAudit", "Verifier"],
+                            "status": "Active",
+                            "created_at": now_iso,
+                        },
+                        {
+                            "id": "app-auth-sync",
+                            "name": "Internal Auth & Session Cache",
+                            "description": "High-throughput Redis session cache with JWT token rotation and sliding expirations.",
+                            "archetype": "enhancement",
+                            "is_internal": True,
+                            "repos": ["repos/auth-core"],
+                            "skills_status": "present",
+                            "skills_path": "SKILLS.md",
+                            "agents": ["ProductManager", "Architect", "ArchitectureReview", "Coder", "CodeReview", "SecurityAudit", "Verifier"],
+                            "status": "Completed",
+                            "created_at": now_iso,
+                        },
+                    ],
                     "choices": {
                         "preferred_provider": os.environ.get("LLM_PROVIDER", "gemini"),
                         "gemini_api_key": os.environ.get("GEMINI_API_KEY", ""),
@@ -184,6 +213,10 @@ class UserManager:
                     user["email"] = email
                 if phone and not user.get("phone"):
                     user["phone"] = phone
+                if "developed_apps" not in user:
+                    user["developed_apps"] = []
+                if "onboarding_completed" not in user:
+                    user["onboarding_completed"] = False
                 audit_action = "USER_LOGIN"
 
             self.active_user_id = ident
@@ -212,12 +245,69 @@ class UserManager:
     def get_active_user(self) -> Optional[Dict[str, Any]]:
         with self.lock:
             if self.active_user_id and self.active_user_id in self.users:
-                return self.users[self.active_user_id]
+                u = self.users[self.active_user_id]
+                if "developed_apps" not in u:
+                    u["developed_apps"] = []
+                return u
             # Return first user if exists, else a guest/placeholder profile
             if self.users:
                 first_k = next(iter(self.users))
-                return self.users[first_k]
+                u = self.users[first_k]
+                if "developed_apps" not in u:
+                    u["developed_apps"] = []
+                return u
             return None
+
+    def get_user_apps(self, identifier: Optional[str] = None) -> List[Dict[str, Any]]:
+        user = self.get_user(identifier) if identifier else self.get_active_user()
+        if not user:
+            return []
+        return user.get("developed_apps", [])
+
+    def add_user_app(self, app_data: Dict[str, Any], identifier: Optional[str] = None) -> Dict[str, Any]:
+        ident = identifier or self.active_user_id
+        if not ident:
+            active = self.get_active_user()
+            ident = active.get("id") if active else None
+
+        with self.lock:
+            if not ident or ident not in self.users:
+                return {"status": "error", "message": "No active user found to associate app."}
+            user = self.users[ident]
+            apps = user.setdefault("developed_apps", [])
+            app_id = app_data.get("id") or f"app-{int(time.time()*1000)}"
+            app_record = {
+                "id": app_id,
+                "name": app_data.get("name", "Untitled App"),
+                "description": app_data.get("description", ""),
+                "archetype": app_data.get("archetype", "brand_new"),
+                "is_internal": bool(app_data.get("is_internal", False)),
+                "repos": app_data.get("repos", []),
+                "skills_status": app_data.get("skills_status", "missing"),
+                "skills_path": app_data.get("skills_path", "SKILLS.md"),
+                "agents": app_data.get("agents", []),
+                "status": app_data.get("status", "Active"),
+                "created_at": datetime.now().isoformat(),
+            }
+            apps.insert(0, app_record)
+            self._save()
+
+        AUDIT_LOGGER.log_event(
+            event_type="PRODUCT_CREATED",
+            agent="USER_WORKSPACE",
+            action="ADD_APP",
+            details={"app_id": app_id, "name": app_record["name"], "archetype": app_record["archetype"]},
+        )
+        return {"status": "ok", "app": app_record}
+
+    def complete_onboarding(self, identifier: Optional[str] = None) -> Dict[str, Any]:
+        ident = identifier or self.active_user_id
+        with self.lock:
+            if not ident or ident not in self.users:
+                return {"status": "error", "message": "No active user session"}
+            self.users[ident]["onboarding_completed"] = True
+            self._save()
+        return {"status": "ok", "message": "Onboarding completed successfully"}
 
     def update_profile(self, identifier: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -235,6 +325,8 @@ class UserManager:
                 user["email"] = str(updates["email"]).strip()
             if "phone" in updates and updates["phone"]:
                 user["phone"] = str(updates["phone"]).strip()
+            if "onboarding_completed" in updates:
+                user["onboarding_completed"] = bool(updates["onboarding_completed"])
 
             # Update choices / BYOK preferences
             if "choices" in updates and isinstance(updates["choices"], dict):

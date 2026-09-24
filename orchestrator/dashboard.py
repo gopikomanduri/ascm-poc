@@ -641,6 +641,10 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             user = USER_MANAGER.get_active_user()
             self._send_json({"status": "ok", "user": user})
 
+        elif path == "/api/apps":
+            apps = USER_MANAGER.get_user_apps()
+            self._send_json({"status": "ok", "apps": apps})
+
         elif path == "/api/repos/detect":
             detected = []
             cur = Path.cwd()
@@ -784,6 +788,39 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/auth/logout":
             USER_MANAGER.logout()
             self._send_json({"status": "ok", "message": "Logged out successfully"})
+        elif path == "/api/apps/create":
+            res = USER_MANAGER.add_user_app(payload)
+            self._send_json(res)
+        elif path == "/api/onboarding/complete":
+            res = USER_MANAGER.complete_onboarding()
+            self._send_json(res)
+        elif path == "/api/product/analyze-repo":
+            from orchestrator.product_wizard import RepoAnalyzer
+            repo_path = payload.get("repo_path", "")
+            custom_skills = payload.get("custom_skills_path")
+            res = RepoAnalyzer.analyze_repo(repo_path, custom_skills)
+            self._send_json(res)
+        elif path == "/api/product/create-skills-md":
+            from orchestrator.product_wizard import RepoAnalyzer
+            repo_path = payload.get("repo_path", "")
+            role = payload.get("role", "provider")
+            paths = payload.get("allowed_paths", [])
+            desc = payload.get("description", "")
+            res = RepoAnalyzer.scaffold_skills_md(repo_path, role=role, allowed_paths=paths, description=desc)
+            self._send_json(res)
+        elif path == "/api/product/grill-clarify":
+            from orchestrator.product_wizard import RepoAnalyzer
+            answers = payload.get("answers", {})
+            res = RepoAnalyzer.grill_repo_clarifications(answers)
+            self._send_json(res)
+        elif path == "/api/product/recommend-agents":
+            from orchestrator.product_wizard import AgentRosterAdvisor
+            archetype = payload.get("archetype", "brand_new")
+            is_internal = bool(payload.get("is_internal", False))
+            repo_count = int(payload.get("repo_count", 1))
+            user_notes = payload.get("user_notes", "")
+            res = AgentRosterAdvisor.recommend_agents(archetype, is_internal=is_internal, repo_count=repo_count, user_notes=user_notes)
+            self._send_json(res)
         elif path == "/api/action/launch":
             goal = payload.get("goal", "").strip()
             repos = payload.get("repos", [])
@@ -1498,6 +1535,183 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       padding: 20px;
       margin-top: 20px;
     }
+
+    /* Onboarding & Apps Styling */
+    .onboarding-hero {
+      background: linear-gradient(135deg, rgba(88, 166, 255, 0.15), rgba(63, 185, 80, 0.1));
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+    .onboarding-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    .onboarding-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .onboarding-card-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .apps-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .apps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 20px;
+    }
+    .app-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .app-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent-blue);
+    }
+    .app-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .app-archetype-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 12px;
+      text-transform: uppercase;
+    }
+    .archetype-greenfield { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); border: 1px solid rgba(63, 185, 80, 0.3); }
+    .archetype-multi_repo { background: rgba(88, 166, 255, 0.15); color: var(--accent-blue); border: 1px solid rgba(88, 166, 255, 0.3); }
+    .archetype-enhancement { background: rgba(210, 153, 34, 0.15); color: var(--accent-yellow); border: 1px solid rgba(210, 153, 34, 0.3); }
+
+    .scope-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .scope-internal { background: rgba(188, 140, 255, 0.2); color: var(--accent-purple); }
+    .scope-commercial { background: rgba(88, 166, 255, 0.2); color: var(--accent-blue); }
+
+    /* Wizard Modal */
+    .wizard-steps {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      position: relative;
+    }
+    .wizard-step-node {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      z-index: 2;
+    }
+    .wizard-step-node.active { color: var(--accent-blue); font-weight: 600; }
+    .wizard-step-node.completed { color: var(--accent-green); }
+    .wizard-step-circle {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--card-sub-bg);
+      border: 2px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+    .wizard-step-node.active .wizard-step-circle {
+      border-color: var(--accent-blue);
+      background: rgba(88, 166, 255, 0.2);
+      color: #ffffff;
+    }
+    .wizard-step-node.completed .wizard-step-circle {
+      border-color: var(--accent-green);
+      background: rgba(63, 185, 80, 0.2);
+      color: var(--accent-green);
+    }
+    .archetype-selector {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .archetype-option {
+      background: var(--card-sub-bg);
+      border: 2px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .archetype-option:hover { border-color: var(--accent-blue); }
+    .archetype-option.selected {
+      border-color: var(--accent-blue);
+      background: rgba(88, 166, 255, 0.1);
+    }
+    .grill-callout {
+      background: rgba(210, 153, 34, 0.08);
+      border: 1px solid var(--accent-yellow);
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 14px;
+    }
+    .agent-roster-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 6px;
+    }
+    .agent-item-card {
+      background: var(--card-sub-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 12px;
+    }
+    .agent-item-card.recommended {
+      border-color: rgba(63, 185, 80, 0.4);
+    }
   </style>
 </head>
 <body>
@@ -1511,8 +1725,11 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       <select class="run-select" id="run-selector" onchange="onRunChanged()">
         <option value="live">🔴 Live Active Session</option>
       </select>
-      <button class="btn btn-primary" onclick="openLaunchModal()">
-        <span>+ Launch Goal</span>
+      <button class="btn btn-primary" onclick="openNewProductWizard()">
+        <span>+ New Product</span>
+      </button>
+      <button class="btn btn-outline" onclick="openLaunchModal()">
+        <span>⚡ Quick Sprint</span>
       </button>
       <div class="user-profile-btn" id="user-nav-btn" onclick="onUserNavClick()">
         <span class="user-avatar-mini" id="nav-avatar"></span>
@@ -1536,6 +1753,13 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
 
   <!-- Navigation Tabs -->
   <div class="tabs-bar">
+    <button class="tab-btn" id="tab-btn-apps" onclick="switchTab('apps')">
+      <span>🚀 My Apps & Projects</span>
+      <span class="tab-badge" id="tab-badge-apps">0</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-onboarding" onclick="switchTab('onboarding')">
+      <span>✨ Onboarding</span>
+    </button>
     <button class="tab-btn active" id="tab-btn-pipeline" onclick="switchTab('pipeline')">
       <span>Pipeline & Agents</span>
     </button>
@@ -2057,6 +2281,127 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- VIEW: MY APPS & DEVELOPED PROJECTS -->
+  <div class="tab-content" id="view-apps">
+    <div class="apps-top-bar">
+      <div>
+        <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">My Developed Apps & Projects</h2>
+        <p style="font-size: 13px; color: var(--text-muted);">Manage your active products, cross-repo integrations, and contract-governed AI agent squads.</p>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-primary" onclick="openNewProductWizard()">
+          <span>+ Create New Product</span>
+        </button>
+        <button class="btn btn-outline" onclick="loadUserApps()">
+          <span>↻ Refresh</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom: 20px;">
+      <div class="stat-card">
+        <span class="stat-label">TOTAL DEVELOPED APPS</span>
+        <span class="stat-val val-running" id="app-stat-total">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">GREENFIELD PRODUCTS</span>
+        <span class="stat-val val-completed" id="app-stat-greenfield">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">MULTI-REPO INTEGRATIONS</span>
+        <span class="stat-val val-waiting" id="app-stat-multirepo">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">BROWNFIELD ENHANCEMENTS</span>
+        <span class="stat-val val-tasks" id="app-stat-enhancements">0</span>
+      </div>
+    </div>
+
+    <div class="apps-grid" id="apps-grid">
+      <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: var(--card-bg); border: 1px dashed var(--border-color); border-radius: 8px;">
+        <div style="font-size: 24px; margin-bottom: 10px;">📦</div>
+        <div style="font-weight: 600; margin-bottom: 6px;">No Products Registered Yet</div>
+        <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Create your first product to orchestrate autonomous development sprints.</div>
+        <button class="btn btn-primary" onclick="openNewProductWizard()">+ Create New Product</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW: ONBOARDING -->
+  <div class="tab-content" id="view-onboarding">
+    <div class="onboarding-hero">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <span class="pill pill-fw" style="margin-bottom: 12px; display: inline-block;">WELCOME TO ASCM</span>
+          <h1 style="font-size: 24px; font-weight: 800; margin-bottom: 8px;">Autonomous Software Construction Machine</h1>
+          <p style="font-size: 14px; color: var(--text-muted); max-width: 680px; line-height: 1.6;">
+            A deterministic, multi-agent engineering platform that converts natural language vision into verified, production-ready code across microservices and repositories with zero vendor lock-in.
+          </p>
+        </div>
+        <div style="font-size: 48px;">🚀</div>
+      </div>
+      <div style="display: flex; gap: 14px; margin-top: 20px;">
+        <button class="btn btn-success" style="padding: 10px 20px; font-size: 14px;" onclick="completeOnboarding()">
+          <span>Complete Onboarding & Go to Apps &rarr;</span>
+        </button>
+        <button class="btn btn-outline" onclick="openNewProductWizard()">
+          <span>+ Create First Product</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="onboarding-grid">
+      <div class="onboarding-card">
+        <div class="onboarding-card-num">1</div>
+        <h3 style="font-size: 15px; font-weight: 700;">Bring Your Own Keys (BYOK)</h3>
+        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+          Connect your choice of frontier model providers: Google Gemini, OpenAI GPT-4o, Anthropic Claude 3.5 Sonnet, or completely local private models via Ollama. No proprietary proxy lock-in.
+        </p>
+        <button class="btn btn-outline" style="align-self: flex-start; font-size: 12px;" onclick="switchTab('profile')">Configure Keys &rarr;</button>
+      </div>
+
+      <div class="onboarding-card">
+        <div class="onboarding-card-num">2</div>
+        <h3 style="font-size: 15px; font-weight: 700;">Multi-Model Critic Architecture</h3>
+        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+          Eliminate AI self-confirmation bias. Architecture Review and Code Review critic agents are automatically allocated distinct model families from the generation agents to ensure objective critique.
+        </p>
+        <span class="model-badge" style="align-self: flex-start;">Dual-Model Auditing</span>
+      </div>
+
+      <div class="onboarding-card">
+        <div class="onboarding-card-num">3</div>
+        <h3 style="font-size: 15px; font-weight: 700;">Deterministic Contract Isolation</h3>
+        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+          Repository protection through <code>SKILLS.md</code> file allowlists and hermetic Docker sandboxes. Autonomous agents cannot touch unapproved paths or break cross-repo contracts.
+        </p>
+        <span class="pill pill-completed" style="align-self: flex-start;">Zero Path Traversal</span>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top: 10px;">
+      <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 10px;">How It Works: 4-Step Engineering Lifecycle</h3>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; font-size: 13px;">
+        <div style="background: var(--card-sub-bg); padding: 14px; border-radius: 6px; border: 1px solid var(--border-color);">
+          <strong style="color: var(--accent-blue);">1. Intent & Grilling</strong>
+          <p style="margin-top: 6px; color: var(--text-muted);">Product Manager Agent clarifies requirements, user cohorts, and scope until reaching 90%+ confidence.</p>
+        </div>
+        <div style="background: var(--card-sub-bg); padding: 14px; border-radius: 6px; border: 1px solid var(--border-color);">
+          <strong style="color: var(--accent-purple);">2. Specs & Architecture</strong>
+          <p style="margin-top: 6px; color: var(--text-muted);">Architect Agent generates OpenAPI contracts and NFR scorecards, audited by independent Architecture Reviewer.</p>
+        </div>
+        <div style="background: var(--card-sub-bg); padding: 14px; border-radius: 6px; border: 1px solid var(--border-color);">
+          <strong style="color: var(--accent-green);">3. Code & Unit Tests</strong>
+          <p style="margin-top: 6px; color: var(--text-muted);">Coder Agents craft synchronized patches and test suites using famous language testing frameworks (Testify, Pytest, Jest).</p>
+        </div>
+        <div style="background: var(--card-sub-bg); padding: 14px; border-radius: 6px; border: 1px solid var(--border-color);">
+          <strong style="color: var(--accent-yellow);">4. Sandboxed Verification</strong>
+          <p style="margin-top: 6px; color: var(--text-muted);">Hermetic builds, test execution, and automatic self-healing loops with full SOC2 audit trails.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: LOGIN / SIGNUP SINGLE PAGER (EMAIL / MOBILE + OTP) -->
   <div class="modal-backdrop" id="modal-auth">
     <div class="modal-box">
@@ -2146,6 +2491,184 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- MODAL: CREATE NEW PRODUCT WIZARD -->
+  <div class="modal-backdrop" id="modal-new-product">
+    <div class="modal-box" style="max-width: 760px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h2>Create New Product Sprint</h2>
+        <button class="close-btn" onclick="closeNewProductWizard()">&times;</button>
+      </div>
+
+      <!-- Step Indicator -->
+      <div class="wizard-steps">
+        <div class="wizard-step-node active" id="wnode-1">
+          <div class="wizard-step-circle">1</div>
+          <span>Archetype & Scope</span>
+        </div>
+        <div class="wizard-step-node" id="wnode-2">
+          <div class="wizard-step-circle">2</div>
+          <span>Repo & SKILLS.md</span>
+        </div>
+        <div class="wizard-step-node" id="wnode-3">
+          <div class="wizard-step-circle">3</div>
+          <span>Agent Squad</span>
+        </div>
+        <div class="wizard-step-node" id="wnode-4">
+          <div class="wizard-step-circle">4</div>
+          <span>Review & Launch</span>
+        </div>
+      </div>
+
+      <!-- STEP 1: Archetype & Scope -->
+      <div id="wstep-1">
+        <div class="form-group">
+          <label class="form-label">Product Name</label>
+          <input type="text" id="wiz-app-name" class="form-input" placeholder="e.g. Distributed Payment Gateway or Realtime Chat Microservice">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Product Archetype</label>
+          <div class="archetype-selector">
+            <div class="archetype-option selected" id="arch-opt-greenfield" onclick="selectArchetype('brand_new')">
+              <div style="font-size: 20px;">🌟</div>
+              <strong style="font-size: 13px;">Brand New Product</strong>
+              <span style="font-size: 11px; color: var(--text-muted);">Greenfield scaffold from stakeholder PRD from scratch.</span>
+            </div>
+            <div class="archetype-option" id="arch-opt-multirepo" onclick="selectArchetype('talking_to_existing_repos')">
+              <div style="font-size: 20px;">🔗</div>
+              <strong style="font-size: 13px;">Talks to Existing Repos</strong>
+              <span style="font-size: 11px; color: var(--text-muted);">Multi-repo orchestration connecting upstream & downstream services.</span>
+            </div>
+            <div class="archetype-option" id="arch-opt-enhancement" onclick="selectArchetype('enhancement')">
+              <div style="font-size: 20px;">⚡</div>
+              <strong style="font-size: 13px;">Enhance Existing Repo</strong>
+              <span style="font-size: 11px; color: var(--text-muted);">Brownfield feature additions preserving backward compatibility.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Stakeholder Goal / User Vision</label>
+          <textarea id="wiz-app-goal" class="gov-textarea" style="min-height: 80px;" placeholder="Describe what you want to build or enhance..."></textarea>
+        </div>
+
+        <div style="background: var(--card-sub-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px 16px; margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+            <input type="checkbox" id="wiz-is-internal" onchange="onInternalToggleChanged()">
+            <div>
+              <strong style="font-size: 13px;">This is an internal product / developer tool</strong>
+              <div style="font-size: 11px; color: var(--text-muted);">If enabled, ASCM will skip Business GTM & SaaS Revenue agents, focusing purely on engineering velocity and architecture.</div>
+            </div>
+          </label>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button class="btn btn-outline" onclick="closeNewProductWizard()">Cancel</button>
+          <button class="btn btn-primary" onclick="goToWizardStep(2)">Next: Repositories &rarr;</button>
+        </div>
+      </div>
+
+      <!-- STEP 2: Repository & SKILLS.md -->
+      <div id="wstep-2" style="display: none;">
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+          Provide the repository path or link. ASCM will analyze it to discover contract files (<code>SKILLS.md</code>), detect tech stacks, and verify allowlists.
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">Target Repository Path or Git URL</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="wiz-repo-path" class="form-input" placeholder="e.g. /path/to/repo or goproject/ascm-poc">
+            <button class="btn btn-primary" onclick="runRepoAnalysis()">🔍 Analyze</button>
+          </div>
+        </div>
+
+        <!-- Analysis Feedback Box -->
+        <div id="wiz-analysis-box" style="display: none; margin-bottom: 16px;"></div>
+
+        <!-- Grilling Clarification Section (Shown if user declines SKILLS.md creation) -->
+        <div id="wiz-grill-box" class="grill-callout" style="display: none;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="font-size: 16px;">🔥</span>
+            <strong style="font-size: 13px; color: var(--accent-yellow);">Interactive Clarification Protocol (Grill Me)</strong>
+          </div>
+          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+            Because <code>SKILLS.md</code> is absent, our Product and Architect Agents must grill the codebase boundaries to prevent breaking changes.
+          </p>
+
+          <div class="form-group">
+            <label class="form-label">1. Primary Tech Stack, Language & Entry Point</label>
+            <input type="text" id="grill-stack" class="form-input" placeholder="e.g. Go 1.22, Gin framework, cmd/server/main.go">
+          </div>
+          <div class="form-group">
+            <label class="form-label">2. Existing Public APIs / Functions That Must NOT Break</label>
+            <input type="text" id="grill-apis" class="form-input" placeholder="e.g. POST /v1/payments, GET /v1/status, internal/api/handler.go">
+          </div>
+          <div class="form-group">
+            <label class="form-label">3. Protected / Forbidden Directories</label>
+            <input type="text" id="grill-protected" class="form-input" placeholder="e.g. db/migrations/, .github/, scripts/">
+          </div>
+          <div class="form-group">
+            <label class="form-label">4. Specific Enhancement Scope</label>
+            <input type="text" id="grill-scope" class="form-input" placeholder="e.g. Add webhook retry mechanism with exponential backoff">
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+            <div id="grill-score-pill" class="pill pill-warning" style="display: none;">Clarity: 0%</div>
+            <button class="btn btn-warning" onclick="submitGrillAnswers()">Submit Clarifications &rarr;</button>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+          <button class="btn btn-outline" onclick="goToWizardStep(1)">&larr; Back</button>
+          <button class="btn btn-primary" onclick="goToWizardStep(3)">Next: Agent Squad &rarr;</button>
+        </div>
+      </div>
+
+      <!-- STEP 3: Agent Squad Selection -->
+      <div id="wstep-3" style="display: none;">
+        <div style="background: rgba(88, 166, 255, 0.08); border: 1px solid var(--accent-blue); border-radius: 6px; padding: 12px 16px; margin-bottom: 16px;">
+          <div style="font-weight: 600; font-size: 13px; color: var(--accent-blue); margin-bottom: 4px;">🎯 Squad Intelligence Advisor</div>
+          <div id="wiz-advisor-reasoning" style="font-size: 12px; color: var(--text-muted);">
+            Analyzing requirements and product domain...
+          </div>
+        </div>
+
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+          Select which agents to activate for this sprint. Some internal tools do not require marketing or revenue agents:
+        </p>
+
+        <div class="agent-roster-grid" id="wiz-agent-roster"></div>
+
+        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+          <button class="btn btn-outline" onclick="goToWizardStep(2)">&larr; Back</button>
+          <button class="btn btn-primary" onclick="goToWizardStep(4)">Next: Review & Launch &rarr;</button>
+        </div>
+      </div>
+
+      <!-- STEP 4: Review & Launch -->
+      <div id="wstep-4" style="display: none;">
+        <div class="panel" style="margin-bottom: 16px;">
+          <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">Product Sprint Summary</h3>
+          <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px;">
+            <div><strong>Product Name:</strong> <span id="summ-name" style="color: var(--accent-cyan);">-</span></div>
+            <div><strong>Archetype:</strong> <span id="summ-archetype" class="pill pill-fw">-</span></div>
+            <div><strong>Scope:</strong> <span id="summ-scope" class="scope-badge scope-commercial">-</span></div>
+            <div><strong>Target Repositories:</strong> <span id="summ-repos" style="color: var(--text-muted);">-</span></div>
+            <div><strong>Contract Status:</strong> <span id="summ-contract" class="pill pill-completed">-</span></div>
+            <div><strong>Active Agent Squad:</strong> <div id="summ-agents" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;"></div></div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+          <button class="btn btn-outline" onclick="goToWizardStep(3)">&larr; Back</button>
+          <button class="btn btn-success" style="font-size: 14px; padding: 10px 22px;" onclick="submitWizardFinal()">
+            <span>🚀 Create Product & Launch Autonomous Sprint</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div class="toast-msg" id="toast-msg">Notification</div>
 
@@ -2182,6 +2705,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
         renderNavUser();
         if (currentUser) {
           fillProfileForm(currentUser);
+          loadUserApps();
         }
       } catch (err) {
         console.error("Failed to load user:", err);
@@ -2277,7 +2801,12 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
           fillProfileForm(currentUser);
           closeAuthModal();
           showToast(`Welcome, ${currentUser.name}!`);
-          switchTab('profile');
+          loadUserApps();
+          if (currentUser && !currentUser.onboarding_completed) {
+            switchTab('onboarding');
+          } else {
+            switchTab('apps');
+          }
         } else {
           alert(data.message || "Invalid OTP verification.");
         }
@@ -2952,6 +3481,454 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
         fetchState();
       } catch (e) {
         showToast("Failed to submit feedback", true);
+      }
+    }
+
+    /* User Developed Apps & Workspace */
+    let currentApps = [];
+
+    async function loadUserApps() {
+      try {
+        const res = await fetch('/api/apps');
+        const data = await res.json();
+        currentApps = data.apps || [];
+        renderApps(currentApps);
+      } catch (err) {
+        console.error("Failed to load user apps:", err);
+      }
+    }
+
+    function renderApps(apps) {
+      const grid = document.getElementById('apps-grid');
+      const badge = document.getElementById('tab-badge-apps');
+      if (badge) badge.innerText = apps.length;
+
+      const statTot = document.getElementById('app-stat-total');
+      if (statTot) statTot.innerText = apps.length;
+      const statGf = document.getElementById('app-stat-greenfield');
+      if (statGf) statGf.innerText = apps.filter(a => a.archetype === 'brand_new').length;
+      const statMr = document.getElementById('app-stat-multirepo');
+      if (statMr) statMr.innerText = apps.filter(a => a.archetype === 'talking_to_existing_repos').length;
+      const statEh = document.getElementById('app-stat-enhancements');
+      if (statEh) statEh.innerText = apps.filter(a => a.archetype === 'enhancement').length;
+
+      if (!grid) return;
+      if (!apps || apps.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: var(--card-bg); border: 1px dashed var(--border-color); border-radius: 8px;">
+            <div style="font-size: 24px; margin-bottom: 10px;">📦</div>
+            <div style="font-weight: 600; margin-bottom: 6px;">No Products Registered Yet</div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Create your first product to orchestrate autonomous development sprints.</div>
+            <button class="btn btn-primary" onclick="openNewProductWizard()">+ Create New Product</button>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = apps.map(app => {
+        const archClass = app.archetype === 'brand_new' ? 'archetype-greenfield' : (app.archetype === 'talking_to_existing_repos' ? 'archetype-multi_repo' : 'archetype-enhancement');
+        const archLabel = app.archetype === 'brand_new' ? 'Greenfield' : (app.archetype === 'talking_to_existing_repos' ? 'Multi-Repo' : 'Enhancement');
+        const scopeBadge = app.is_internal
+          ? `<span class="scope-badge scope-internal">Internal Tool</span>`
+          : `<span class="scope-badge scope-commercial">Commercial SaaS</span>`;
+        const repos = app.repos || [];
+        const agents = app.agents || [];
+        const skillsFound = app.skills_status === 'present';
+
+        return `
+          <div class="app-card">
+            <div class="app-card-header">
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                  <span class="app-archetype-tag ${archClass}">${archLabel}</span>
+                  ${scopeBadge}
+                </div>
+                <h3 style="font-size: 16px; font-weight: 700; margin: 0;">${app.name}</h3>
+              </div>
+              <span class="pill pill-${(app.status || 'Active').toLowerCase() === 'completed' ? 'completed' : 'running'}">${app.status || 'Active'}</span>
+            </div>
+
+            <p style="font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.4;">
+              ${app.description || 'Autonomous contract-driven microservice product.'}
+            </p>
+
+            <div style="background: var(--card-sub-bg); border-radius: 6px; padding: 10px; border: 1px solid var(--border-color);">
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; font-weight: 600;">
+                Connected Repositories (${repos.length})
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px; font-size: 12px;">
+                ${repos.length > 0
+                  ? repos.map(r => `
+                      <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <code style="color: var(--accent-cyan); font-size: 11px;">${r}</code>
+                        <span style="font-size: 11px; color: ${skillsFound ? 'var(--accent-green)' : 'var(--accent-yellow)'};">
+                          ${skillsFound ? '✓ SKILLS.md' : '⚠ Clarified'}
+                        </span>
+                      </div>
+                    `).join('')
+                  : '<span style="color: var(--text-muted); font-size: 11px;">Single workspace root</span>'
+                }
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; font-weight: 600;">
+                Active Agent Squad (${agents.length})
+              </div>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                ${agents.slice(0, 5).map(a => `<span class="pill pill-fw" style="font-size: 10px;">${a}</span>`).join('')}
+                ${agents.length > 5 ? `<span class="pill pill-fw" style="font-size: 10px;">+${agents.length - 5} more</span>` : ''}
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: auto;">
+              <span style="font-size: 11px; color: var(--text-muted);">Created: ${new Date(app.created_at || Date.now()).toLocaleDateString()}</span>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick="switchTab('architecture')">🔍 Specs</button>
+                <button class="btn btn-primary" style="padding: 4px 12px; font-size: 12px;" onclick="quickLaunchApp('${app.id}', '${app.name.replace(/'/g, "\\'")}')">🚀 Sprint</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function completeOnboarding() {
+      try {
+        await fetch('/api/onboarding/complete', { method: 'POST' });
+        if (currentUser) currentUser.onboarding_completed = true;
+        showToast("Onboarding completed! Welcome to your developed apps.");
+        switchTab('apps');
+        loadUserApps();
+      } catch (e) {
+        showToast("Error updating onboarding status", true);
+      }
+    }
+
+    function quickLaunchApp(appId, appName) {
+      openLaunchModal();
+      document.getElementById('launch-goal-text').value = `Enhance ${appName}: `;
+    }
+
+    /* Product Creation Wizard Logic */
+    let wizardState = {
+      step: 1,
+      archetype: 'brand_new',
+      is_internal: false,
+      repo_path: '',
+      skills_found: false,
+      custom_skills_path: '',
+      selected_agents: [],
+      clarity_score: 0,
+      analysis: null
+    };
+
+    function openNewProductWizard() {
+      wizardState = {
+        step: 1,
+        archetype: 'brand_new',
+        is_internal: false,
+        repo_path: '',
+        skills_found: false,
+        custom_skills_path: '',
+        selected_agents: [],
+        clarity_score: 0,
+        analysis: null
+      };
+      document.getElementById('wiz-app-name').value = '';
+      document.getElementById('wiz-app-goal').value = '';
+      document.getElementById('wiz-repo-path').value = '';
+      document.getElementById('wiz-is-internal').checked = false;
+      document.getElementById('wiz-analysis-box').style.display = 'none';
+      document.getElementById('wiz-grill-box').style.display = 'none';
+      selectArchetype('brand_new');
+      goToWizardStep(1);
+      document.getElementById('modal-new-product').classList.add('active');
+    }
+
+    function closeNewProductWizard() {
+      document.getElementById('modal-new-product').classList.remove('active');
+    }
+
+    function selectArchetype(type) {
+      wizardState.archetype = type;
+      document.querySelectorAll('.archetype-option').forEach(el => el.classList.remove('selected'));
+      if (type === 'brand_new') document.getElementById('arch-opt-greenfield').classList.add('selected');
+      if (type === 'talking_to_existing_repos') document.getElementById('arch-opt-multirepo').classList.add('selected');
+      if (type === 'enhancement') document.getElementById('arch-opt-enhancement').classList.add('selected');
+    }
+
+    function onInternalToggleChanged() {
+      wizardState.is_internal = document.getElementById('wiz-is-internal').checked;
+    }
+
+    async function goToWizardStep(stepNum) {
+      if (stepNum === 2) {
+        const name = document.getElementById('wiz-app-name').value.trim();
+        if (!name) {
+          alert("Please specify a Product Name before continuing.");
+          return;
+        }
+        if (wizardState.archetype === 'brand_new') {
+          if (!document.getElementById('wiz-repo-path').value.trim()) {
+            document.getElementById('wiz-repo-path').value = '.';
+          }
+        }
+      }
+
+      if (stepNum === 3) {
+        await fetchAgentRecommendations();
+      }
+
+      if (stepNum === 4) {
+        const checked = [];
+        document.querySelectorAll('.wiz-agent-checkbox:checked').forEach(cb => checked.push(cb.value));
+        wizardState.selected_agents = checked;
+
+        document.getElementById('summ-name').innerText = document.getElementById('wiz-app-name').value.trim() || 'Untitled Product';
+        const archLabel = wizardState.archetype === 'brand_new' ? 'Brand New Product' : (wizardState.archetype === 'talking_to_existing_repos' ? 'Talks to Existing Repos' : 'Enhancement of Existing Repo');
+        document.getElementById('summ-archetype').innerText = archLabel;
+
+        const scopeEl = document.getElementById('summ-scope');
+        scopeEl.innerText = wizardState.is_internal ? 'Internal Tool' : 'Commercial SaaS';
+        scopeEl.className = wizardState.is_internal ? 'scope-badge scope-internal' : 'scope-badge scope-commercial';
+
+        document.getElementById('summ-repos').innerText = document.getElementById('wiz-repo-path').value.trim() || 'Workspace root';
+        
+        const contractEl = document.getElementById('summ-contract');
+        if (wizardState.skills_found) {
+          contractEl.innerText = 'SKILLS.md Contract Active';
+          contractEl.className = 'pill pill-completed';
+        } else if (wizardState.clarity_score >= 75) {
+          contractEl.innerText = `Clarified (${wizardState.clarity_score}% confidence)`;
+          contractEl.className = 'pill pill-running';
+        } else {
+          contractEl.innerText = 'Standard Greenfield Scaffolding';
+          contractEl.className = 'pill pill-fw';
+        }
+
+        const agentsWrap = document.getElementById('summ-agents');
+        agentsWrap.innerHTML = wizardState.selected_agents.map(a => `<span class="pill pill-fw">${a}</span>`).join('');
+      }
+
+      wizardState.step = stepNum;
+      for (let i = 1; i <= 4; i++) {
+        const stepDiv = document.getElementById(`wstep-${i}`);
+        const nodeDiv = document.getElementById(`wnode-${i}`);
+        if (stepDiv) stepDiv.style.display = (i === stepNum ? 'block' : 'none');
+        if (nodeDiv) {
+          nodeDiv.className = 'wizard-step-node' + (i === stepNum ? ' active' : (i < stepNum ? ' completed' : ''));
+        }
+      }
+    }
+
+    async function runRepoAnalysis() {
+      const path = document.getElementById('wiz-repo-path').value.trim() || '.';
+      const box = document.getElementById('wiz-analysis-box');
+      box.style.display = 'block';
+      box.innerHTML = `<div style="font-size: 13px; color: var(--accent-blue);">🔍 Inspecting repository & search for SKILLS.md...</div>`;
+
+      try {
+        const res = await fetch('/api/product/analyze-repo', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ repo_path: path, custom_skills_path: wizardState.custom_skills_path })
+        });
+        const data = await res.json();
+        wizardState.analysis = data;
+
+        if (data.status !== 'ok') {
+          box.innerHTML = `<div style="color: var(--accent-red); font-size: 13px;">❌ ${data.message}</div>`;
+          return;
+        }
+
+        wizardState.skills_found = data.found_skills;
+
+        if (data.found_skills) {
+          box.innerHTML = `
+            <div style="background: rgba(63, 185, 80, 0.1); border: 1px solid var(--accent-green); border-radius: 6px; padding: 14px;">
+              <div style="display: flex; align-items: center; gap: 8px; color: var(--accent-green); font-weight: 700; margin-bottom: 6px;">
+                <span>✓</span> SKILLS.md Contract Discovered
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
+                Found at: <code>${data.skills_path}</code> | Language: <strong>${data.primary_language}</strong> (${data.total_files} files)
+              </div>
+              <div style="font-size: 12px;">
+                <strong>Allowed Paths:</strong> ${data.allowed_paths.length > 0 ? data.allowed_paths.map(p => `<code>${p}</code>`).join(', ') : 'Root broad scope'}
+              </div>
+            </div>
+          `;
+          document.getElementById('wiz-grill-box').style.display = 'none';
+        } else {
+          box.innerHTML = `
+            <div style="background: rgba(210, 153, 34, 0.1); border: 1px solid var(--accent-yellow); border-radius: 6px; padding: 14px;">
+              <div style="display: flex; align-items: center; gap: 8px; color: var(--accent-yellow); font-weight: 700; margin-bottom: 6px;">
+                <span>⚠️</span> SKILLS.md Contract Not Found
+              </div>
+              <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+                No <code>SKILLS.md</code> file was detected at default paths in this repository.
+              </p>
+              
+              <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <input type="text" id="wiz-custom-skill-input" class="form-input" style="font-size: 12px;" placeholder="Custom relative path (e.g. docs/SKILLS.md)">
+                <button class="btn btn-outline" style="font-size: 12px;" onclick="checkCustomSkillPath()">Check Path</button>
+              </div>
+
+              <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Would you like ASCM to create SKILLS.md for this repository?</div>
+              <div style="display: flex; gap: 10px;">
+                <button class="btn btn-success" style="font-size: 12px;" onclick="createWizardSkillsMd()">✨ Yes, Create SKILLS.md</button>
+                <button class="btn btn-warning" style="font-size: 12px;" onclick="expandGrillBox()">No, Provide Details (Grill Me)</button>
+              </div>
+            </div>
+          `;
+        }
+      } catch (err) {
+        box.innerHTML = `<div style="color: var(--accent-red); font-size: 13px;">Error analyzing repository: ${err}</div>`;
+      }
+    }
+
+    function checkCustomSkillPath() {
+      const input = document.getElementById('wiz-custom-skill-input');
+      wizardState.custom_skills_path = input ? input.value.trim() : '';
+      runRepoAnalysis();
+    }
+
+    async function createWizardSkillsMd() {
+      const path = document.getElementById('wiz-repo-path').value.trim() || '.';
+      try {
+        const res = await fetch('/api/product/create-skills-md', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ repo_path: path })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          showToast("SKILLS.md scaffolded successfully!");
+          wizardState.skills_found = true;
+          runRepoAnalysis();
+        } else {
+          alert(data.message || "Failed to create SKILLS.md");
+        }
+      } catch (e) {
+        alert("Error creating SKILLS.md: " + e);
+      }
+    }
+
+    function expandGrillBox() {
+      document.getElementById('wiz-grill-box').style.display = 'block';
+      if (wizardState.analysis) {
+        document.getElementById('grill-stack').value = wizardState.analysis.primary_language || '';
+      }
+    }
+
+    async function submitGrillAnswers() {
+      const answers = {
+        primary_stack: document.getElementById('grill-stack').value.trim(),
+        public_apis: document.getElementById('grill-apis').value.trim(),
+        protected_paths: document.getElementById('grill-protected').value.trim(),
+        enhancement_scope: document.getElementById('grill-scope').value.trim(),
+      };
+
+      try {
+        const res = await fetch('/api/product/grill-clarify', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ answers: answers })
+        });
+        const data = await res.json();
+        wizardState.clarity_score = data.clarity_score;
+
+        const pill = document.getElementById('grill-score-pill');
+        pill.style.display = 'inline-block';
+        pill.innerText = `Clarity: ${data.clarity_score}% (${data.verdict})`;
+        pill.className = `pill pill-${data.ready_to_proceed ? 'completed' : 'warning'}`;
+
+        if (data.ready_to_proceed) {
+          showToast("Clarifications verified! Requirements clear to proceed.");
+        } else {
+          showToast(`More details required: ${data.missing_fields.join(', ')}`, true);
+        }
+      } catch (e) {
+        alert("Grilling submission error: " + e);
+      }
+    }
+
+    async function fetchAgentRecommendations() {
+      try {
+        const res = await fetch('/api/product/recommend-agents', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            archetype: wizardState.archetype,
+            is_internal: wizardState.is_internal,
+          })
+        });
+        const data = await res.json();
+        document.getElementById('wiz-advisor-reasoning').innerText = data.reasoning;
+
+        const rosterEl = document.getElementById('wiz-agent-roster');
+        rosterEl.innerHTML = (data.recommended_agents || []).map(agent => {
+          const isChecked = agent.recommended ? 'checked' : '';
+          const badgeClass = agent.badge === 'Mandatory Core' ? 'pill-completed' : (agent.badge === 'Recommended' ? 'pill-running' : 'pill-fw');
+          return `
+            <div class="agent-item-card ${agent.recommended ? 'recommended' : ''}">
+              <input type="checkbox" class="wiz-agent-checkbox" value="${agent.id}" id="chk-agent-${agent.id}" ${isChecked} style="margin-top: 2px;">
+              <label for="chk-agent-${agent.id}" style="cursor: pointer; flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                  <strong style="font-size: 13px;">${agent.name}</strong>
+                  <span class="pill ${badgeClass}" style="font-size: 10px;">${agent.badge}</span>
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">${agent.description}</div>
+                <div style="font-size: 10px; color: var(--accent-cyan); margin-top: 4px;">Rationale: ${agent.rationale}</div>
+              </label>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error("Failed to fetch agent recommendations:", err);
+      }
+    }
+
+    async function submitWizardFinal() {
+      const name = document.getElementById('wiz-app-name').value.trim();
+      const goal = document.getElementById('wiz-app-goal').value.trim() || `Construct product: ${name}`;
+      const repoPath = document.getElementById('wiz-repo-path').value.trim() || '.';
+
+      const appPayload = {
+        name: name,
+        description: goal,
+        archetype: wizardState.archetype,
+        is_internal: wizardState.is_internal,
+        repos: [repoPath],
+        skills_status: wizardState.skills_found ? 'present' : 'clarified',
+        skills_path: wizardState.skills_found ? 'SKILLS.md' : 'clarified',
+        agents: wizardState.selected_agents,
+        status: 'Active'
+      };
+
+      try {
+        await fetch('/api/apps/create', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(appPayload)
+        });
+
+        await fetch('/api/action/launch', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            goal: goal,
+            repos: [repoPath],
+            auto_approve: true,
+          })
+        });
+
+        showToast(`Product '${name}' created & Sprint launched!`);
+        closeNewProductWizard();
+        switchTab('pipeline');
+        loadUserApps();
+      } catch (e) {
+        alert("Failed to launch product sprint: " + e);
       }
     }
 
