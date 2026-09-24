@@ -41,7 +41,7 @@ This document outlines the items required to transform ASCM into a commercially 
 | :--- | :--- | :--- | :--- |
 | **P2-1** | **Centralized Contract & Policy Manager** | Organization-wide `SKILL.md` policies with RBAC on sensitive directory modifications. | ⚪ Planned (Phase 3) |
 | **P2-2** | **Isolated Container Execution** | Run tests and verifications inside hermetic, unprivileged Docker containers (`--network none`). | 🟢 Completed |
-| **P2-3** | **SOC2 Audit Trail** | Tamper-proof logging of prompts, code patches, review evaluations, and approvals. | ⚪ Planned (Phase 3) |
+| **P2-3** | **SOC2 Audit Trail & PII Sanitizer** | Tamper-proof, structured logging (`.log` & NDJSON `.jsonl`) of every agent step, LLM interaction, and governance decision with automatic PII & credential scrubbing (API keys, SSNs, emails, tokens). Compatible with open-source and enterprise log collectors (ELK, Loki, Datadog). | 🟢 Completed |
 
 ---
 
@@ -58,5 +58,7 @@ This document outlines the items required to transform ASCM into a commercially 
 - **[2026-09-24] P1-4 Completed**: Implemented automated Git branch creation, cross-repository linked Pull Request Markdown descriptions (`PULL_REQUEST.md`), and GitHub CLI (`gh pr create`) integration in `GitService`.
 - **[2026-09-24] P1-5 Completed**: Built intelligent model cascading and tiering (`tier="fast"` vs `tier="primary"`, `--fast-model` CLI flag, `FAST_MODEL` env var, and per-agent role overrides like `PRODUCT_AGENT_MODEL`) reducing API costs by up to 80%.
 - **[2026-09-24] P2-2 Completed**: Added hermetic Docker container sandboxing to `VerifierEngine` (`--sandbox` flag or `USE_DOCKER_SANDBOX=true`) with unprivileged network-isolated execution.
-- **[2026-09-24] Verification**: 42 unit tests passing across all components.
+- **[2026-09-24] P2-3 Completed**: Built enterprise security `PIIScrubber` (redacts API keys, credentials, emails, SSNs, credit cards, IPs) and structured `AuditLogger` writing dual human-readable text logs (`ascm_audit.log`) and open-source aggregator ready NDJSON logs (`ascm_audit.jsonl`).
+- **[2026-09-24] Verification**: 48 unit tests passing across all components.
+
 

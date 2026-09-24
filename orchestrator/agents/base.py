@@ -303,9 +303,43 @@ class BaseAgent:
         self.provider = provider or get_configured_provider(tier=self.tier, agent_name=agent_name)
 
     def call(self, prompt: str, json_mode: bool = False) -> str:
-        return self.provider.generate(
-            prompt=prompt,
-            system_instruction=self.system_instruction,
-            json_mode=json_mode,
-        )
+        from orchestrator.security.audit_logger import AUDIT_LOGGER
+        from orchestrator.security.pii_scrubber import PIIScrubber
+
+        sanitized_prompt = prompt
+        if os.environ.get("SCRUB_OUTBOUND_PII", "").lower() in ("true", "1", "yes"):
+            sanitized_prompt = PIIScrubber.scrub(prompt)
+
+        start_time = time.time()
+        agent_name = self.__class__.__name__
+        try:
+            response = self.provider.generate(
+                prompt=sanitized_prompt,
+                system_instruction=self.system_instruction,
+                json_mode=json_mode,
+            )
+            elapsed_ms = (time.time() - start_time) * 1000
+            provider_type = self.provider.__class__.__name__
+            model_name = getattr(self.provider, "model", "default")
+            AUDIT_LOGGER.log_llm_interaction(
+                agent=agent_name,
+                provider=provider_type,
+                model=model_name,
+                prompt=prompt,
+                response=response,
+                latency_ms=elapsed_ms,
+                json_mode=json_mode,
+            )
+            return response
+        except Exception as err:
+            elapsed_ms = (time.time() - start_time) * 1000
+            AUDIT_LOGGER.log_event(
+                event_type="LLM_CALL_FAILURE",
+                agent=agent_name,
+                action="GENERATE_CONTENT",
+                details={"error": str(err), "latency_ms": round(elapsed_ms, 2)},
+                level="ERROR",
+            )
+            raise
+
 

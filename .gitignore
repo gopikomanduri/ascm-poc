@@ -3,4 +3,7 @@ __pycache__/
 *.py[cod]
 .env
 .ascm_history/
+logs/
+*.log
+*.jsonl
 

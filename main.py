@@ -42,6 +42,8 @@ def main():
     parser.add_argument("--base-url", help="Custom base URL for OpenAI-compatible, Azure, Groq, or Ollama endpoints")
     parser.add_argument("--create-pr", action="store_true", help="Push branches and generate linked Pull Requests on GitHub")
     parser.add_argument("--sandbox", action="store_true", help="Execute test verifications inside hermetic Docker containers")
+    parser.add_argument("--log-dir", default="logs", help="Directory for enterprise security audit logs (default: logs)")
+    parser.add_argument("--scrub-outbound-pii", action="store_true", default=True, help="Scrub PII and credentials from outbound LLM prompts (default: True)")
     args = parser.parse_args()
 
     import os
@@ -59,6 +61,15 @@ def main():
         os.environ["AUTO_PUSH_REMOTE"] = "true"
     if args.sandbox:
         os.environ["USE_DOCKER_SANDBOX"] = "true"
+    if args.log_dir:
+        os.environ["ASCM_LOG_DIR"] = args.log_dir
+    if args.scrub_outbound_pii:
+        os.environ["SCRUB_OUTBOUND_PII"] = "true"
+
+    from orchestrator.security.audit_logger import AUDIT_LOGGER
+    print(f"[+] Enterprise Audit Log (Text):  {AUDIT_LOGGER.text_log_file}")
+    print(f"[+] Enterprise Audit Log (JSONL): {AUDIT_LOGGER.jsonl_log_file}")
+
 
 
     if args.dashboard_only:

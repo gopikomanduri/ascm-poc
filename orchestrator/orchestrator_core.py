@@ -18,6 +18,7 @@ from orchestrator.dashboard import GLOBAL_DASHBOARD_STATE, DashboardServer
 from orchestrator.engine.sandbox import SandboxEngine, PathViolationError
 from orchestrator.engine.verifier import VerifierEngine
 from orchestrator.git_service import GitService
+from orchestrator.security.audit_logger import AUDIT_LOGGER
 from orchestrator.state import SharedBlackboard, TaskItem
 
 
@@ -27,13 +28,21 @@ class OrchestratorEngine:
         try:
             self.valid_repos = self._validate_repositories(repo_paths)
             self.state = SharedBlackboard(user_goal=initial_goal, target_repos=self.valid_repos)
+            AUDIT_LOGGER.log_event(
+                event_type="SESSION_START",
+                agent="ORCHESTRATOR",
+                action="INITIALIZE",
+                details={"goal": initial_goal, "repositories": self.valid_repos},
+            )
             self.dashboard_server: Optional[DashboardServer] = None
             if enable_dashboard:
                 self.dashboard_server = DashboardServer(port=port)
                 self.dashboard_server.start()
         except Exception as err:
             GLOBAL_DASHBOARD_STATE.record_crash(err)
+            AUDIT_LOGGER.log_event("SESSION_CRASH", agent="ORCHESTRATOR", action="INIT_ERROR", details={"error": str(err)}, level="ERROR")
             raise
+
 
     def run(self, auto_approve: bool = False) -> None:
         try:
@@ -150,6 +159,7 @@ class OrchestratorEngine:
         """
         if auto_approve:
             self._log(f"[+] Milestone '{milestone_name}' auto-confirmed.")
+            AUDIT_LOGGER.log_governance(milestone=milestone_name, decision="CONFIRMED", feedback="", auto_approved=True)
             return True, ""
 
         GLOBAL_DASHBOARD_STATE.request_milestone_review(milestone_name, summary)
@@ -166,12 +176,15 @@ class OrchestratorEngine:
             GLOBAL_DASHBOARD_STATE.submit_milestone_review(True, "")
             self._log(f"[+] Milestone '{milestone_name}' confirmed by user.")
             self.state.milestone_feedback_history.append({"milestone": milestone_name, "status": "confirmed", "feedback": ""})
+            AUDIT_LOGGER.log_governance(milestone=milestone_name, decision="CONFIRMED", feedback="", auto_approved=False)
             return True, ""
         else:
             GLOBAL_DASHBOARD_STATE.submit_milestone_review(False, user_choice)
             self._log(f"[!] Milestone '{milestone_name}' rework requested: {user_choice}")
             self.state.milestone_feedback_history.append({"milestone": milestone_name, "status": "rework", "feedback": user_choice})
+            AUDIT_LOGGER.log_governance(milestone=milestone_name, decision="REWORK", feedback=user_choice, auto_approved=False)
             return False, user_choice
+
 
     def _run_product_clarification_loop(self, auto_approve: bool = False) -> None:
         product_agent = ProductAgent()
@@ -449,6 +462,14 @@ class OrchestratorEngine:
                 SandboxEngine.validate_and_write(contract.repo_path, contract.allowed_paths, files)
                 
                 verification = VerifierEngine.run_checks(contract.repo_path)
+                AUDIT_LOGGER.log_verification(
+                    repo=contract.name,
+                    language=verification.language,
+                    passed=verification.passed,
+                    test_output=verification.test_output,
+                    vet_output=verification.vet_output,
+                    sandboxed=verification.sandboxed,
+                )
                 if not verification.passed:
                     healed = False
                     for attempt in range(1, max_healing_attempts + 1):
@@ -475,9 +496,18 @@ class OrchestratorEngine:
                             files.update(fixed_patch)
                         except PathViolationError as err:
                             self._log(f"Self-healing patch failed sandbox: {err}")
+                            AUDIT_LOGGER.log_security_event("PATH_VIOLATION", {"repo": contract.name, "error": str(err)}, severity="ERROR")
                             break
 
                         verification = VerifierEngine.run_checks(contract.repo_path)
+                        AUDIT_LOGGER.log_verification(
+                            repo=contract.name,
+                            language=verification.language,
+                            passed=verification.passed,
+                            test_output=verification.test_output,
+                            vet_output=verification.vet_output,
+                            sandboxed=verification.sandboxed,
+                        )
                         if verification.passed:
                             self._log(f"[+] Self-Healing succeeded on attempt {attempt}! Verification passed.")
                             GLOBAL_DASHBOARD_STATE.update_agent("GoCoderAgent", "completed", "Self-healing succeeded")
@@ -498,6 +528,7 @@ class OrchestratorEngine:
                 })
             except (OSError, RuntimeError) as error:
                 self._log(f"Error applying changes to '{contract.name}': {error}")
+                AUDIT_LOGGER.log_event("PATCH_APPLY_ERROR", agent="ORCHESTRATOR", action="WRITE", details={"repo": contract.name, "error": str(error)}, level="ERROR")
 
         # Phase 6b: Coordinated Linked Cross-Repository PR Generation
         if committed_records:
@@ -520,6 +551,13 @@ class OrchestratorEngine:
                 )
                 artifact_path = GitService.write_pr_artifact(c.repo_path, pr_desc)
                 self._log(f"[+] Generated linked PR draft for '{c.name}': {artifact_path}")
+                AUDIT_LOGGER.log_git_commit(
+                    repo=c.name,
+                    branch=b,
+                    goal=self.state.user_goal,
+                    files=f_list,
+                    pr_path=artifact_path,
+                )
 
                 # If remote push / PR creation is enabled
                 if os.environ.get("AUTO_PUSH_REMOTE", "").lower() in ("true", "1", "yes") or os.environ.get("CREATE_PR", "").lower() in ("true", "1", "yes"):
@@ -535,10 +573,12 @@ class OrchestratorEngine:
     def _notify_phase(self, phase_name: str) -> None:
         print(f"\n--- {phase_name} ---")
         GLOBAL_DASHBOARD_STATE.set_phase(phase_name)
+        AUDIT_LOGGER.log_phase(phase_name)
 
     def _log(self, message: str) -> None:
         print(message)
         GLOBAL_DASHBOARD_STATE.log(message)
+        AUDIT_LOGGER.log_step(agent="ORCHESTRATOR", action="LOG", details=message)
 
     def _validate_repositories(self, repos: List[str]) -> List[str]:
         valid = []
@@ -548,4 +588,5 @@ class OrchestratorEngine:
                 raise ValueError(f"Directory does not exist: {r}")
             valid.append(str(p))
         return valid
+
 
