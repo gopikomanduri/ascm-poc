@@ -11,7 +11,9 @@ from orchestrator.agents.all_agents import (
     CodeReviewAgent,
 )
 from orchestrator.auth.user_manager import USER_MANAGER
+from orchestrator.budget.token_forecaster import GLOBAL_TOKEN_FORECASTER
 from orchestrator.dashboard import GLOBAL_DASHBOARD_STATE, get_latest_live_run
+from orchestrator.knowledge.blueprint_engine import GLOBAL_BLUEPRINT_ENGINE
 from orchestrator.security.audit_logger import AUDIT_LOGGER
 from orchestrator.state import SharedBlackboard
 
@@ -43,6 +45,47 @@ def main():
     }
     USER_MANAGER.add_user_app(app_data)
     print(f"\n[+] Registered 'PayPulse Sentinel' in User Workspace & Developed Apps.")
+
+    # 2. PRE-FLIGHT BUDGET RADAR & LOCAL BLUEPRINT KNOWLEDGE BASE
+    print("\n" + "=" * 70)
+    print("📊 PRE-FLIGHT BUDGET RADAR & ARCHITECTURAL KNOWLEDGE BASE")
+    print("=" * 70)
+    goal = "Build a multi-tenant Stripe payment and AI token escrow gateway with real-time observability dashboard"
+    
+    # Check Local Knowledge Blueprints
+    matched_bps = GLOBAL_BLUEPRINT_ENGINE.match(goal)
+    savings_data = GLOBAL_BLUEPRINT_ENGINE.calculate_total_savings([b.id for b in matched_bps])
+    print(f"[Local Architectural Knowledge Base]:")
+    print(f"  • Matched Blueprints: {len(matched_bps)} zero-token templates found")
+    for bp in matched_bps:
+        print(f"    - {bp.title} ({bp.language}): ~{bp.tokens_saved_estimate:,} tokens saved (0 hallucinations)")
+    print(f"  • Gross Token Reduction: -{savings_data['total_tokens_saved']:,} tokens (~${savings_data['estimated_cost_saved_usd']:.4f})")
+
+    # Run P90 Statistical Token & Cost Forecast
+    forecast = GLOBAL_TOKEN_FORECASTER.forecast(
+        user_goal=goal,
+        repos=[repo_gateway, repo_portal],
+        agent_roster=[
+            "ProductManagerAgent", "BusinessStrategyAgent", "RevenueROIAgent",
+            "ArchitectAgent", "ArchitectureReviewAgent", "CoderAgent", "CodeReviewAgent"
+        ],
+        target_file_count=4,
+        circuit_breaker_limit_usd=1.00,
+        blueprints_matched_count=len(matched_bps),
+    )
+    print(f"\n[P90 Statistical Confidence Interval]:")
+    print(f"  • Expected Baseline (P50): {forecast.p50_total_tokens:,} tokens")
+    print(f"  • 90% Confidence Cap (P90): {forecast.p90_total_tokens:,} tokens (90% chance usage <= this)")
+    print(f"  • Optimized with Blueprints: {forecast.blueprint_savings['optimized_p90_tokens']:,} tokens ({forecast.blueprint_savings['percentage_reduction']}% reduction)")
+    print(f"  • Circuit Breaker ($1.00): {forecast.circuit_breaker_status}")
+
+    print(f"\n[Multi-Model Projected Cost Table (P90)]:")
+    for m_key, m_val in forecast.cost_projections.items():
+        free_txt = " (100% Free / Self-Hosted)" if m_val['p90_cost_usd'] == 0 else ""
+        print(f"  • {m_val['provider_name']:<30}: ${m_val['p90_cost_usd']:.4f}{free_txt}")
+
+    GLOBAL_DASHBOARD_STATE.set_preflight_forecast(forecast.to_dict())
+    GLOBAL_DASHBOARD_STATE.set_active_blueprints([b.to_dict() for b in matched_bps])
 
     # 2. Execute Business Strategy Agent
     print("\n" + "-" * 70)

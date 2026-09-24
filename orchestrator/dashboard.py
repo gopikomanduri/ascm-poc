@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from orchestrator.auth.user_manager import USER_MANAGER
+from orchestrator.budget.token_forecaster import GLOBAL_TOKEN_FORECASTER, PROVIDER_RATES
+from orchestrator.knowledge.blueprint_engine import GLOBAL_BLUEPRINT_ENGINE
 
 HISTORY_DIR = Path.cwd() / ".ascm_history"
 
@@ -46,6 +48,10 @@ class DashboardState:
         self.agents: Dict[str, Dict[str, Any]] = {}
         self.tasks: List[Dict[str, Any]] = []
         self.test_results: List[Dict[str, Any]] = []
+
+        # Budget Forecast & Local Blueprints
+        self.preflight_forecast: Dict[str, Any] = {}
+        self.active_blueprints: List[Dict[str, Any]] = []
 
         # Strategy & Multi-Model Reviews
         self.business_strategy: Dict[str, Any] = {}
@@ -119,6 +125,8 @@ class DashboardState:
             self.strategy_feedback = []
             self.arch_feedback = []
             self.code_feedback = []
+            self.preflight_forecast = {}
+            self.active_blueprints = []
             self.pending_approval = False
             self.pending_changes_data = []
             self.approval_decision = None
@@ -176,6 +184,36 @@ class DashboardState:
                 "status": "completed",
                 "action": f"Code Review Audit Completed (Score: {score}/100, Security: {grade})",
             })
+            self._flush_to_disk()
+
+    def set_preflight_forecast(self, forecast: Dict[str, Any]) -> None:
+        with self.lock:
+            self.preflight_forecast = forecast
+            t_fmt = datetime.now().strftime("%I:%M:%S %p")
+            p90 = forecast.get("p90_total_tokens", 0)
+            status = forecast.get("circuit_breaker_status", "SAFE")
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": "TokenForecaster",
+                "status": "completed",
+                "action": f"Pre-Flight Budget Radar: P90={p90:,} tokens (Circuit Breaker: {status})",
+            })
+            self.logs.append(f"[{t_fmt}] [BUDGET_RADAR] Pre-flight P90 forecast: {p90:,} tokens (Status: {status})")
+            self._flush_to_disk()
+
+    def set_active_blueprints(self, blueprints: List[Dict[str, Any]]) -> None:
+        with self.lock:
+            self.active_blueprints = blueprints
+            t_fmt = datetime.now().strftime("%I:%M:%S %p")
+            count = len(blueprints)
+            saved = sum(b.get("tokens_saved_estimate", 0) for b in blueprints)
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": "BlueprintEngine",
+                "status": "completed",
+                "action": f"Local Knowledge: {count} Zero-Token Blueprints Engaged (~{saved:,} tokens saved)",
+            })
+            self.logs.append(f"[{t_fmt}] [BLUEPRINT_ENGINE] {count} zero-token blueprints active (~{saved:,} tokens saved).")
             self._flush_to_disk()
 
     def submit_strategy_feedback(self, feedback: str) -> None:
@@ -513,6 +551,8 @@ class DashboardState:
             "strategy_feedback": getattr(self, "strategy_feedback", []),
             "arch_feedback": getattr(self, "arch_feedback", []),
             "code_feedback": getattr(self, "code_feedback", []),
+            "preflight_forecast": getattr(self, "preflight_forecast", {}),
+            "active_blueprints": getattr(self, "active_blueprints", []),
             "timeline_events": self.timeline_events[-100:],
             "logs": self.logs[-100:],
         }
@@ -667,6 +707,21 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/apps":
             apps = USER_MANAGER.get_user_apps()
             self._send_json({"status": "ok", "apps": apps})
+
+        elif path == "/api/forecast":
+            goal = query_params.get("goal", [""])[0]
+            repos_raw = query_params.get("repos", [""])[0]
+            repos = [r.strip() for r in repos_raw.split(",") if r.strip()]
+            matched = GLOBAL_BLUEPRINT_ENGINE.match(goal)
+            report = GLOBAL_TOKEN_FORECASTER.forecast(
+                user_goal=goal,
+                repos=repos,
+                blueprints_matched_count=len(matched),
+            )
+            self._send_json({"status": "ok", "forecast": report.to_dict(), "blueprints": [b.to_dict() for b in matched]})
+
+        elif path == "/api/blueprints":
+            self._send_json({"status": "ok", "blueprints": GLOBAL_BLUEPRINT_ENGINE.list_all()})
 
         elif path == "/api/repos/detect":
             detected = []
@@ -844,6 +899,25 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             user_notes = payload.get("user_notes", "")
             res = AgentRosterAdvisor.recommend_agents(archetype, is_internal=is_internal, repo_count=repo_count, user_notes=user_notes)
             self._send_json(res)
+        elif path == "/api/forecast/calculate":
+            goal = payload.get("goal", "")
+            repos = payload.get("repos", [])
+            roster = payload.get("roster")
+            target_files = int(payload.get("target_files", 2))
+            cb_limit = float(payload.get("circuit_breaker", 1.0))
+            matched_bps = GLOBAL_BLUEPRINT_ENGINE.match(goal)
+            report = GLOBAL_TOKEN_FORECASTER.forecast(
+                user_goal=goal,
+                repos=repos,
+                agent_roster=roster,
+                target_file_count=target_files,
+                circuit_breaker_limit_usd=cb_limit,
+                blueprints_matched_count=len(matched_bps),
+            )
+            report_dict = report.to_dict()
+            GLOBAL_DASHBOARD_STATE.set_preflight_forecast(report_dict)
+            GLOBAL_DASHBOARD_STATE.set_active_blueprints([bp.to_dict() for bp in matched_bps])
+            self._send_json({"status": "ok", "forecast": report_dict, "blueprints": [bp.to_dict() for bp in matched_bps]})
         elif path == "/api/action/launch":
             goal = payload.get("goal", "").strip()
             repos = payload.get("repos", [])
@@ -1802,6 +1876,10 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       <span>Unit Tests</span>
       <span class="tab-badge" id="tab-badge-tests">0</span>
     </button>
+    <button class="tab-btn" id="tab-btn-budget" onclick="switchTab('budget')">
+      <span>📊 Token Radar & Blueprints</span>
+      <span class="tab-badge" id="tab-badge-budget" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">P90</span>
+    </button>
     <button class="tab-btn" id="tab-btn-architecture" onclick="switchTab('architecture')">
       <span>System Architecture</span>
     </button>
@@ -2096,6 +2174,132 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       <div class="empty-state">
         <h3>No Unit Tests Executed Yet</h3>
         <p>Unit test cases are generated and executed dynamically as the Coder & Verifier engines produce polyglot microservice code.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW: TOKEN RADAR & BLUEPRINTS TAB -->
+  <div class="tab-content" id="view-budget">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+      <div>
+        <h2 style="font-size: 20px; font-weight: 700; color: #f8fafc; margin-bottom: 6px;">Pre-Flight Budget Radar & Architectural Knowledge Base</h2>
+        <p style="color: #94a3b8; font-size: 13px;">Predicts token consumption with 90% confidence (P90) before agents launch, and injects zero-token local blueprints to bypass boilerplate.</p>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-outline" onclick="loadBlueprintsCatalog()">🔄 Refresh Blueprints</button>
+        <button class="btn btn-primary" onclick="calculatePreflightForecast()">⚡ Recalculate P90 Radar</button>
+      </div>
+    </div>
+
+    <!-- Forecaster Inputs / Simulator Bar -->
+    <div class="card" style="margin-bottom: 24px; padding: 20px;">
+      <h3 style="font-size: 15px; font-weight: 600; color: #f8fafc; margin-bottom: 14px;">🎯 Sprint Scope & Circuit Breaker Config</h3>
+      <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 16px; align-items: flex-end;">
+        <div>
+          <label style="font-size: 12px; color: #94a3b8; display: block; margin-bottom: 6px;">Sprint Goal / User Requirement</label>
+          <input type="text" id="budget-goal-input" class="gov-input" placeholder="e.g. Build multi-tenant Stripe payment and AI token escrow gateway" style="width: 100%;">
+        </div>
+        <div>
+          <label style="font-size: 12px; color: #94a3b8; display: block; margin-bottom: 6px;">Target Files Count</label>
+          <input type="number" id="budget-files-input" class="gov-input" value="3" min="1" max="50" style="width: 100%;">
+        </div>
+        <div>
+          <label style="font-size: 12px; color: #94a3b8; display: block; margin-bottom: 6px;">Circuit Breaker Cap ($ USD)</label>
+          <input type="number" id="budget-cap-input" class="gov-input" value="1.00" step="0.25" min="0.10" style="width: 100%;">
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="calculatePreflightForecast()" style="height: 40px; padding: 0 20px;">
+            <span>Run Forecast</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- P90 Statistical KPI Metrics -->
+    <div class="stats-grid" style="margin-bottom: 24px;">
+      <div class="stat-card" style="border-top: 3px solid #10b981;">
+        <span class="stat-label">P90 UPPER BOUND TOKENS</span>
+        <span class="stat-val" style="color: #10b981;" id="kpi-p90-tokens">--</span>
+        <span style="font-size: 11px; color: #94a3b8; margin-top: 4px;">90% statistical confidence</span>
+      </div>
+      <div class="stat-card" style="border-top: 3px solid #38bdf8;">
+        <span class="stat-label">EXPECTED MEAN (P50)</span>
+        <span class="stat-val val-cyan" id="kpi-p50-tokens">--</span>
+        <span style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Standard execution baseline</span>
+      </div>
+      <div class="stat-card" style="border-top: 3px solid #a855f7;">
+        <span class="stat-label">ZERO-TOKEN BLUEPRINT SAVINGS</span>
+        <span class="stat-val" style="color: #c084fc;" id="kpi-blueprint-savings">--</span>
+        <span style="font-size: 11px; color: #94a3b8; margin-top: 4px;" id="kpi-blueprint-pct">Local knowledge cache</span>
+      </div>
+      <div class="stat-card" style="border-top: 3px solid #f59e0b;">
+        <span class="stat-label">CIRCUIT BREAKER GUARD</span>
+        <span class="stat-val" style="color: #fbbf24;" id="kpi-circuit-breaker">SAFE</span>
+        <span style="font-size: 11px; color: #94a3b8; margin-top: 4px;" id="kpi-circuit-desc">Within $1.00 budget</span>
+      </div>
+    </div>
+
+    <!-- Two-Column Section: Provider Cost Matrix & Blueprint Catalog -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+      <!-- Column 1: Multi-Model Provider Cost Matrix -->
+      <div class="card" style="padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h3 style="font-size: 16px; font-weight: 600; color: #f8fafc;">💵 Multi-Model Projected Cost (USD)</h3>
+          <span class="pill" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-size: 11px;">P90 Confidence</span>
+        </div>
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; color: #94a3b8;">
+                <th style="padding: 10px 8px;">Model / Provider</th>
+                <th style="padding: 10px 8px;">Tier</th>
+                <th style="padding: 10px 8px;">P50 Mean</th>
+                <th style="padding: 10px 8px;">P90 Max</th>
+              </tr>
+            </thead>
+            <tbody id="budget-cost-matrix-body">
+              <tr><td colspan="4" style="text-align: center; color: #64748b; padding: 20px;">Loading cost projections...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Column 2: Agent Token Allocation -->
+      <div class="card" style="padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h3 style="font-size: 16px; font-weight: 600; color: #f8fafc;">🤖 Agent Roster Token Distribution</h3>
+          <span class="pill" style="background: rgba(168, 85, 247, 0.1); color: #c084fc; font-size: 11px;">Prompt + Output</span>
+        </div>
+        <div style="overflow-x: auto; max-height: 280px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; color: #94a3b8;">
+                <th style="padding: 10px 8px;">Agent</th>
+                <th style="padding: 10px 8px;">Role</th>
+                <th style="padding: 10px 8px;">Prompt (Exp)</th>
+                <th style="padding: 10px 8px;">P90 Total</th>
+              </tr>
+            </thead>
+            <tbody id="budget-agent-breakdown-body">
+              <tr><td colspan="4" style="text-align: center; color: #64748b; padding: 20px;">Calculating agent distributions...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Blueprint Knowledge Base Catalog -->
+    <div class="card" style="padding: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+        <div>
+          <h3 style="font-size: 16px; font-weight: 600; color: #f8fafc; margin-bottom: 4px;">⚡ Local Architectural Blueprint Bank</h3>
+          <p style="color: #94a3b8; font-size: 12px;">Battle-tested, deterministic patterns loaded offline for 0 tokens and 0ms latency.</p>
+        </div>
+        <span class="pill" style="background: rgba(16, 185, 129, 0.1); color: #10b981; font-weight: 600;">Zero Hallucinations Guarantee</span>
+      </div>
+
+      <div id="blueprints-catalog-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+        <!-- Filled dynamically -->
       </div>
     </div>
   </div>
@@ -3955,8 +4159,127 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       }
     }
 
+    /* Pre-Flight Budget Radar & Blueprint Functions */
+    async function calculatePreflightForecast() {
+      const goal = document.getElementById('budget-goal-input').value.trim() ||
+                   (currentSnapshot && currentSnapshot.user_goal) ||
+                   "Build multi-tenant Stripe payment and AI token escrow gateway";
+      const filesCount = parseInt(document.getElementById('budget-files-input').value) || 3;
+      const cbLimit = parseFloat(document.getElementById('budget-cap-input').value) || 1.00;
+
+      try {
+        const res = await fetch('/api/forecast/calculate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            goal: goal,
+            target_files: filesCount,
+            circuit_breaker: cbLimit,
+          })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          renderForecastData(data.forecast);
+          if (data.blueprints) {
+            renderBlueprints(data.blueprints);
+          }
+          showToast("Pre-flight P90 budget forecast calculated!");
+        }
+      } catch (err) {
+        console.error("Failed to calculate forecast:", err);
+      }
+    }
+
+    function renderForecastData(fc) {
+      if (!fc) return;
+      document.getElementById('kpi-p90-tokens').innerText = (fc.p90_total_tokens || 0).toLocaleString();
+      document.getElementById('kpi-p50-tokens').innerText = (fc.p50_total_tokens || 0).toLocaleString();
+
+      const savings = fc.blueprint_savings || {};
+      document.getElementById('kpi-blueprint-savings').innerText = `-${(savings.tokens_saved || 0).toLocaleString()} tkn`;
+      document.getElementById('kpi-blueprint-pct').innerText = `${savings.percentage_reduction || 0}% token reduction via blueprints`;
+
+      const cbEl = document.getElementById('kpi-circuit-breaker');
+      const cbDesc = document.getElementById('kpi-circuit-desc');
+      const status = fc.circuit_breaker_status || 'SAFE';
+      cbEl.innerText = status;
+      if (status === 'SAFE') {
+        cbEl.style.color = '#10b981';
+        cbDesc.innerText = `Well under $${fc.circuit_breaker_limit_usd.toFixed(2)} cap`;
+      } else if (status === 'WARNING') {
+        cbEl.style.color = '#f59e0b';
+        cbDesc.innerText = `Approaching $${fc.circuit_breaker_limit_usd.toFixed(2)} limit on deep tier`;
+      } else {
+        cbEl.style.color = '#ef4444';
+        cbDesc.innerText = `Exceeds $${fc.circuit_breaker_limit_usd.toFixed(2)} limit!`;
+      }
+
+      // Cost table
+      const tbody = document.getElementById('budget-cost-matrix-body');
+      const costs = fc.cost_projections || {};
+      tbody.innerHTML = Object.keys(costs).map(k => {
+        const c = costs[k];
+        const isFree = c.p90_cost_usd === 0;
+        return `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+            <td style="padding: 10px 8px; font-weight: 600; color: #f8fafc;">${c.provider_name}</td>
+            <td style="padding: 10px 8px;"><span class="pill" style="font-size: 11px;">${c.tier}</span></td>
+            <td style="padding: 10px 8px; color: #94a3b8;">${isFree ? 'Free ($0.00)' : '$' + c.p50_cost_usd.toFixed(4)}</td>
+            <td style="padding: 10px 8px; font-weight: 700; color: ${isFree ? '#10b981' : '#38bdf8'};">${isFree ? 'Free ($0.00)' : '$' + c.p90_cost_usd.toFixed(4)}</td>
+          </tr>
+        `;
+      }).join('');
+
+      // Agent breakdown
+      const agentTbody = document.getElementById('budget-agent-breakdown-body');
+      const agents = fc.agent_breakdown || [];
+      agentTbody.innerHTML = agents.map(a => `
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+          <td style="padding: 10px 8px; font-weight: 600; color: #f8fafc;">${a.agent}</td>
+          <td style="padding: 10px 8px;"><span class="pill" style="font-size: 11px;">${a.category}</span></td>
+          <td style="padding: 10px 8px; color: #94a3b8;">${a.expected_prompt_tokens.toLocaleString()}</td>
+          <td style="padding: 10px 8px; font-weight: 600; color: #a855f7;">${a.p90_total_tokens.toLocaleString()}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadBlueprintsCatalog() {
+      try {
+        const res = await fetch('/api/blueprints');
+        const data = await res.json();
+        if (data.status === 'ok' && data.blueprints) {
+          renderBlueprints(data.blueprints);
+        }
+      } catch (err) {
+        console.error("Failed to load blueprints:", err);
+      }
+    }
+
+    function renderBlueprints(bps) {
+      const grid = document.getElementById('blueprints-catalog-grid');
+      if (!grid) return;
+      grid.innerHTML = bps.map(b => `
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+              <span class="pill" style="background: rgba(16, 185, 129, 0.1); color: #10b981; font-size: 11px;">${b.category}</span>
+              <span style="font-size: 11px; font-weight: 700; color: #c084fc;">~${b.tokens_saved_estimate.toLocaleString()} Tokens Saved</span>
+            </div>
+            <h4 style="font-size: 14px; font-weight: 600; color: #f8fafc; margin-bottom: 6px;">${b.title}</h4>
+            <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px; line-height: 1.4;">${b.description}</p>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 10px; margin-top: 10px;">
+            <span style="font-size: 11px; color: #64748b; font-family: monospace;">Lang: ${b.language}</span>
+            <span class="pill" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-size: 11px;">Deterministic 0-Tkn</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
     loadCurrentUser();
     loadRunsList();
+    loadBlueprintsCatalog();
+    setTimeout(calculatePreflightForecast, 800);
     setInterval(loadRunsList, 5000);
     setInterval(() => {
       if (selectedRunId === 'live') fetchState();
