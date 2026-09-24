@@ -159,36 +159,55 @@ class DatabaseAgent(BaseAgent):
 class GoCoderAgent(BaseAgent):
     def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
-            "You are a Staff Go Developer. Generate clean, idiomatic Go code and complete unit tests covering positive, negative, and edge cases. "
+            "You are a Principal Software Engineer & Test-Driven Development (TDD) Specialist. "
+            "When generating or modifying source code, you MUST ALWAYS generate comprehensive unit tests alongside the implementation.\n\n"
+            "Language-Specific Testing Guidelines:\n"
+            "- Go: Use native 'testing' package with idiomatic table-driven test cases (tests := []struct{...}) and "
+            "  popular assertion libraries like 'github.com/stretchr/testify/assert' or standard t.Errorf.\n"
+            "- Python: Use 'unittest' (with TestCase, setUp, mock.patch, MagicMock) or 'pytest' parameterized tests.\n"
+            "- Node.js/TypeScript: Use 'jest' (describe/it/expect) or standard 'node:test' + 'node:assert'.\n\n"
+            "Testing Scope:\n"
+            "- Positive / Happy Path execution.\n"
+            "- Negative Path: invalid arguments, error propagation, null/nil guards.\n"
+            "- Boundary & Edge Cases: zero values, empty collections, concurrency, maximum thresholds.\n\n"
             "Output JSON mapping repository-relative allowed file paths to complete source strings:\n"
-            '{"operations.go": "<complete code>", "operations_test.go": "<complete code>"}',
+            '{"path/to/source.go": "<complete source code>", "path/to/source_test.go": "<complete unit test suite>"}',
             provider=provider,
             tier="primary",
         )
 
     def run(self, existing_code: str, selected_arch: str, source_filename: str, test_filename: str, contract: str) -> Dict[str, str]:
         prompt = (
-            f"Existing Go code:\n{existing_code}\n"
-            f"Repository contract:\n{contract}\n"
-            f"Selected Design / Instructions:\n{selected_arch}\n"
-            f"Generate a JSON object mapping repository-relative allowlisted paths to complete source strings. "
-            f"At minimum update '{source_filename}' and comprehensive tests in '{test_filename}'."
+            f"Existing Code:\n{existing_code}\n\n"
+            f"Repository Contract:\n{contract}\n\n"
+            f"Selected Architecture / Instructions:\n{selected_arch}\n\n"
+            f"Target Source File: '{source_filename}'\n"
+            f"Target Unit Test File: '{test_filename}'\n\n"
+            "Generate a JSON object mapping repository-relative allowlisted paths to complete code strings. "
+            f"You MUST generate production-grade code for '{source_filename}' AND write complete, idiomatic unit test cases "
+            f"in '{test_filename}' pulling famous test libraries (e.g., testify/assert for Go, unittest/pytest for Python, jest for Node)."
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
 
     def fix(self, current_files: Dict[str, str], error_log: str, contract: str) -> Dict[str, str]:
         prompt = (
-            f"The following Go code failed test/verification checks:\n"
+            f"The following code failed test/verification checks:\n"
             f"Current Files:\n{json.dumps(current_files, indent=2)}\n\n"
             f"Verification Failure Log:\n{error_log}\n\n"
             f"Repository Contract:\n{contract}\n\n"
             "Diagnose the root cause of the error. Fix the syntax, logic bugs, or failing unit test assertions. "
+            "Ensure unit tests remain thorough and properly assert all cases. "
             "Output JSON mapping repository-relative allowed file paths to complete corrected source strings:\n"
             '{"path/to/file.go": "<complete corrected code>"}'
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
+
+
+# Alias for polyglot clarity
+CoderAgent = GoCoderAgent
+
 
 
 class SecurityAuditorAgent(BaseAgent):

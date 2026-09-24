@@ -462,6 +462,19 @@ class OrchestratorEngine:
                 SandboxEngine.validate_and_write(contract.repo_path, contract.allowed_paths, files)
                 
                 verification = VerifierEngine.run_checks(contract.repo_path)
+                GLOBAL_DASHBOARD_STATE.record_test_result(
+                    repo=contract.name,
+                    language=verification.language,
+                    passed=verification.passed,
+                    test_output=verification.test_output,
+                    vet_output=verification.vet_output,
+                    sandboxed=verification.sandboxed,
+                    framework=verification.framework,
+                    total_tests=verification.total_tests,
+                    passed_count=verification.passed_count,
+                    failed_count=verification.failed_count,
+                    test_cases=verification.test_cases,
+                )
                 AUDIT_LOGGER.log_verification(
                     repo=contract.name,
                     language=verification.language,
@@ -469,6 +482,10 @@ class OrchestratorEngine:
                     test_output=verification.test_output,
                     vet_output=verification.vet_output,
                     sandboxed=verification.sandboxed,
+                    framework=verification.framework,
+                    total_tests=verification.total_tests,
+                    passed_count=verification.passed_count,
+                    failed_count=verification.failed_count,
                 )
                 if not verification.passed:
                     healed = False
@@ -500,6 +517,19 @@ class OrchestratorEngine:
                             break
 
                         verification = VerifierEngine.run_checks(contract.repo_path)
+                        GLOBAL_DASHBOARD_STATE.record_test_result(
+                            repo=contract.name,
+                            language=verification.language,
+                            passed=verification.passed,
+                            test_output=verification.test_output,
+                            vet_output=verification.vet_output,
+                            sandboxed=verification.sandboxed,
+                            framework=verification.framework,
+                            total_tests=verification.total_tests,
+                            passed_count=verification.passed_count,
+                            failed_count=verification.failed_count,
+                            test_cases=verification.test_cases,
+                        )
                         AUDIT_LOGGER.log_verification(
                             repo=contract.name,
                             language=verification.language,
@@ -507,6 +537,10 @@ class OrchestratorEngine:
                             test_output=verification.test_output,
                             vet_output=verification.vet_output,
                             sandboxed=verification.sandboxed,
+                            framework=verification.framework,
+                            total_tests=verification.total_tests,
+                            passed_count=verification.passed_count,
+                            failed_count=verification.failed_count,
                         )
                         if verification.passed:
                             self._log(f"[+] Self-Healing succeeded on attempt {attempt}! Verification passed.")

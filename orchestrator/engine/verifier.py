@@ -1,8 +1,9 @@
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
 class VerificationResult(BaseModel):
@@ -12,6 +13,11 @@ class VerificationResult(BaseModel):
     vet_output: str = ""
     language: str = "go"
     sandboxed: bool = False
+    framework: str = ""
+    total_tests: int = 0
+    passed_count: int = 0
+    failed_count: int = 0
+    test_cases: List[Dict[str, Any]] = Field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -76,6 +82,78 @@ class VerifierEngine:
         return result, sandboxed
 
     @staticmethod
+    def parse_test_suite(output: str, language: str = "generic", tests_passed: bool = True) -> Dict[str, Any]:
+        # Handle swapped arguments gracefully if called as parse_test_suite("go", output)
+        known_langs = ("go", "python", "node", "generic")
+        if output.lower() in known_langs and language not in known_langs:
+            output, language = language, output
+
+        cases: List[Dict[str, Any]] = []
+        framework = ""
+        lang = (language or "").lower()
+        
+        if lang == "go":
+            framework = "testify / go test"
+            for m in re.finditer(r"---\s+(PASS|FAIL|SKIP):\s+([^\s]+)\s+\(([^)]+)\)", output):
+                st = m.group(1).upper()
+                cases.append({
+                    "name": m.group(2),
+                    "status": "PASS" if st == "PASS" else ("FAIL" if st == "FAIL" else "SKIP"),
+                    "duration": m.group(3),
+                })
+        elif lang == "python":
+            # Check for pytest format first
+            pytest_matches = list(re.finditer(r"([^\s]+::[^\s]+)\s+(PASSED|FAILED|SKIPPED)", output))
+            if pytest_matches:
+                framework = "pytest"
+                for m in pytest_matches:
+                    st = m.group(2).upper()
+                    cases.append({
+                        "name": m.group(1),
+                        "status": "PASS" if st == "PASSED" else ("FAIL" if st == "FAILED" else "SKIP"),
+                        "duration": "",
+                    })
+            else:
+                framework = "unittest"
+                for m in re.finditer(r"([a-zA-Z0-9_]+)\s+\(([^)]+)\)\s+\.\.\.\s+(ok|FAIL|ERROR|skipped)", output):
+                    st = m.group(3).lower()
+                    cases.append({
+                        "name": f"{m.group(2)}.{m.group(1)}",
+                        "status": "PASS" if st == "ok" else ("SKIP" if st == "skipped" else "FAIL"),
+                        "duration": "",
+                    })
+        elif lang == "node":
+            framework = "jest"
+            for m in re.finditer(r"(✓|✕)\s+([^\n\r(]+)(?:\s+\(([^)]+)\))?", output):
+                cases.append({
+                    "name": m.group(2).strip(),
+                    "status": "PASS" if m.group(1) == "✓" else "FAIL",
+                    "duration": m.group(3) or "",
+                })
+
+        passed_count = sum(1 for c in cases if c["status"] == "PASS")
+        failed_count = sum(1 for c in cases if c["status"] == "FAIL")
+        total = len(cases)
+
+        if total == 0:
+            total = 1
+            passed_count = 1 if tests_passed else 0
+            failed_count = 0 if tests_passed else 1
+            cases.append({
+                "name": f"{lang.capitalize()}TestSuite",
+                "status": "PASS" if tests_passed else "FAIL",
+                "duration": "completed",
+            })
+
+        return {
+            "framework": framework or ("testify / go test" if lang == "go" else "pytest / unittest" if lang == "python" else "jest / npm test"),
+            "total_tests": total,
+            "passed_count": passed_count,
+            "failed_count": failed_count,
+            "test_cases": cases,
+        }
+
+    @staticmethod
     def run_checks(repo_path: str) -> VerificationResult:
         lang = VerifierEngine.detect_language(repo_path)
         if lang == "go":
@@ -98,19 +176,28 @@ class VerifierEngine:
                 vet_output="Go executable not found",
                 language="go",
                 sandboxed=False,
+                framework="go test",
             )
 
         docker_img = "golang:1.22-alpine"
         test_run, is_sandboxed = VerifierEngine._execute(["go", "test", "-v", "./..."], repo_path, docker_img)
         vet_run, _ = VerifierEngine._execute(["go", "vet", "./..."], repo_path, docker_img)
+        output = test_run.stdout or test_run.stderr
+        passed = (test_run.returncode == 0)
+        parsed = VerifierEngine.parse_test_suite(output, "go", passed)
 
         return VerificationResult(
-            tests_passed=(test_run.returncode == 0),
-            test_output=test_run.stdout or test_run.stderr,
+            tests_passed=passed,
+            test_output=output,
             vet_passed=(vet_run.returncode == 0),
             vet_output=vet_run.stderr,
             language="go",
             sandboxed=is_sandboxed,
+            framework=parsed["framework"],
+            total_tests=parsed["total_tests"],
+            passed_count=parsed["passed_count"],
+            failed_count=parsed["failed_count"],
+            test_cases=parsed["test_cases"],
         )
 
     @staticmethod
@@ -119,14 +206,22 @@ class VerifierEngine:
         python_bin = shutil.which("python3") or shutil.which("python") or "python"
         cmd = [python_bin, "-m", "unittest", "discover", "-s", ".", "-v"]
         test_run, is_sandboxed = VerifierEngine._execute(cmd, repo_path, docker_img)
+        output = test_run.stdout or test_run.stderr
+        passed = (test_run.returncode == 0)
+        parsed = VerifierEngine.parse_test_suite(output, "python", passed)
 
         return VerificationResult(
-            tests_passed=(test_run.returncode == 0),
-            test_output=test_run.stdout or test_run.stderr,
+            tests_passed=passed,
+            test_output=output,
             vet_passed=True,
             vet_output="",
             language="python",
             sandboxed=is_sandboxed,
+            framework=parsed["framework"],
+            total_tests=parsed["total_tests"],
+            passed_count=parsed["passed_count"],
+            failed_count=parsed["failed_count"],
+            test_cases=parsed["test_cases"],
         )
 
     @staticmethod
@@ -135,12 +230,20 @@ class VerifierEngine:
         npm_bin = shutil.which("npm") or "npm"
         cmd = [npm_bin, "test", "--", "--passWithNoTests"]
         test_run, is_sandboxed = VerifierEngine._execute(cmd, repo_path, docker_img)
+        output = test_run.stdout or test_run.stderr
+        passed = (test_run.returncode == 0)
+        parsed = VerifierEngine.parse_test_suite(output, "node", passed)
 
         return VerificationResult(
-            tests_passed=(test_run.returncode == 0),
-            test_output=test_run.stdout or test_run.stderr,
+            tests_passed=passed,
+            test_output=output,
             vet_passed=True,
             vet_output="",
             language="node",
             sandboxed=is_sandboxed,
+            framework=parsed["framework"],
+            total_tests=parsed["total_tests"],
+            passed_count=parsed["passed_count"],
+            failed_count=parsed["failed_count"],
+            test_cases=parsed["test_cases"],
         )

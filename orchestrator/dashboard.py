@@ -40,6 +40,7 @@ class DashboardState:
         ]
         self.agents: Dict[str, Dict[str, Any]] = {}
         self.tasks: List[Dict[str, Any]] = []
+        self.test_results: List[Dict[str, Any]] = []
 
         # Interactive Governance & Human Gate State
         self.pending_approval: bool = False
@@ -96,6 +97,7 @@ class DashboardState:
             }
             
             self.tasks = []
+            self.test_results = []
             self.pending_approval = False
             self.pending_changes_data = []
             self.approval_decision = None
@@ -113,6 +115,58 @@ class DashboardState:
             self._flush_to_disk()
 
         self._start_heartbeat_worker()
+
+    def record_test_result(
+        self,
+        repo: str,
+        language: str,
+        passed: bool,
+        test_output: str = "",
+        vet_output: str = "",
+        sandboxed: bool = False,
+        framework: str = "",
+        total_tests: int = 0,
+        passed_count: int = 0,
+        failed_count: int = 0,
+        test_cases: Optional[List[Dict[str, Any]]] = None,
+    ) -> None:
+        t_fmt = datetime.now().strftime("%I:%M:%S %p")
+        with self.lock:
+            if not hasattr(self, "test_results"):
+                self.test_results = []
+
+            tc_list = test_cases or []
+            t_total = total_tests or (len(tc_list) if tc_list else 1)
+            t_passed = passed_count if total_tests > 0 else (t_total if passed else 0)
+            t_failed = failed_count if total_tests > 0 else (0 if passed else t_total)
+
+            entry = {
+                "id": f"test_{len(self.test_results) + 1}",
+                "timestamp": t_fmt,
+                "repo": repo,
+                "language": language,
+                "framework": framework or ("testify / go test" if language == "go" else "pytest / unittest" if language == "python" else "jest / npm test"),
+                "passed": passed,
+                "total_tests": t_total,
+                "passed_count": t_passed,
+                "failed_count": t_failed,
+                "sandboxed": sandboxed,
+                "test_output": test_output,
+                "vet_output": vet_output,
+                "test_cases": tc_list,
+            }
+            self.test_results.append(entry)
+            self.last_heartbeat = time.time()
+            st_text = "PASSED" if passed else "FAILED"
+            self.logs.append(f"[{t_fmt}] [UNIT_TESTS] {repo} ({language.upper()} via {entry['framework']}): {st_text} ({t_passed}/{t_total} passed)")
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": "VerifierEngine",
+                "status": "completed" if passed else "failed",
+                "action": f"Unit tests {st_text} for {repo} ({t_passed}/{t_total} passed)",
+            })
+            self._flush_to_disk()
+
 
     def request_approval(self, pending_changes: List[Dict[str, Any]]) -> None:
         with self.lock:
@@ -329,9 +383,11 @@ class DashboardState:
             "milestone_name": getattr(self, "milestone_name", ""),
             "milestone_summary": getattr(self, "milestone_summary", ""),
             "milestone_decision": getattr(self, "milestone_decision", None),
+            "test_results": getattr(self, "test_results", []),
             "timeline_events": self.timeline_events[-100:],
             "logs": self.logs[-100:],
         }
+
 
     def _flush_to_disk(self) -> None:
         try:
@@ -565,13 +621,14 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ASCM Orchestrator - Persistent Telemetry Dashboard</title>
+  <title>ASCM Orchestrator - Persistent Telemetry & Unit Test Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-dark: #0d1117;
       --card-bg: #161b22;
+      --card-sub-bg: #0d1117;
       --border-color: #30363d;
       --text-main: #c9d1d9;
       --text-muted: #8b949e;
@@ -580,6 +637,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       --accent-yellow: #d29922;
       --accent-red: #f85149;
       --accent-purple: #bc8cff;
+      --accent-cyan: #39c5cf;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -593,7 +651,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
       padding-bottom: 16px;
       border-bottom: 1px solid var(--border-color);
     }
@@ -637,7 +695,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       border: 1px solid var(--border-color);
       border-radius: 8px;
       padding: 16px 20px;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -645,6 +703,84 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     .phase-title { font-size: 12px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
     .phase-name { font-size: 16px; font-weight: 600; color: var(--accent-blue); margin-top: 2px; }
 
+    /* Nav Tabs */
+    .tabs-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+    }
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .tab-btn.active {
+      color: #ffffff;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-bottom-color: var(--card-bg);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    .tab-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: rgba(88, 166, 255, 0.2);
+      color: var(--accent-blue);
+      font-weight: 700;
+    }
+    .tab-badge.pending {
+      background: rgba(210, 153, 34, 0.2);
+      color: var(--accent-yellow);
+      animation: pulse-anim 1.5s infinite;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Alert Banners */
+    .gov-banner {
+      background: rgba(210, 153, 34, 0.15);
+      border: 1px solid rgba(210, 153, 34, 0.4);
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .gov-banner-title { font-weight: 600; color: var(--accent-yellow); font-size: 14px; }
+    .gov-banner-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-primary { background: var(--accent-blue); color: #fff; }
+    .btn-success { background: var(--accent-green); color: #fff; }
+    .btn-danger { background: var(--accent-red); color: #fff; }
+    .btn-warning { background: var(--accent-yellow); color: #000; }
+
+    /* Stats Grid */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -665,6 +801,8 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     .val-completed { color: var(--accent-green); }
     .val-waiting { color: var(--accent-yellow); }
     .val-tasks { color: var(--accent-purple); }
+    .val-failed { color: var(--accent-red); }
+    .val-cyan { color: var(--accent-cyan); }
 
     .main-grid {
       display: grid;
@@ -709,11 +847,14 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       padding: 3px 8px;
       border-radius: 12px;
       text-transform: uppercase;
+      display: inline-block;
     }
     .pill-running { background: rgba(88, 166, 255, 0.15); color: var(--accent-blue); border: 1px solid rgba(88, 166, 255, 0.3); }
     .pill-completed { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); border: 1px solid rgba(63, 185, 80, 0.3); }
     .pill-waiting { background: rgba(210, 153, 34, 0.15); color: var(--accent-yellow); border: 1px solid rgba(210, 153, 34, 0.3); }
     .pill-failed { background: rgba(248, 81, 73, 0.15); color: var(--accent-red); border: 1px solid rgba(248, 81, 73, 0.3); }
+    .pill-lang { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); border: 1px solid rgba(188, 140, 255, 0.3); }
+    .pill-fw { background: rgba(57, 197, 207, 0.15); color: var(--accent-cyan); border: 1px solid rgba(57, 197, 207, 0.3); font-family: 'Fira Code', monospace; }
 
     .timeline-list {
       display: flex;
@@ -749,13 +890,136 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     }
     .log-line { white-space: pre-wrap; word-break: break-all; }
     .log-line.phase { color: var(--accent-blue); font-weight: 600; }
+
+    /* Unit Tests View Styles */
+    .ut-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .ut-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .ut-title-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .ut-repo-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .ut-stats-summary {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .ut-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .ut-table th {
+      text-align: left;
+      padding: 8px 12px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .ut-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .ut-case-name {
+      font-family: 'Fira Code', monospace;
+      color: var(--text-main);
+      font-weight: 500;
+    }
+    .ut-details-toggle {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      align-self: flex-start;
+    }
+    .ut-details-toggle:hover { color: var(--text-main); }
+    .ut-raw-output {
+      font-family: 'Fira Code', monospace;
+      font-size: 11px;
+      background: #090d13;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      max-height: 220px;
+      overflow-y: auto;
+      color: #8b949e;
+      white-space: pre-wrap;
+      word-break: break-all;
+      display: none;
+    }
+    .ut-raw-output.visible { display: block; }
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      background: var(--card-bg);
+      border: 1px dashed var(--border-color);
+      border-radius: 8px;
+      color: var(--text-muted);
+    }
+    .empty-state h3 { color: #ffffff; font-size: 16px; margin-bottom: 6px; }
+    .empty-state p { font-size: 13px; }
+
+    /* Governance Form Styles */
+    .gov-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .gov-card h3 { font-size: 15px; font-weight: 600; color: #ffffff; }
+    .gov-textarea {
+      width: 100%;
+      background: #090d13;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 10px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 13px;
+      resize: vertical;
+      min-height: 60px;
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="logo">
       <div class="pulse"></div>
-      <h1>ASCM Persistent Telemetry Dashboard</h1>
+      <h1>ASCM Persistent Telemetry & Unit Test Dashboard</h1>
     </div>
     <div class="run-controls">
       <select class="run-select" id="run-selector" onchange="onRunChanged()">
@@ -776,53 +1040,130 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <div class="stats-grid">
-    <div class="stat-card">
-      <span class="stat-label">RUNNING AGENTS</span>
-      <span class="stat-val val-running" id="cnt-running">0</span>
+  <!-- Navigation Tabs -->
+  <div class="tabs-bar">
+    <button class="tab-btn active" id="tab-btn-pipeline" onclick="switchTab('pipeline')">
+      <span>Pipeline & Agents</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-unittests" onclick="switchTab('unittests')">
+      <span>Unit Tests</span>
+      <span class="tab-badge" id="tab-badge-tests">0</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-governance" onclick="switchTab('governance')">
+      <span>Governance & Milestones</span>
+      <span class="tab-badge pending" id="tab-badge-gov" style="display: none;">Action Req</span>
+    </button>
+  </div>
+
+  <!-- VIEW 1: PIPELINE & AGENTS -->
+  <div class="tab-content active" id="view-pipeline">
+    <div id="pipeline-gov-banner" style="display: none;" class="gov-banner">
+      <div>
+        <div class="gov-banner-title" id="pipeline-gov-title">Action Required</div>
+        <div class="gov-banner-desc" id="pipeline-gov-desc">Pending review or clarification</div>
+      </div>
+      <button class="btn btn-warning" onclick="switchTab('governance')">Open Governance Gate &rarr;</button>
     </div>
-    <div class="stat-card">
-      <span class="stat-label">COMPLETED AGENTS</span>
-      <span class="stat-val val-completed" id="cnt-completed">0</span>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label">RUNNING AGENTS</span>
+        <span class="stat-val val-running" id="cnt-running">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">COMPLETED AGENTS</span>
+        <span class="stat-val val-completed" id="cnt-completed">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">WAITING AGENTS</span>
+        <span class="stat-val val-waiting" id="cnt-waiting">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">TOTAL SUB-TASKS</span>
+        <span class="stat-val val-tasks" id="cnt-tasks">0</span>
+      </div>
     </div>
-    <div class="stat-card">
-      <span class="stat-label">WAITING AGENTS</span>
-      <span class="stat-val val-waiting" id="cnt-waiting">0</span>
+
+    <div class="main-grid">
+      <div class="panel">
+        <div class="panel-header">
+          <span>Agent Pipeline & Status</span>
+          <span style="font-size: 12px; color: var(--text-muted);" id="active-action-text">Idle</span>
+        </div>
+        <div class="agent-list" id="agent-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Timestamped Audit Timeline</span>
+          <span style="font-size: 12px; color: var(--text-muted);">Exact Start & Transition Times</span>
+        </div>
+        <div class="timeline-list" id="timeline-list"></div>
+      </div>
     </div>
-    <div class="stat-card">
-      <span class="stat-label">TOTAL SUB-TASKS</span>
-      <span class="stat-val val-tasks" id="cnt-tasks">0</span>
+
+    <div class="panel" style="margin-top: 24px;">
+      <div class="panel-header">
+        <span>Execution Log Audit Stream</span>
+        <span style="font-size: 12px; color: var(--text-muted);">Timestamped Output</span>
+      </div>
+      <div class="log-box" id="log-box"></div>
     </div>
   </div>
 
-  <div class="main-grid">
-    <div class="panel">
-      <div class="panel-header">
-        <span>Agent Pipeline & Status</span>
-        <span style="font-size: 12px; color: var(--text-muted);" id="active-action-text">Idle</span>
+  <!-- VIEW 2: UNIT TESTS TAB -->
+  <div class="tab-content" id="view-unittests">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label">TOTAL UNIT TESTS</span>
+        <span class="stat-val val-cyan" id="ut-stat-total">0</span>
       </div>
-      <div class="agent-list" id="agent-list"></div>
+      <div class="stat-card">
+        <span class="stat-label">PASSED TESTS</span>
+        <span class="stat-val val-completed" id="ut-stat-passed">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">FAILED TESTS</span>
+        <span class="stat-val val-failed" id="ut-stat-failed">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">OVERALL PASS RATE</span>
+        <span class="stat-val val-running" id="ut-stat-rate">100%</span>
+      </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-header">
-        <span>Timestamped Audit Timeline</span>
-        <span style="font-size: 12px; color: var(--text-muted);">Exact Start & Transition Times</span>
+    <div id="ut-runs-container">
+      <div class="empty-state">
+        <h3>No Unit Tests Executed Yet</h3>
+        <p>Unit test cases are generated and executed dynamically as the Coder & Verifier engines produce polyglot microservice code.</p>
       </div>
-      <div class="timeline-list" id="timeline-list"></div>
     </div>
   </div>
 
-  <div class="panel" style="margin-top: 24px;">
-    <div class="panel-header">
-      <span>Execution Log Audit Stream</span>
-      <span style="font-size: 12px; color: var(--text-muted);">Timestamped Output</span>
+  <!-- VIEW 3: GOVERNANCE & MILESTONES TAB -->
+  <div class="tab-content" id="view-governance">
+    <div id="gov-container">
+      <div class="empty-state">
+        <h3>Governance & Milestones Status</h3>
+        <p>No human intervention is currently blocking pipeline execution. All gates will automatically prompt here if clarification or milestone feedback is required.</p>
+      </div>
     </div>
-    <div class="log-box" id="log-box"></div>
   </div>
 
   <script>
     let selectedRunId = 'live';
+    let currentTab = 'pipeline';
+
+    function switchTab(tabName) {
+      currentTab = tabName;
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      const activeBtn = document.getElementById(`tab-btn-${tabName}`);
+      const activeContent = document.getElementById(`view-${tabName}`);
+      if (activeBtn) activeBtn.classList.add('active');
+      if (activeContent) activeContent.classList.add('active');
+    }
 
     async function loadRunsList() {
       try {
@@ -830,14 +1171,13 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
         const runs = await res.json();
         const sel = document.getElementById('run-selector');
         
-        // Preserve selection if present
         const currentVal = sel.value;
         sel.innerHTML = '<option value="live">🔴 Live Active Session</option>';
         
         runs.forEach(r => {
           const opt = document.createElement('option');
           opt.value = r.run_id;
-          opt.innerText = `📁 ${r.run_id} - Goal: "${r.goal.substring(0, 30)}"`;
+          opt.innerText = `📁 ${r.run_id} - Goal: "${(r.goal || '').substring(0, 30)}"`;
           sel.appendChild(opt);
         });
 
@@ -854,12 +1194,33 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       fetchState();
     }
 
+    async function submitGovAction(endpoint, payload) {
+      try {
+        await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        fetchState();
+      } catch (err) {
+        alert("Action failed: " + err);
+      }
+    }
+
+    function toggleRawOutput(id) {
+      const box = document.getElementById(id);
+      if (box) {
+        box.classList.toggle('visible');
+      }
+    }
+
     async function fetchState() {
       try {
         const url = `/api/state?run_id=${selectedRunId}`;
         const res = await fetch(url);
         const data = await res.json();
 
+        // Phase & Status
         const phaseElem = document.getElementById('phase-name');
         phaseElem.innerText = data.phase + (data.user_goal ? ` (${data.user_goal})` : '');
         
@@ -890,6 +1251,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
         document.getElementById('active-agent').innerText = data.active_agent || 'None';
         document.getElementById('active-action-text').innerText = data.active_action || 'Idle';
 
+        // Pipeline stats
         document.getElementById('cnt-running').innerText = data.counts.running || 0;
         document.getElementById('cnt-completed').innerText = data.counts.completed || 0;
         document.getElementById('cnt-waiting').innerText = data.counts.waiting || 0;
@@ -936,6 +1298,171 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
           logBox.appendChild(div);
         });
         logBox.scrollTop = logBox.scrollHeight;
+
+        // Render Unit Tests
+        const testResults = data.test_results || [];
+        document.getElementById('tab-badge-tests').innerText = testResults.length;
+
+        let totalTests = 0;
+        let totalPassed = 0;
+        let totalFailed = 0;
+
+        testResults.forEach(r => {
+          totalTests += (r.total_tests || 0);
+          totalPassed += (r.passed_count || 0);
+          totalFailed += (r.failed_count || 0);
+        });
+
+        document.getElementById('ut-stat-total').innerText = totalTests;
+        document.getElementById('ut-stat-passed').innerText = totalPassed;
+        document.getElementById('ut-stat-failed').innerText = totalFailed;
+        const passRate = totalTests > 0 ? Math.round((totalPassed / totalTests) * 100) : 100;
+        document.getElementById('ut-stat-rate').innerText = `${passRate}%`;
+
+        const utContainer = document.getElementById('ut-runs-container');
+        if (testResults.length === 0) {
+          utContainer.innerHTML = `
+            <div class="empty-state">
+              <h3>No Unit Tests Executed Yet</h3>
+              <p>Unit test cases are generated and executed dynamically as the Coder & Verifier engines produce polyglot microservice code.</p>
+            </div>
+          `;
+        } else {
+          utContainer.innerHTML = '';
+          testResults.forEach((run, idx) => {
+            const card = document.createElement('div');
+            card.className = 'ut-card';
+            const rawId = `ut-raw-${idx}`;
+
+            const cases = run.test_cases || [];
+            let tableHtml = '';
+            if (cases.length > 0) {
+              const rows = cases.map(c => `
+                <tr>
+                  <td class="ut-case-name">${c.name || 'Unnamed test'}</td>
+                  <td><span class="pill pill-${(c.status || '').toLowerCase() === 'pass' ? 'completed' : 'failed'}">${c.status || 'PASS'}</span></td>
+                  <td style="color: var(--text-muted); font-size: 12px;">${c.duration || '-'}</td>
+                  <td style="color: var(--accent-red); font-size: 11px;">${c.details || ''}</td>
+                </tr>
+              `).join('');
+              tableHtml = `
+                <table class="ut-table">
+                  <thead>
+                    <tr><th>Test Case</th><th>Status</th><th>Duration</th><th>Details</th></tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              `;
+            } else {
+              tableHtml = `<div style="font-size: 12px; color: var(--text-muted); font-style: italic;">All ${run.total_tests} test cases executed cleanly in suite.</div>`;
+            }
+
+            const rawContent = (run.test_output || '') + (run.vet_output ? `\n\n--- Code Analysis / Vet Output ---\n${run.vet_output}` : '');
+
+            card.innerHTML = `
+              <div class="ut-header">
+                <div class="ut-title-area">
+                  <span class="ut-repo-name">${run.repo || 'Target Service'}</span>
+                  <span class="pill pill-lang">${(run.language || 'polyglot').toUpperCase()}</span>
+                  <span class="pill pill-fw">${run.framework || 'Language Runner'}</span>
+                  <span class="pill pill-${run.passed ? 'completed' : 'failed'}">${run.passed ? 'PASSED' : 'FAILED'}</span>
+                </div>
+                <div class="ut-stats-summary">
+                  <span style="font-size: 13px; font-weight: 600; color: ${run.passed ? 'var(--accent-green)' : 'var(--accent-red)'};">
+                    ${run.passed_count}/${run.total_tests} Passed
+                  </span>
+                  <span style="font-size: 12px; color: var(--text-muted);">${run.timestamp || ''}</span>
+                </div>
+              </div>
+              <div>${tableHtml}</div>
+              <button class="ut-details-toggle" onclick="toggleRawOutput('${rawId}')">
+                <span>Toggle Raw Runner Output (stdout & stderr)</span>
+              </button>
+              <div class="ut-raw-output" id="${rawId}">${rawContent || 'No raw stdout logged.'}</div>
+            `;
+            utContainer.appendChild(card);
+          });
+        }
+
+        // Governance Check
+        const govBadge = document.getElementById('tab-badge-gov');
+        const govBanner = document.getElementById('pipeline-gov-banner');
+        const govTitle = document.getElementById('pipeline-gov-title');
+        const govDesc = document.getElementById('pipeline-gov-desc');
+        const govContainer = document.getElementById('gov-container');
+
+        const hasGov = data.pending_milestone || data.pending_approval || data.clarification_needed;
+        if (hasGov) {
+          govBadge.style.display = 'inline-block';
+          govBanner.style.display = 'flex';
+          if (data.pending_milestone) {
+            govTitle.innerText = `Milestone Review Required: ${data.milestone_name}`;
+            govDesc.innerText = data.milestone_summary || 'Review required before proceeding.';
+          } else if (data.pending_approval) {
+            govTitle.innerText = 'Code Changes Approval Required';
+            govDesc.innerText = `${(data.pending_changes_data || []).length} repository modifications await sign-off.`;
+          } else if (data.clarification_needed) {
+            govTitle.innerText = 'Clarification Requested';
+            govDesc.innerText = 'Product agent requires requirement clarifications.';
+          }
+        } else {
+          govBadge.style.display = 'none';
+          govBanner.style.display = 'none';
+        }
+
+        // Render Governance Tab
+        if (hasGov) {
+          let govHtml = '';
+          if (data.pending_milestone) {
+            govHtml += `
+              <div class="gov-card">
+                <h3>Milestone Gate: ${data.milestone_name}</h3>
+                <p style="font-size: 13px; color: var(--text-muted);">${data.milestone_summary}</p>
+                <textarea id="milestone-feedback" class="gov-textarea" placeholder="Optional feedback or rework instructions..."></textarea>
+                <div style="display: flex; gap: 10px; margin-top: 8px;">
+                  <button class="btn btn-success" onclick="submitGovAction('/api/action/milestone', { proceed: true, feedback: document.getElementById('milestone-feedback').value })">Confirm & Proceed</button>
+                  <button class="btn btn-danger" onclick="submitGovAction('/api/action/milestone', { proceed: false, feedback: document.getElementById('milestone-feedback').value })">Request Rework</button>
+                </div>
+              </div>
+            `;
+          }
+          if (data.pending_approval) {
+            govHtml += `
+              <div class="gov-card">
+                <h3>Code Changes Sign-Off Gate</h3>
+                <p style="font-size: 13px; color: var(--text-muted);">Please inspect the pending modifications generated by Coder agents across repositories:</p>
+                <ul style="font-size: 12px; margin-left: 18px; color: var(--accent-blue);">
+                  ${(data.pending_changes_data || []).map(c => `<li>${c.repo}: ${c.file_count} files</li>`).join('')}
+                </ul>
+                <div style="display: flex; gap: 10px; margin-top: 8px;">
+                  <button class="btn btn-success" onclick="submitGovAction('/api/action/approve', {})">Approve & Merge</button>
+                  <button class="btn btn-danger" onclick="submitGovAction('/api/action/reject', {})">Reject Changes</button>
+                </div>
+              </div>
+            `;
+          }
+          if (data.clarification_needed) {
+            const qList = (data.clarification_questions || []).map(q => `<li>${q}</li>`).join('');
+            govHtml += `
+              <div class="gov-card">
+                <h3>PRD Clarifications Needed</h3>
+                <ul style="font-size: 13px; margin-left: 18px; color: var(--accent-yellow); margin-bottom: 8px;">${qList}</ul>
+                <textarea id="clarify-answer" class="gov-textarea" placeholder="Provide clarifications..."></textarea>
+                <div style="margin-top: 8px;">
+                  <button class="btn btn-primary" onclick="submitGovAction('/api/action/clarify', { answer: document.getElementById('clarify-answer').value })">Submit Clarification</button>
+                </div>
+              </div>
+            `;
+          }
+          govContainer.innerHTML = govHtml;
+        } else {
+          govContainer.innerHTML = `
+            <div class="empty-state">
+              <h3>Governance & Milestones Status</h3>
+              <p>No human intervention is currently blocking pipeline execution. All gates will automatically prompt here if clarification or milestone feedback is required.</p>
+            </div>
+          `;
+        }
 
       } catch (err) {
         console.error("Failed to fetch state:", err);

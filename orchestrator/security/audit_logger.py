@@ -188,6 +188,10 @@ class AuditLogger:
         test_output: str = "",
         vet_output: str = "",
         sandboxed: bool = False,
+        framework: str = "",
+        total_tests: int = 0,
+        passed_count: int = 0,
+        failed_count: int = 0,
     ) -> None:
         self.log_event(
             event_type="VERIFICATION",
@@ -196,7 +200,11 @@ class AuditLogger:
             details={
                 "repo": repo,
                 "language": language,
+                "framework": framework,
                 "passed": passed,
+                "total_tests": total_tests,
+                "passed_count": passed_count,
+                "failed_count": failed_count,
                 "sandboxed": sandboxed,
                 "error_summary": None if passed else PIIScrubber.scrub(f"{test_output}\n{vet_output}".strip()),
             },
