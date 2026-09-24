@@ -42,6 +42,9 @@ class GeminiProvider(BaseLLMProvider):
         valid_defaults = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         self.candidate_models = list(dict.fromkeys([preferred] + valid_defaults))
 
+        self.provider_name = "gemini"
+        self.model = preferred
+
     def generate(self, prompt: str, system_instruction: str, json_mode: bool = False) -> str:
         from google.genai import types
         config = types.GenerateContentConfig(
@@ -74,6 +77,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
     vLLM, and any standard OpenAI-compatible API endpoint with zero external dependencies.
     """
     def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
+        self.provider_name = "openai"
         self.api_key = api_key
         self.base_url = (base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
         self.model = model or os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o-mini")
@@ -116,6 +120,7 @@ class AnthropicProvider(BaseLLMProvider):
     using native HTTP requests with zero extra dependencies.
     """
     def __init__(self, api_key: str, model: Optional[str] = None):
+        self.provider_name = "anthropic"
         self.api_key = api_key
         self.model = model or os.environ.get("ANTHROPIC_MODEL") or os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20241022")
 
@@ -162,6 +167,7 @@ class OllamaProvider(BaseLLMProvider):
     running offline via Ollama (100% free, private).
     """
     def __init__(self, host: Optional[str] = None, model: Optional[str] = None):
+        self.provider_name = "ollama"
         self.host = (host or os.environ.get("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
         self.model = model or os.environ.get("OLLAMA_MODEL") or os.environ.get("LLM_MODEL", "qwen2.5-coder:latest")
 
@@ -204,77 +210,153 @@ def get_configured_provider(
     agent_name: Optional[str] = None,
 ) -> BaseLLMProvider:
     _load_dotenv()
-    name = (provider_name or os.environ.get("LLM_PROVIDER", "")).lower().strip()
+    name = (provider_name or "").lower().strip()
+
+    # Check agent-specific provider override: e.g. BUSINESS_AGENT_PROVIDER or ARCH_REVIEW_AGENT_PROVIDER
+    if not name and agent_name:
+        agent_key = agent_name.upper().replace("AGENT", "_AGENT").strip("_")
+        name = (
+            os.environ.get(f"{agent_name.upper()}_PROVIDER")
+            or os.environ.get(f"{agent_key}_PROVIDER")
+            or os.environ.get(f"{agent_name.upper()}_LLM_PROVIDER")
+            or ""
+        ).lower().strip()
+
+    if not name:
+        name = os.environ.get("LLM_PROVIDER", "").lower().strip()
 
     # Agent or Tier model resolution
     resolved_model = model
     if not resolved_model and agent_name:
-        # Check specific agent override: e.g. PRODUCT_AGENT_MODEL or PRODUCTAGENT_MODEL
-        resolved_model = os.environ.get(f"{agent_name.upper()}_MODEL") or os.environ.get(
-            f"{agent_name.upper().replace('AGENT', '_AGENT')}_MODEL"
+        agent_key = agent_name.upper().replace("AGENT", "_AGENT").strip("_")
+        resolved_model = (
+            os.environ.get(f"{agent_name.upper()}_MODEL")
+            or os.environ.get(f"{agent_key}_MODEL")
+            or os.environ.get(f"{agent_name.upper()}_LLM_MODEL")
         )
 
     if not resolved_model and tier == "fast":
         resolved_model = os.environ.get("FAST_MODEL") or os.environ.get("FAST_LLM_MODEL")
+
+    # Available keys detection
+    has_gemini = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+    has_openai = bool(os.environ.get("OPENAI_API_KEY"))
+    has_anthropic = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    has_ollama = bool(os.environ.get("OLLAMA_HOST") or os.environ.get("OLLAMA_MODEL"))
+
+    # Multi-Model Diversity:
+    # If no explicit provider is forced for this agent, and this is a critic/review/strategy agent,
+    # assign diverse providers to avoid confirmation bias if multiple keys are available!
+    critic_agents = {
+        "ArchitectureReviewAgent": ["anthropic", "openai", "gemini"],
+        "ArchitectureCriticAgent": ["anthropic", "openai", "gemini"],
+        "CodeReviewAgent": ["openai", "anthropic", "ollama", "gemini"],
+        "CodeCriticAgent": ["openai", "anthropic", "ollama", "gemini"],
+        "BusinessStrategyAgent": ["anthropic", "openai", "gemini"],
+        "BusinessAgent": ["anthropic", "openai", "gemini"],
+        "RevenueROIAgent": ["openai", "gemini", "anthropic"],
+        "RevenueAgent": ["openai", "gemini", "anthropic"],
+    }
+
+    if not name and agent_name in critic_agents:
+        preferences = critic_agents[agent_name]
+        for p in preferences:
+            if p == "anthropic" and has_anthropic:
+                name = "anthropic"
+                break
+            elif p == "openai" and has_openai:
+                name = "openai"
+                break
+            elif p == "ollama" and has_ollama:
+                name = "ollama"
+                break
+            elif p == "gemini" and has_gemini:
+                name = "gemini"
+                break
 
     # 1. Explicit provider selection
     if name == "gemini":
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key:
             raise RuntimeError("GEMINI_API_KEY is required for 'gemini' provider.")
-        target_model = resolved_model or (
-            "gemini-1.5-flash" if tier == "fast" else os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-2.5-flash")
+        # If it's a deep review/critic agent on Gemini, prefer 1.5-pro over flash to avoid bias
+        default_gemini = (
+            "gemini-1.5-pro" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent")
+            else "gemini-1.5-flash" if tier == "fast"
+            else os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-2.5-flash")
         )
+        target_model = resolved_model or default_gemini
         return GeminiProvider(api_key=key, model=target_model)
 
     if name == "openai":
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
             raise RuntimeError("OPENAI_API_KEY is required for 'openai' provider.")
-        target_model = resolved_model or (
-            "gpt-4o-mini" if tier == "fast" else os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
+        default_openai = (
+            "gpt-4o" if agent_name in ("ArchitectureReviewAgent", "CodeReviewAgent", "BusinessStrategyAgent")
+            else "gpt-4o-mini" if tier == "fast"
+            else os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
         )
+        target_model = resolved_model or default_openai
         return OpenAICompatibleProvider(api_key=key, base_url=base_url, model=target_model)
 
     if name == "anthropic":
         key = os.environ.get("ANTHROPIC_API_KEY")
         if not key:
             raise RuntimeError("ANTHROPIC_API_KEY is required for 'anthropic' provider.")
-        target_model = resolved_model or (
-            "claude-3-5-haiku-latest" if tier == "fast" else os.environ.get("ANTHROPIC_MODEL") or os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20241022")
+        default_anthropic = (
+            "claude-3-5-sonnet-20241022" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent", "CodeReviewAgent")
+            else "claude-3-5-haiku-latest" if tier == "fast"
+            else os.environ.get("ANTHROPIC_MODEL") or os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20241022")
         )
+        target_model = resolved_model or default_anthropic
         return AnthropicProvider(api_key=key, model=target_model)
 
     if name == "ollama":
-        target_model = resolved_model or (
-            os.environ.get("OLLAMA_FAST_MODEL", "llama3.2:3b") if tier == "fast" else os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:latest")
+        default_ollama = (
+            "deepseek-coder:6.7b" if agent_name in ("CodeReviewAgent", "CodeCriticAgent")
+            else os.environ.get("OLLAMA_FAST_MODEL", "llama3.2:3b") if tier == "fast"
+            else os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:latest")
         )
+        target_model = resolved_model or default_ollama
         return OllamaProvider(host=base_url or os.environ.get("OLLAMA_HOST"), model=target_model)
 
     # 2. Auto-detection based on present environment keys (BYOK)
-    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+    if has_gemini:
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        target_model = resolved_model or (
-            "gemini-1.5-flash" if tier == "fast" else os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-2.5-flash")
+        default_gemini = (
+            "gemini-1.5-pro" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent")
+            else "gemini-1.5-flash" if tier == "fast"
+            else os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-2.5-flash")
         )
+        target_model = resolved_model or default_gemini
         return GeminiProvider(api_key=key, model=target_model)
 
-    if os.environ.get("OPENAI_API_KEY"):
-        target_model = resolved_model or (
-            "gpt-4o-mini" if tier == "fast" else os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
+    if has_openai:
+        default_openai = (
+            "gpt-4o" if agent_name in ("ArchitectureReviewAgent", "CodeReviewAgent", "BusinessStrategyAgent")
+            else "gpt-4o-mini" if tier == "fast"
+            else os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
         )
+        target_model = resolved_model or default_openai
         return OpenAICompatibleProvider(api_key=os.environ["OPENAI_API_KEY"], base_url=base_url, model=target_model)
 
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        target_model = resolved_model or (
-            "claude-3-5-haiku-latest" if tier == "fast" else os.environ.get("ANTHROPIC_MODEL") or os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20241022")
+    if has_anthropic:
+        default_anthropic = (
+            "claude-3-5-sonnet-20241022" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent", "CodeReviewAgent")
+            else "claude-3-5-haiku-latest" if tier == "fast"
+            else os.environ.get("ANTHROPIC_MODEL") or os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20241022")
         )
+        target_model = resolved_model or default_anthropic
         return AnthropicProvider(api_key=os.environ["ANTHROPIC_API_KEY"], model=target_model)
 
-    if os.environ.get("OLLAMA_HOST") or os.environ.get("OLLAMA_MODEL"):
-        target_model = resolved_model or (
-            os.environ.get("OLLAMA_FAST_MODEL", "llama3.2:3b") if tier == "fast" else os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:latest")
+    if has_ollama:
+        default_ollama = (
+            "deepseek-coder:6.7b" if agent_name in ("CodeReviewAgent", "CodeCriticAgent")
+            else os.environ.get("OLLAMA_FAST_MODEL", "llama3.2:3b") if tier == "fast"
+            else os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:latest")
         )
+        target_model = resolved_model or default_ollama
         return OllamaProvider(host=base_url, model=target_model)
 
 
@@ -301,6 +383,9 @@ class BaseAgent:
         self.tier = tier
         agent_name = self.__class__.__name__
         self.provider = provider or get_configured_provider(tier=self.tier, agent_name=agent_name)
+        self.provider_name = str(getattr(self.provider, "provider_name", "unknown"))
+        raw_m = getattr(self.provider, "model", "default")
+        self.model_name = "mock-model" if (hasattr(raw_m, "_mock_return_value") or "Mock" in type(raw_m).__name__) else str(raw_m)
 
     def call(self, prompt: str, json_mode: bool = False) -> str:
         from orchestrator.security.audit_logger import AUDIT_LOGGER
@@ -320,7 +405,8 @@ class BaseAgent:
             )
             elapsed_ms = (time.time() - start_time) * 1000
             provider_type = self.provider.__class__.__name__
-            model_name = getattr(self.provider, "model", "default")
+            raw_m = getattr(self.provider, "model", "default")
+            model_name = "mock-model" if (hasattr(raw_m, "_mock_return_value") or "Mock" in type(raw_m).__name__) else str(raw_m)
             AUDIT_LOGGER.log_llm_interaction(
                 agent=agent_name,
                 provider=provider_type,

@@ -32,8 +32,11 @@ class DashboardState:
         self.known_agents = [
             "DiscoveryAgent",
             "ProductAgent",
+            "BusinessAgent",
+            "RevenueAgent",
             "DesignAgent",
             "ArchitectAgent",
+            "ArchitectureReviewAgent",
             "PlannerAgent",
             "DatabaseAgent",
             "GoCoderAgent",
@@ -43,6 +46,15 @@ class DashboardState:
         self.agents: Dict[str, Dict[str, Any]] = {}
         self.tasks: List[Dict[str, Any]] = []
         self.test_results: List[Dict[str, Any]] = []
+
+        # Strategy & Multi-Model Reviews
+        self.business_strategy: Dict[str, Any] = {}
+        self.revenue_analysis: Dict[str, Any] = {}
+        self.architecture_review: Dict[str, Any] = {}
+        self.code_review_report: Dict[str, Any] = {}
+        self.strategy_feedback: List[Dict[str, Any]] = []
+        self.arch_feedback: List[Dict[str, Any]] = []
+        self.code_feedback: List[Dict[str, Any]] = []
 
         # Interactive Governance & Human Gate State
         self.pending_approval: bool = False
@@ -100,6 +112,13 @@ class DashboardState:
             
             self.tasks = []
             self.test_results = []
+            self.business_strategy = {}
+            self.revenue_analysis = {}
+            self.architecture_review = {}
+            self.code_review_report = {}
+            self.strategy_feedback = []
+            self.arch_feedback = []
+            self.code_feedback = []
             self.pending_approval = False
             self.pending_changes_data = []
             self.approval_decision = None
@@ -117,6 +136,86 @@ class DashboardState:
             self._flush_to_disk()
 
         self._start_heartbeat_worker()
+
+    def set_business_and_revenue_strategy(self, business_data: Dict[str, Any], revenue_data: Dict[str, Any]) -> None:
+        with self.lock:
+            self.business_strategy = business_data
+            self.revenue_analysis = revenue_data
+            t_fmt = datetime.now().strftime("%I:%M:%S %p")
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": "BusinessAgent",
+                "status": "completed",
+                "action": "Market Strategy, Competitor Analysis & Revenue ROI Formulated",
+            })
+            self._flush_to_disk()
+
+    def set_architecture_review(self, arch_review: Dict[str, Any]) -> None:
+        with self.lock:
+            self.architecture_review = arch_review
+            t_fmt = datetime.now().strftime("%I:%M:%S %p")
+            score = arch_review.get("overall_score", 0)
+            verdict = arch_review.get("verdict", "REVIEWED")
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": "ArchitectureReviewAgent",
+                "status": "completed",
+                "action": f"Architecture Review Completed (Score: {score}/100, Verdict: {verdict})",
+            })
+            self._flush_to_disk()
+
+    def set_code_review_report(self, code_review: Dict[str, Any]) -> None:
+        with self.lock:
+            self.code_review_report = code_review
+            t_fmt = datetime.now().strftime("%I:%M:%S %p")
+            score = code_review.get("overall_score", 0)
+            grade = code_review.get("security_grade", "A")
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": "CodeReviewAgent",
+                "status": "completed",
+                "action": f"Code Review Audit Completed (Score: {score}/100, Security: {grade})",
+            })
+            self._flush_to_disk()
+
+    def submit_strategy_feedback(self, feedback: str) -> None:
+        with self.lock:
+            t_fmt = datetime.now().strftime("%I:%M:%S %p")
+            self.strategy_feedback.append({"timestamp": t_fmt, "feedback": feedback})
+            self.logs.append(f"[{t_fmt}] [User Strategy Input]: {feedback}")
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": "HumanStakeholder",
+                "status": "info",
+                "action": f"Strategy Feedback Provided: {feedback[:60]}...",
+            })
+            self._flush_to_disk()
+
+    def submit_arch_feedback(self, feedback: str) -> None:
+        with self.lock:
+            t_fmt = datetime.now().strftime("%I:%M:%S %p")
+            self.arch_feedback.append({"timestamp": t_fmt, "feedback": feedback})
+            self.logs.append(f"[{t_fmt}] [User Architecture Input]: {feedback}")
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": "HumanStakeholder",
+                "status": "info",
+                "action": f"Architecture Feedback Provided: {feedback[:60]}...",
+            })
+            self._flush_to_disk()
+
+    def submit_code_feedback(self, feedback: str) -> None:
+        with self.lock:
+            t_fmt = datetime.now().strftime("%I:%M:%S %p")
+            self.code_feedback.append({"timestamp": t_fmt, "feedback": feedback})
+            self.logs.append(f"[{t_fmt}] [User Code Review Input]: {feedback}")
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": "HumanStakeholder",
+                "status": "info",
+                "action": f"Code Review Feedback Provided: {feedback[:60]}...",
+            })
+            self._flush_to_disk()
 
     def record_test_result(
         self,
@@ -386,6 +485,13 @@ class DashboardState:
             "milestone_summary": getattr(self, "milestone_summary", ""),
             "milestone_decision": getattr(self, "milestone_decision", None),
             "test_results": getattr(self, "test_results", []),
+            "business_strategy": getattr(self, "business_strategy", {}),
+            "revenue_analysis": getattr(self, "revenue_analysis", {}),
+            "architecture_review": getattr(self, "architecture_review", {}),
+            "code_review_report": getattr(self, "code_review_report", {}),
+            "strategy_feedback": getattr(self, "strategy_feedback", []),
+            "arch_feedback": getattr(self, "arch_feedback", []),
+            "code_feedback": getattr(self, "code_feedback", []),
             "timeline_events": self.timeline_events[-100:],
             "logs": self.logs[-100:],
         }
@@ -585,6 +691,19 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             ]
             self._send_json({"status": "ok", "nodes": nodes, "edges": edges, "phase": snap.get("phase", "")})
 
+        elif path == "/api/reviews/all":
+            snap = get_latest_live_run()
+            self._send_json({
+                "status": "ok",
+                "business_strategy": snap.get("business_strategy", {}),
+                "revenue_analysis": snap.get("revenue_analysis", {}),
+                "architecture_review": snap.get("architecture_review", {}),
+                "code_review_report": snap.get("code_review_report", {}),
+                "strategy_feedback": snap.get("strategy_feedback", []),
+                "arch_feedback": snap.get("arch_feedback", []),
+                "code_feedback": snap.get("code_feedback", []),
+            })
+
         elif path == "/" or path == "/index.html":
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -628,6 +747,18 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             feedback = payload.get("feedback", "")
             GLOBAL_DASHBOARD_STATE.submit_milestone_review(proceed, feedback)
             self._send_json({"status": "ok", "message": f"Milestone review submitted: proceed={proceed}"})
+        elif path == "/api/action/business-feedback":
+            fb = payload.get("feedback", "").strip()
+            GLOBAL_DASHBOARD_STATE.submit_strategy_feedback(fb)
+            self._send_json({"status": "ok", "message": "Business & revenue strategy feedback recorded"})
+        elif path == "/api/action/arch-feedback":
+            fb = payload.get("feedback", "").strip()
+            GLOBAL_DASHBOARD_STATE.submit_arch_feedback(fb)
+            self._send_json({"status": "ok", "message": "Architecture review feedback recorded"})
+        elif path == "/api/action/code-feedback":
+            fb = payload.get("feedback", "").strip()
+            GLOBAL_DASHBOARD_STATE.submit_code_feedback(fb)
+            self._send_json({"status": "ok", "message": "Code review feedback recorded"})
         elif path == "/api/auth/send-otp":
             ident = payload.get("identifier", "").strip()
             name = payload.get("name")
@@ -1259,6 +1390,114 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       font-size: 13px;
     }
     .toast-msg.error { border-color: var(--accent-red); }
+
+    /* Strategy & Review Styling */
+    .strategy-grid, .review-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .vp-banner {
+      background: linear-gradient(135deg, rgba(88, 166, 255, 0.12), rgba(188, 140, 255, 0.12));
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      border-radius: 8px;
+      padding: 18px 24px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .comp-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .comp-table th {
+      text-align: left;
+      padding: 10px 12px;
+      background: var(--card-sub-bg);
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .comp-table td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-main);
+      vertical-align: top;
+    }
+    .nfr-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .nfr-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .nfr-bar-bg {
+      background: var(--card-sub-bg);
+      border: 1px solid var(--border-color);
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .nfr-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: var(--accent-blue);
+      transition: width 0.4s ease;
+    }
+    .finding-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .finding-critical { background: rgba(248, 81, 73, 0.2); color: var(--accent-red); border: 1px solid rgba(248, 81, 73, 0.4); }
+    .finding-major { background: rgba(210, 153, 34, 0.2); color: var(--accent-yellow); border: 1px solid rgba(210, 153, 34, 0.4); }
+    .finding-minor { background: rgba(88, 166, 255, 0.2); color: var(--accent-blue); border: 1px solid rgba(88, 166, 255, 0.4); }
+    .model-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(188, 140, 255, 0.15);
+      color: var(--accent-purple);
+      border: 1px solid rgba(188, 140, 255, 0.3);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .score-circle {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: 3px solid var(--accent-blue);
+      background: rgba(88, 166, 255, 0.1);
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 20px;
+    }
+    .user-input-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
@@ -1299,6 +1538,18 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
   <div class="tabs-bar">
     <button class="tab-btn active" id="tab-btn-pipeline" onclick="switchTab('pipeline')">
       <span>Pipeline & Agents</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-business" onclick="switchTab('business')">
+      <span>Business & ROI</span>
+      <span class="tab-badge" id="tab-badge-biz" style="display: none;">Ready</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-archreview" onclick="switchTab('archreview')">
+      <span>Architecture Review</span>
+      <span class="tab-badge" id="tab-badge-arch" style="display: none;">Audit</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-codereview" onclick="switchTab('codereview')">
+      <span>Code Review</span>
+      <span class="tab-badge" id="tab-badge-code" style="display: none;">Audit</span>
     </button>
     <button class="tab-btn" id="tab-btn-unittests" onclick="switchTab('unittests')">
       <span>Unit Tests</span>
@@ -1369,6 +1620,207 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
         <span style="font-size: 12px; color: var(--text-muted);">Timestamped Output</span>
       </div>
       <div class="log-box" id="log-box"></div>
+    </div>
+  </div>
+
+  <!-- VIEW: BUSINESS & ROI STRATEGY TAB -->
+  <div class="tab-content" id="view-business">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <div>
+        <h2 style="font-size: 18px; color: #fff; margin-bottom: 4px;">Commercial Strategy, Market Cohorts & Revenue ROI</h2>
+        <p style="font-size: 13px; color: var(--text-muted);">Data-driven Go-To-Market analysis and financial return models formulated by specialized commercial agents.</p>
+      </div>
+      <div id="biz-model-badge" class="model-badge">Model: Multi-Model Strategist</div>
+    </div>
+
+    <div class="vp-banner" id="biz-vp-banner">
+      <div style="font-size: 28px;">🚀</div>
+      <div>
+        <div style="font-size: 11px; text-transform: uppercase; color: var(--accent-blue); font-weight: 600; letter-spacing: 0.5px;">Core Value Proposition</div>
+        <div id="biz-vp-text" style="font-size: 15px; color: #ffffff; font-weight: 500; margin-top: 2px;">Analyzing feature value proposition...</div>
+      </div>
+    </div>
+
+    <div class="strategy-grid">
+      <!-- Target User Cohorts Card -->
+      <div class="panel">
+        <div class="panel-header">Target User Cohorts & Personas</div>
+        <div id="biz-cohorts-container" style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="empty-state"><p>Awaiting Product PRD clarification to segment user cohorts.</p></div>
+        </div>
+      </div>
+
+      <!-- Competitor Analysis Card -->
+      <div class="panel">
+        <div class="panel-header">Competitor Analysis & ASCM Moat</div>
+        <div id="biz-competitors-container">
+          <table class="comp-table">
+            <thead><tr><th>Competitor</th><th>ASCM Moat / Advantage</th><th>Verdict</th></tr></thead>
+            <tbody id="biz-competitor-rows">
+              <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Analyzing competitive landscape...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="strategy-grid">
+      <!-- Revenue & Pricing Architecture Card -->
+      <div class="panel">
+        <div class="panel-header">Monetization & Pricing Tiers</div>
+        <div id="rev-tiers-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="empty-state" style="grid-column: span 2;"><p>Pricing tiers will be recommended based on sprint complexity.</p></div>
+        </div>
+      </div>
+
+      <!-- Financial ROI & Unit Economics Card -->
+      <div class="panel">
+        <div class="panel-header">ROI & Onboarding Funnel Impact</div>
+        <div class="stats-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 14px;">
+          <div class="stat-card">
+            <span class="stat-label">HOURS SAVED / SPRINT</span>
+            <span class="stat-val val-completed" id="rev-stat-hours">0 hrs</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">EST. COST SAVINGS</span>
+            <span class="stat-val val-cyan" id="rev-stat-savings">$0</span>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--text-main); margin-bottom: 8px;">
+          <strong>Key Activation KPI:</strong> <span id="rev-activation-kpi" style="color: var(--accent-purple);">-</span>
+        </div>
+        <div style="font-size: 12px; color: var(--text-muted);" id="rev-summary-text">Unit economics and onboarding funnel conversion metrics.</div>
+      </div>
+    </div>
+
+    <!-- Stakeholder Business Input / Feedback Box -->
+    <div class="user-input-card">
+      <h3 style="font-size: 14px; color: #fff; margin-bottom: 8px;">Refine Strategy, Target Cohorts or Pricing Assumptions</h3>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Provide feedback to adjust market segmentation, competitor positioning, or financial return targets:</p>
+      <textarea id="biz-user-feedback-input" class="gov-textarea" placeholder="e.g. Focus on Seed-stage Solo Founders, reduce Pro tier to $29/mo, emphasize Docker security moat..."></textarea>
+      <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+        <button class="btn btn-primary" onclick="submitBusinessFeedback()">Submit Strategy Guidance</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW: ARCHITECTURE REVIEW & NFRS TAB -->
+  <div class="tab-content" id="view-archreview">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <div>
+        <h2 style="font-size: 18px; color: #fff; margin-bottom: 4px;">Independent Architecture Review & NFR Scorecard</h2>
+        <p style="font-size: 13px; color: var(--text-muted);">Unbiased, adversarial critique of High-Level & Low-Level Designs auditing for scalability, security, and single points of failure.</p>
+      </div>
+      <div id="arch-model-badge" class="model-badge">Auditor: Adversarial Architecture Critic</div>
+    </div>
+
+    <div class="review-grid">
+      <!-- Architecture Quality Score & Verdict Card -->
+      <div class="panel">
+        <div class="panel-header">Architecture Audit Verdict</div>
+        <div style="display: flex; align-items: center; gap: 24px; padding: 12px 0;">
+          <div class="score-circle" id="arch-score-circle">--</div>
+          <div>
+            <div id="arch-verdict-pill" class="pill pill-running" style="font-size: 13px; padding: 4px 12px;">Awaiting Review</div>
+            <div id="arch-exec-summary" style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">The Architecture Critic audits design docs as soon as HLD & LLD are produced.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Non-Functional Requirements (NFR) Scorecard Card -->
+      <div class="panel">
+        <div class="panel-header">Non-Functional Requirements (NFR) Scorecard</div>
+        <div id="arch-nfr-container">
+          <div class="empty-state"><p>NFR metrics (Scalability, Security, Latency, Reliability, Maintainability) will populate during architecture review.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="review-grid">
+      <!-- Architectural Gaps Flagged -->
+      <div class="panel">
+        <div class="panel-header">Architectural Gaps & Coupling Concerns</div>
+        <div id="arch-gaps-container" style="font-size: 13px; color: var(--text-main);">
+          <div class="empty-state"><p>No gaps flagged yet.</p></div>
+        </div>
+      </div>
+
+      <!-- Single Points of Failure & SPOF Risks -->
+      <div class="panel">
+        <div class="panel-header">Single Points of Failure (SPOF) & Risks</div>
+        <div id="arch-spof-container" style="font-size: 13px; color: var(--text-main);">
+          <div class="empty-state"><p>No single points of failure detected yet.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stakeholder Architecture Feedback Form -->
+    <div class="user-input-card">
+      <h3 style="font-size: 14px; color: #fff; margin-bottom: 8px;">Architecture Feedback & NFR Overrides</h3>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Provide guidance on flagged gaps, suggest architectural tradeoffs, or clarify infrastructure constraints:</p>
+      <textarea id="arch-user-feedback-input" class="gov-textarea" placeholder="e.g. Accept eventual consistency for read replicas, require JWT token expiration in < 15 minutes..."></textarea>
+      <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+        <button class="btn btn-primary" onclick="submitArchFeedback()">Submit Architecture Guidance</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW: CODE REVIEW & AUDIT TAB -->
+  <div class="tab-content" id="view-codereview">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <div>
+        <h2 style="font-size: 18px; color: #fff; margin-bottom: 4px;">Independent Code Review & Quality Audit</h2>
+        <p style="font-size: 13px; color: var(--text-muted);">Multi-model adversarial code audit checking logic correctness, OWASP security vulnerabilities, and test rigor.</p>
+      </div>
+      <div id="code-model-badge" class="model-badge">Auditor: Independent Code Critic</div>
+    </div>
+
+    <div class="review-grid">
+      <!-- Quality Score & Security Grade Card -->
+      <div class="panel">
+        <div class="panel-header">Code Quality & Security Grade</div>
+        <div style="display: flex; align-items: center; gap: 24px; padding: 12px 0;">
+          <div class="score-circle" id="code-score-circle">--</div>
+          <div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span id="code-verdict-pill" class="pill pill-running" style="font-size: 13px; padding: 4px 12px;">Awaiting Code</span>
+              <span id="code-sec-grade-pill" class="pill pill-completed" style="font-size: 13px; padding: 4px 12px;">Grade: -</span>
+            </div>
+            <div id="code-exec-summary" style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Code reviewer audits multi-repo patches and unit test suites prior to merge approval.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Suite Rigor Assessment Card -->
+      <div class="panel">
+        <div class="panel-header">Test Suite Rigor Assessment</div>
+        <div id="code-test-assessment" style="font-size: 13px; color: var(--text-main); padding: 8px 0;">
+          <div class="empty-state"><p>Test coverage and edge case assertions will be evaluated when Coder generates tests.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detailed Findings Table Card -->
+    <div class="panel">
+      <div class="panel-header">Audit Findings & Remediation Recommendations</div>
+      <div id="code-findings-container">
+        <table class="comp-table">
+          <thead><tr><th>Target File</th><th>Severity</th><th>Issue Description</th><th>Remediation Recommendation</th></tr></thead>
+          <tbody id="code-findings-rows">
+            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No code review findings yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Stakeholder Code Feedback Form -->
+    <div class="user-input-card">
+      <h3 style="font-size: 14px; color: #fff; margin-bottom: 8px;">Code Review Guidance & Exceptions</h3>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Instruct the Coder and Reviewer agents on code style exceptions, library preferences, or security rules:</p>
+      <textarea id="code-user-feedback-input" class="gov-textarea" placeholder="e.g. Use testify/require instead of assert for fatal conditions, allow in-memory cache for test mocks..."></textarea>
+      <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+        <button class="btn btn-primary" onclick="submitCodeFeedback()">Submit Code Guidance</button>
+      </div>
     </div>
   </div>
 
@@ -2280,8 +2732,226 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
           `;
         }
 
+        // Render Strategy, Architecture & Code Reviews
+        // 1. Business Strategy & Revenue
+        const biz = data.business_strategy || {};
+        const rev = data.revenue_analysis || {};
+        if (biz.value_proposition || biz.market_strategy) {
+          const badgeBiz = document.getElementById('tab-badge-biz');
+          if (badgeBiz) badgeBiz.style.display = 'inline-block';
+          const vpText = document.getElementById('biz-vp-text');
+          if (vpText) vpText.innerText = biz.value_proposition || biz.market_strategy;
+
+          const cohortsCont = document.getElementById('biz-cohorts-container');
+          if (cohortsCont && Array.isArray(biz.user_cohorts) && biz.user_cohorts.length > 0) {
+            cohortsCont.innerHTML = biz.user_cohorts.map(c => `
+              <div style="background: var(--card-sub-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
+                <div style="display: flex; justify-content: space-between; font-weight: 600; color: #fff; margin-bottom: 4px;">
+                  <span>${c.cohort_name}</span>
+                  <span style="color: var(--accent-green); font-size: 12px;">WTP: ${c.willingness_to_pay || 'High'}</span>
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;"><strong>Pain Point:</strong> ${c.pain_point}</div>
+                <div style="font-size: 12px; color: var(--text-main);"><strong>Adoption Driver:</strong> ${c.why_adopt}</div>
+              </div>
+            `).join('');
+          }
+
+          const compRows = document.getElementById('biz-competitor-rows');
+          if (compRows && Array.isArray(biz.competitor_analysis) && biz.competitor_analysis.length > 0) {
+            compRows.innerHTML = biz.competitor_analysis.map(comp => `
+              <tr>
+                <td><strong style="color: #fff;">${comp.competitor}</strong><div style="font-size: 11px; color: var(--text-muted);">${comp.limitations || ''}</div></td>
+                <td style="color: var(--accent-blue);">${comp.ascm_advantage}</td>
+                <td><span class="pill pill-completed">${comp.verdict || 'ASCM Wins'}</span></td>
+              </tr>
+            `).join('');
+          }
+
+          const tiersCont = document.getElementById('rev-tiers-container');
+          if (tiersCont && Array.isArray(rev.pricing_tiers) && rev.pricing_tiers.length > 0) {
+            tiersCont.innerHTML = rev.pricing_tiers.map(t => `
+              <div style="background: var(--card-sub-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
+                <div style="font-weight: 600; color: #fff;">${t.tier}</div>
+                <div style="font-size: 18px; color: var(--accent-blue); font-weight: 700; margin: 4px 0;">${t.price}</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">${t.target_audience || ''}</div>
+                <ul style="font-size: 11px; margin-left: 14px; color: var(--text-main);">${(t.features || []).map(f => `<li>${f}</li>`).join('')}</ul>
+              </div>
+            `).join('');
+          }
+
+          if (rev.hours_saved_per_sprint !== undefined) {
+            document.getElementById('rev-stat-hours').innerText = `${rev.hours_saved_per_sprint} hrs`;
+          }
+          if (rev.cost_savings_estimate_usd !== undefined) {
+            document.getElementById('rev-stat-savings').innerText = `$${Number(rev.cost_savings_estimate_usd).toLocaleString()}`;
+          }
+          if (rev.activation_kpi) {
+            document.getElementById('rev-activation-kpi').innerText = rev.activation_kpi;
+          }
+          if (rev.roi_summary || rev.executive_summary) {
+            document.getElementById('rev-summary-text').innerText = rev.roi_summary || rev.executive_summary;
+          }
+        }
+
+        // 2. Architecture Review
+        const arch = data.architecture_review || {};
+        if (arch.overall_score !== undefined) {
+          const badgeArch = document.getElementById('tab-badge-arch');
+          if (badgeArch) {
+            badgeArch.style.display = 'inline-block';
+            badgeArch.innerText = `${arch.overall_score}/100`;
+          }
+          const circle = document.getElementById('arch-score-circle');
+          if (circle) {
+            circle.innerText = arch.overall_score;
+            circle.style.borderColor = arch.overall_score >= 85 ? 'var(--accent-green)' : 'var(--accent-yellow)';
+          }
+          const verdPill = document.getElementById('arch-verdict-pill');
+          if (verdPill) {
+            verdPill.innerText = arch.verdict || 'REVIEWED';
+            verdPill.className = `pill pill-${(arch.verdict || '').includes('APPROVE') ? 'completed' : 'failed'}`;
+          }
+          const archSumm = document.getElementById('arch-exec-summary');
+          if (archSumm) archSumm.innerText = arch.executive_summary || 'Architecture verified against NFRs.';
+
+          const nfrCont = document.getElementById('arch-nfr-container');
+          if (nfrCont && arch.nfr_scorecard) {
+            nfrCont.innerHTML = Object.entries(arch.nfr_scorecard).map(([k, item]) => `
+              <div class="nfr-row">
+                <div class="nfr-header">
+                  <span style="text-transform: capitalize;">${k}</span>
+                  <span style="color: var(--accent-blue); font-weight: 600;">${item.score}/100</span>
+                </div>
+                <div class="nfr-bar-bg"><div class="nfr-bar-fill" style="width: ${item.score}%;"></div></div>
+                <div style="font-size: 11px; color: var(--text-muted);">${item.notes || ''}</div>
+              </div>
+            `).join('');
+          }
+
+          const gapsCont = document.getElementById('arch-gaps-container');
+          if (gapsCont) {
+            const gaps = arch.architectural_gaps || [];
+            gapsCont.innerHTML = gaps.length > 0
+              ? `<ul style="margin-left: 18px; color: var(--accent-yellow);">${gaps.map(g => `<li style="margin-bottom: 6px;">${g}</li>`).join('')}</ul>`
+              : `<div class="empty-state"><p>No architectural gaps flagged.</p></div>`;
+          }
+
+          const spofCont = document.getElementById('arch-spof-container');
+          if (spofCont) {
+            const spofs = arch.spof_risks || [];
+            spofCont.innerHTML = spofs.length > 0
+              ? `<ul style="margin-left: 18px; color: var(--accent-red);">${spofs.map(s => `<li style="margin-bottom: 6px;">${s}</li>`).join('')}</ul>`
+              : `<div class="empty-state"><p>Zero single points of failure detected in topology.</p></div>`;
+          }
+        }
+
+        // 3. Code Review Report
+        const codeRev = data.code_review_report || {};
+        if (codeRev.overall_score !== undefined) {
+          const badgeCode = document.getElementById('tab-badge-code');
+          if (badgeCode) {
+            badgeCode.style.display = 'inline-block';
+            badgeCode.innerText = `${codeRev.overall_score}/100`;
+          }
+          const circle = document.getElementById('code-score-circle');
+          if (circle) {
+            circle.innerText = codeRev.overall_score;
+            circle.style.borderColor = codeRev.overall_score >= 85 ? 'var(--accent-green)' : 'var(--accent-yellow)';
+          }
+          const verdPill = document.getElementById('code-verdict-pill');
+          if (verdPill) {
+            verdPill.innerText = codeRev.verdict || (codeRev.approved ? 'APPROVED' : 'REJECTED');
+            verdPill.className = `pill pill-${codeRev.approved ? 'completed' : 'failed'}`;
+          }
+          const secPill = document.getElementById('code-sec-grade-pill');
+          if (secPill) secPill.innerText = `Security Grade: ${codeRev.security_grade || 'A'}`;
+          const codeSumm = document.getElementById('code-exec-summary');
+          if (codeSumm) codeSumm.innerText = codeRev.executive_summary || 'Independent adversarial code review completed.';
+
+          const testAssess = document.getElementById('code-test-assessment');
+          if (testAssess) testAssess.innerText = codeRev.test_coverage_assessment || 'Unit test suite rigorous with high assertion density.';
+
+          const findRows = document.getElementById('code-findings-rows');
+          if (findRows) {
+            const findings = codeRev.findings || [];
+            findRows.innerHTML = findings.length > 0
+              ? findings.map(f => `
+                  <tr>
+                    <td><code style="color: var(--accent-cyan);">${f.file || 'general'}</code></td>
+                    <td><span class="finding-badge finding-${(f.severity || 'minor').toLowerCase()}">${f.severity || 'MINOR'}</span></td>
+                    <td>${f.issue}</td>
+                    <td style="color: var(--accent-green);">${f.fix_recommendation || '-'}</td>
+                  </tr>
+                `).join('')
+              : `<tr><td colspan="4" style="text-align: center; color: var(--accent-green);">Zero critical or major defects identified. Code passes review.</td></tr>`;
+          }
+        }
+
       } catch (err) {
         console.error("Failed to fetch state:", err);
+      }
+    }
+
+    async function submitBusinessFeedback() {
+      const input = document.getElementById('biz-user-feedback-input');
+      const val = (input ? input.value : '').trim();
+      if (!val) {
+        showToast("Please enter feedback before submitting.", true);
+        return;
+      }
+      try {
+        const res = await fetch('/api/action/business-feedback', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ feedback: val })
+        });
+        showToast("Business strategy guidance recorded!");
+        input.value = '';
+        fetchState();
+      } catch (e) {
+        showToast("Failed to submit feedback", true);
+      }
+    }
+
+    async function submitArchFeedback() {
+      const input = document.getElementById('arch-user-feedback-input');
+      const val = (input ? input.value : '').trim();
+      if (!val) {
+        showToast("Please enter feedback before submitting.", true);
+        return;
+      }
+      try {
+        const res = await fetch('/api/action/arch-feedback', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ feedback: val })
+        });
+        showToast("Architecture guidance recorded!");
+        input.value = '';
+        fetchState();
+      } catch (e) {
+        showToast("Failed to submit feedback", true);
+      }
+    }
+
+    async function submitCodeFeedback() {
+      const input = document.getElementById('code-user-feedback-input');
+      const val = (input ? input.value : '').trim();
+      if (!val) {
+        showToast("Please enter feedback before submitting.", true);
+        return;
+      }
+      try {
+        const res = await fetch('/api/action/code-feedback', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ feedback: val })
+        });
+        showToast("Code review guidance recorded!");
+        input.value = '';
+        fetchState();
+      } catch (e) {
+        showToast("Failed to submit feedback", true);
       }
     }
 

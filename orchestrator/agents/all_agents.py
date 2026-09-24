@@ -225,24 +225,177 @@ class SecurityAuditorAgent(BaseAgent):
         return json.loads(raw)
 
 
-class CodeReviewAgent(BaseAgent):
+class BusinessStrategyAgent(BaseAgent):
     def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
-            "You are a Senior Code Reviewer. Inspect generated code patches against design specs, Go best practices, "
-            "and edge case handling.\n"
-            'Output JSON:\n{\n  "approved": bool,\n  "comments": ["comment 1", "comment 2"]\n}',
+            "You are a Chief Commercial Officer (CCO) & Tech Business Strategist.\n"
+            "Analyze the technical product requirements and system capabilities to formulate an aggressive, data-backed Go-To-Market (GTM) strategy.\n\n"
+            "Deliverables:\n"
+            "1. Market Strategy: How to position and market this capability.\n"
+            "2. User Cohorts: Identify distinct target user personas (e.g. Solo Founders, Growth Stage Lead Engineers, Enterprise Platform Teams), pain points, and why they adopt.\n"
+            "3. Competitor Analysis: In-depth competitive comparison against existing tools (GitHub Copilot, Cursor, Replit Agent, Devin), highlighting ASCM's competitive moat (dual-sided cross-repo synchronization, contracts allowlists, zero-drift verification).\n"
+            "4. Value Proposition: Quantitative, compelling value prop statements.\n"
+            "5. GTM Channels: Actionable acquisition channels.\n\n"
+            "Output JSON with this exact schema:\n"
+            "{\n"
+            '  "market_strategy": "string",\n'
+            '  "user_cohorts": [\n'
+            '    {"cohort_name": "...", "pain_point": "...", "why_adopt": "...", "willingness_to_pay": "..."}\n'
+            "  ],\n"
+            '  "competitor_analysis": [\n'
+            '    {"competitor": "...", "limitations": "...", "ascm_advantage": "...", "verdict": "..."}\n'
+            "  ],\n"
+            '  "value_proposition": "string",\n'
+            '  "gtm_channels": ["channel 1", "channel 2"],\n'
+            '  "executive_summary": "string"\n'
+            "}",
             provider=provider,
-            tier="fast",
+            tier="primary",
         )
 
-    def run(self, files: Dict[str, str], hld: str, lld: str) -> Dict[str, Any]:
+    def run(self, user_goal: str, clarified_prd: str, contracts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         prompt = (
-            f"HLD:\n{hld}\n\n"
-            f"LLD:\n{lld}\n\n"
-            f"Generated Files:\n{json.dumps(files, indent=2)}\n\n"
-            "Review the patch for correctness, style, edge cases, and adherence to design. Set approved to true if acceptable."
+            f"Feature Goal:\n{user_goal}\n\n"
+            f"Clarified PRD:\n{clarified_prd}\n\n"
+            f"Repository Context:\n{json.dumps(contracts or {}, indent=2)}\n\n"
+            "Formulate comprehensive Market Strategy, User Cohorts, Competitor Analysis, Value Proposition, and GTM channels."
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
+
+
+BusinessAgent = BusinessStrategyAgent
+
+
+class RevenueROIAgent(BaseAgent):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
+        super().__init__(
+            "You are a Chief Financial Officer (CFO) & Head of Tech Monetization.\n"
+            "Model the Return on Investment (ROI), revenue metrics, unit economics, and user onboarding conversion metrics for this system.\n\n"
+            "Deliverables:\n"
+            "1. ROI Analysis: Quantify engineering hours saved, cost of manual cross-repo coordination vs automated agent execution, estimated dollar savings per sprint.\n"
+            "2. Revenue Metrics & Pricing Architecture: Recommend pricing tiers (Community BYOK, Pro / Founder, Team / Scale, Enterprise SLA).\n"
+            "3. User Onboarding & Funnel Metrics: Activation KPI (e.g. time-to-first-verified-cross-repo-PR), expected stage conversion rates, and retention tactics.\n"
+            "4. Unit Economics: Model token cost per sprint vs subscription pricing margin.\n\n"
+            "Output JSON with this exact schema:\n"
+            "{\n"
+            '  "roi_summary": "string",\n'
+            '  "hours_saved_per_sprint": float,\n'
+            '  "cost_savings_estimate_usd": float,\n'
+            '  "pricing_tiers": [\n'
+            '    {"tier": "...", "price": "...", "target_audience": "...", "features": ["..."]}\n'
+            "  ],\n"
+            '  "onboarding_funnel_metrics": [\n'
+            '    {"stage": "...", "metric": "...", "target_rate": "...", "improvement_tactic": "..."}\n'
+            "  ],\n"
+            '  "activation_kpi": "string",\n'
+            '  "gross_margin_estimate": "string",\n'
+            '  "executive_summary": "string"\n'
+            "}",
+            provider=provider,
+            tier="primary",
+        )
+
+    def run(self, user_goal: str, clarified_prd: str, business_strategy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        prompt = (
+            f"Feature Goal:\n{user_goal}\n\n"
+            f"Clarified PRD:\n{clarified_prd}\n\n"
+            f"Business Strategy Context:\n{json.dumps(business_strategy or {}, indent=2)}\n\n"
+            "Calculate ROI, pricing tiers, onboarding metrics, activation KPI, and unit economics."
+        )
+        raw = self.call(prompt, json_mode=True)
+        return json.loads(raw)
+
+
+RevenueAgent = RevenueROIAgent
+
+
+class ArchitectureReviewAgent(BaseAgent):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
+        super().__init__(
+            "You are an Independent Principal Systems Architect & Senior Architecture Critic.\n"
+            "Rigorously review the High-Level Design (HLD) and Low-Level Design (LLD) against strict "
+            "Non-Functional Requirements (NFRs: Scalability, Security, Latency, Reliability, Maintainability). "
+            "Act as an unbiased, adversarial critic seeking out hidden architectural flaws, single points of failure (SPOF), "
+            "unhandled concurrency races, tight coupling, and contract mismatches.\n\n"
+            "Output JSON with this exact schema:\n"
+            "{\n"
+            '  "overall_score": int,\n'
+            '  "verdict": "APPROVE|APPROVE_WITH_REMARKS|REWORK_REQUIRED",\n'
+            '  "nfr_scorecard": {\n'
+            '    "scalability": {"score": int, "notes": "..."},\n'
+            '    "security": {"score": int, "notes": "..."},\n'
+            '    "latency": {"score": int, "notes": "..."},\n'
+            '    "reliability": {"score": int, "notes": "..."},\n'
+            '    "maintainability": {"score": int, "notes": "..."}\n'
+            "  },\n"
+            '  "architectural_gaps": ["gap 1", "gap 2"],\n'
+            '  "spof_risks": ["spof 1"],\n'
+            '  "recommendations": ["rec 1", "rec 2"],\n'
+            '  "executive_summary": "string"\n'
+            "}",
+            provider=provider,
+            tier="primary",
+        )
+
+    def run(self, hld: str, lld: str, contracts: Optional[Dict[str, Any]] = None, user_goal: str = "") -> Dict[str, Any]:
+        prompt = (
+            f"User Goal: {user_goal}\n\n"
+            f"Repository Contracts:\n{json.dumps(contracts or {}, indent=2)}\n\n"
+            f"High-Level Design (HLD):\n{hld}\n\n"
+            f"Low-Level Design (LLD):\n{lld}\n\n"
+            "Conduct an adversarial architecture critique. Identify gaps, SPOF risks, validate NFRs (0-100), "
+            "and decide verdict (APPROVE, APPROVE_WITH_REMARKS, REWORK_REQUIRED)."
+        )
+        raw = self.call(prompt, json_mode=True)
+        return json.loads(raw)
+
+
+ArchitectureCriticAgent = ArchitectureReviewAgent
+
+
+class CodeReviewAgent(BaseAgent):
+    def __init__(self, provider: Optional[BaseLLMProvider] = None):
+        super().__init__(
+            "You are an Adversarial Senior Principal Code Reviewer & Security Specialist.\n"
+            "Conduct an exhaustive, critical code review of all generated files and unit tests across provider and consumer repositories.\n"
+            "Audit for logic bugs, concurrency flaws, security vulnerabilities (OWASP, injection, path leaks), performance bottlenecks, "
+            "and unit test suite rigor.\n\n"
+            "Output JSON with this exact schema:\n"
+            "{\n"
+            '  "overall_score": int,\n'
+            '  "approved": bool,\n'
+            '  "verdict": "APPROVED|APPROVED_WITH_COMMENTS|REJECTED",\n'
+            '  "security_grade": "A+|A|B|C|F",\n'
+            '  "test_coverage_assessment": "string",\n'
+            '  "findings": [\n'
+            '    {"file": "...", "severity": "CRITICAL|MAJOR|MINOR", "issue": "...", "fix_recommendation": "..."}\n'
+            "  ],\n"
+            '  "comments": ["comment 1", "comment 2"],\n'
+            '  "executive_summary": "string"\n'
+            "}",
+            provider=provider,
+            tier="primary",
+        )
+
+    def run(self, files: Dict[str, str], hld: str = "", lld: str = "", contracts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        prompt = (
+            f"HLD Context:\n{hld[:1500]}\n\n"
+            f"LLD Context:\n{lld[:1500]}\n\n"
+            f"Generated Files & Unit Tests:\n{json.dumps(files, indent=2)}\n\n"
+            "Perform an adversarial, unbiased code review. Check syntax, error handling, security, performance, and unit test assertions. "
+            "Compute overall_score (0-100), security_grade, test_coverage_assessment, findings, and decide if approved."
+        )
+        raw = self.call(prompt, json_mode=True)
+        data = json.loads(raw)
+        # Ensure backward compatibility
+        if "approved" not in data:
+            data["approved"] = data.get("overall_score", 0) >= 80 and data.get("verdict") != "REJECTED"
+        if "comments" not in data:
+            data["comments"] = [f"{f.get('severity')}: {f.get('issue')}" for f in data.get("findings", [])]
+        return data
+
+
+CodeCriticAgent = CodeReviewAgent
 
 

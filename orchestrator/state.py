@@ -39,3 +39,10 @@ class SharedBlackboard(BaseModel):
     nfr_completeness: float = 0.0
     checkpoint_clarifications: List[Dict[str, str]] = Field(default_factory=list)
     milestone_feedback_history: List[Dict[str, Any]] = Field(default_factory=list)
+    business_strategy: Dict[str, Any] = Field(default_factory=dict)
+    revenue_analysis: Dict[str, Any] = Field(default_factory=dict)
+    architecture_review: Dict[str, Any] = Field(default_factory=dict)
+    code_review_report: Dict[str, Any] = Field(default_factory=dict)
+    user_strategy_feedback: str = ""
+    user_arch_review_feedback: str = ""
+    user_code_review_feedback: str = ""

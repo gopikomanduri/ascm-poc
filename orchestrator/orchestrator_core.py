@@ -7,8 +7,11 @@ from typing import List, Dict, Tuple, Optional
 from orchestrator.agents.all_agents import (
     DiscoveryAgent,
     ProductAgent,
+    BusinessStrategyAgent,
+    RevenueROIAgent,
     DesignAgent,
     ArchitectAgent,
+    ArchitectureReviewAgent,
     PlannerAgent,
     DatabaseAgent,
     GoCoderAgent,
@@ -74,10 +77,13 @@ class OrchestratorEngine:
             self._notify_phase("Phase 3: Product Agent Requirements & Clarification Loop")
             self._run_product_clarification_loop(auto_approve=auto_approve)
 
-            self._notify_phase("Phase 4: Architecture (HLD/LLD) & Task Decomposition")
+            self._notify_phase("Phase 3b: Business Strategy, Competitor Analysis & Revenue ROI")
+            self._run_business_and_revenue_strategy(auto_approve=auto_approve)
+
+            self._notify_phase("Phase 4: Architecture (HLD/LLD), Task Decomposition & Architecture Review")
             self._run_architecture_and_design(providers, auto_approve=auto_approve)
 
-            self._notify_phase("Phase 5: Dynamic Task Execution & Code Generation")
+            self._notify_phase("Phase 5: Dynamic Task Execution, Code Generation & Critic Code Review")
             pending_changes = self._run_task_execution(providers, consumers, auto_approve=auto_approve)
 
             if not pending_changes:
@@ -250,6 +256,49 @@ class OrchestratorEngine:
             GLOBAL_DASHBOARD_STATE.submit_clarification(user_answers)
             current_input += f"\nClarification: {user_answers}"
 
+    def _run_business_and_revenue_strategy(self, auto_approve: bool = False) -> None:
+        contracts_dict = {p: self.state.contracts[p].model_dump() for p in self.state.contracts}
+        biz_agent = BusinessStrategyAgent()
+        rev_agent = RevenueROIAgent()
+
+        self._log(f"Running Business Strategy Agent [Model: {biz_agent.model_name}]...")
+        GLOBAL_DASHBOARD_STATE.update_agent("BusinessAgent", "running", f"Analyzing cohorts & competitors ({biz_agent.model_name})")
+        biz_data = biz_agent.run(self.state.user_goal, self.state.clarified_prd, contracts_dict)
+        GLOBAL_DASHBOARD_STATE.update_agent("BusinessAgent", "completed", "Market strategy formulated")
+
+        self._log(f"Running Revenue & ROI Agent [Model: {rev_agent.model_name}]...")
+        GLOBAL_DASHBOARD_STATE.update_agent("RevenueAgent", "running", f"Modeling ROI & onboarding metrics ({rev_agent.model_name})")
+        rev_data = rev_agent.run(self.state.user_goal, self.state.clarified_prd, biz_data)
+        GLOBAL_DASHBOARD_STATE.update_agent("RevenueAgent", "completed", "ROI & unit economics modeled")
+
+        self.state.business_strategy = biz_data
+        self.state.revenue_analysis = rev_data
+        GLOBAL_DASHBOARD_STATE.set_business_and_revenue_strategy(biz_data, rev_data)
+
+        self._log(f"[+] Business Strategy & Competitor Analysis generated:")
+        self._log(f"    * Value Prop: {biz_data.get('value_proposition')}")
+        self._log(f"    * Target Cohorts: {[c.get('cohort_name') for c in biz_data.get('user_cohorts', [])]}")
+        self._log(f"    * Competitors Analyzed: {[c.get('competitor') for c in biz_data.get('competitor_analysis', [])]}")
+        self._log(f"    * Est. Hours Saved: {rev_data.get('hours_saved_per_sprint', 0)} hrs/sprint")
+        self._log(f"    * Est. Cost Savings: ${rev_data.get('cost_savings_estimate_usd', 0):,.2f}")
+        self._log(f"    * Activation KPI: {rev_data.get('activation_kpi')}")
+
+        summary = (
+            f"Value Proposition: {biz_data.get('value_proposition')}\n\n"
+            f"User Cohorts:\n" + "\n".join(f" - {c.get('cohort_name')}: {c.get('pain_point')} (WTP: {c.get('willingness_to_pay')})" for c in biz_data.get("user_cohorts", [])) + "\n\n"
+            f"Competitor Analysis:\n" + "\n".join(f" - {c.get('competitor')}: ASCM Advantage -> {c.get('ascm_advantage')}" for c in biz_data.get("competitor_analysis", [])) + "\n\n"
+            f"Revenue & ROI:\n"
+            f" - Hours Saved/Sprint: {rev_data.get('hours_saved_per_sprint')} hrs\n"
+            f" - Estimated Cost Savings: ${rev_data.get('cost_savings_estimate_usd', 0):,.2f}\n"
+            f" - Activation KPI: {rev_data.get('activation_kpi')}\n"
+            f" - Pricing Tiers: {', '.join(t.get('tier', '') + ' (' + str(t.get('price', '')) + ')' for t in rev_data.get('pricing_tiers', []))}"
+        )
+        confirmed, feedback = self._seek_milestone_feedback("Milestone 1b: Commercialization & Revenue Strategy", summary, auto_approve=auto_approve)
+        if feedback:
+            self.state.user_strategy_feedback = feedback
+            self.state.clarified_prd += f"\nBusiness Strategy Guidance: {feedback}"
+            self._log(f"[+] Incorporated user commercial feedback: {feedback}")
+
     def _run_architecture_and_design(self, providers: List[str], auto_approve: bool = False) -> None:
         contracts_dict = {p: self.state.contracts[p].model_dump() for p in providers}
         
@@ -262,6 +311,23 @@ class OrchestratorEngine:
             self.state.lld = design_result.get("lld", "")
             self._log(f"[+] HLD Generated ({len(self.state.hld)} chars)")
             self._log(f"[+] LLD Generated ({len(self.state.lld)} chars)")
+
+            # Architecture Review Agent (Adversarial Critic)
+            arch_review_agent = ArchitectureReviewAgent()
+            self._log(f"Running Architecture Review Agent [Model: {arch_review_agent.model_name} - Adversarial Critic]...")
+            GLOBAL_DASHBOARD_STATE.update_agent("ArchitectureReviewAgent", "running", f"Critiquing HLD/LLD against NFRs ({arch_review_agent.model_name})")
+            arch_review = arch_review_agent.run(self.state.hld, self.state.lld, contracts_dict, user_goal=self.state.user_goal)
+            GLOBAL_DASHBOARD_STATE.update_agent("ArchitectureReviewAgent", "completed", f"Review completed (Score: {arch_review.get('overall_score', 0)}/100)")
+            self.state.architecture_review = arch_review
+            GLOBAL_DASHBOARD_STATE.set_architecture_review(arch_review)
+
+            arch_score = arch_review.get("overall_score", 85)
+            arch_verdict = arch_review.get("verdict", "APPROVE")
+            self._log(f"[+] Architecture Review Score: {arch_score}/100 | Verdict: {arch_verdict}")
+            if arch_review.get("architectural_gaps"):
+                self._log(f"    * Gaps Flagged: {arch_review.get('architectural_gaps')}")
+            if arch_review.get("spof_risks"):
+                self._log(f"    * SPOF Risks: {arch_review.get('spof_risks')}")
 
             self._log("Architect Agent decomposing requirements into tasks...")
             GLOBAL_DASHBOARD_STATE.update_agent("ArchitectAgent", "running", "Decomposing task breakdown")
@@ -278,16 +344,22 @@ class OrchestratorEngine:
                 self._log(f"    - [{t.id}] {t.title} -> Assigned to: '{t.assigned_agent}'")
 
             # Milestone 2 User Feedback Gate
+            nfr_summary = ", ".join(f"{k}: {v.get('score')}/100" for k, v in arch_review.get("nfr_scorecard", {}).items()) if arch_review.get("nfr_scorecard") else "Pass"
             arch_summary = (
+                f"Architecture Review (Score: {arch_score}/100 | Verdict: {arch_verdict})\n"
+                f"NFR Scorecard: {nfr_summary}\n"
+                f"Gaps Flagged ({len(arch_review.get('architectural_gaps', []))}): {', '.join(arch_review.get('architectural_gaps', [])) or 'None'}\n"
+                f"SPOF Risks ({len(arch_review.get('spof_risks', []))}): {', '.join(arch_review.get('spof_risks', [])) or 'None'}\n\n"
                 f"HLD Summary:\n{self.state.hld[:600]}...\n\n"
                 f"Tasks ({len(self.state.task_breakdown)}):\n" +
                 "\n".join(f" - [{t.id}] {t.title} (Assigned: {t.assigned_agent}, Target: {t.target_file or 'auto'})" for t in self.state.task_breakdown)
             )
-            confirmed, feedback = self._seek_milestone_feedback("Milestone 2: Architecture & Task Breakdown", arch_summary, auto_approve=auto_approve)
+            confirmed, feedback = self._seek_milestone_feedback("Milestone 2: Architecture & NFR Review", arch_summary, auto_approve=auto_approve)
             if confirmed:
                 break
             else:
                 self._log(f"Incorporating rework feedback into Architecture: {feedback}")
+                self.state.user_arch_review_feedback = feedback
                 self.state.clarified_prd += f"\nArchitecture Rework Feedback: {feedback}"
 
     def _run_task_execution(self, providers: List[str], consumers: List[str] = None, auto_approve: bool = False) -> List[Tuple]:
@@ -370,14 +442,22 @@ class OrchestratorEngine:
                 continue
             GLOBAL_DASHBOARD_STATE.update_agent("SecurityAuditorAgent", "completed", "Audit passed")
 
-            # Code Review Agent
-            GLOBAL_DASHBOARD_STATE.update_agent("CodeReviewAgent", "running", "Reviewing patch compliance")
-            review_report = reviewer_agent.run(accumulated_patch, self.state.hld, self.state.lld)
-            if not review_report.get("approved", False):
-                GLOBAL_DASHBOARD_STATE.update_agent("CodeReviewAgent", "failed", "Review rejected")
+            # Code Review Agent (Adversarial Critic)
+            GLOBAL_DASHBOARD_STATE.update_agent("CodeReviewAgent", "running", f"Auditing patch quality & security ({reviewer_agent.model_name})")
+            review_report = reviewer_agent.run(accumulated_patch, self.state.hld, self.state.lld, contracts={contract.name: contract.model_dump()})
+            self.state.code_review_report = review_report
+            GLOBAL_DASHBOARD_STATE.set_code_review_report(review_report)
+            score = review_report.get("overall_score", 90)
+            sec_grade = review_report.get("security_grade", "A")
+            is_approved = review_report.get("approved", True)
+            self._log(f"[+] Code Review Audit: Score {score}/100, Security Grade: {sec_grade}, Verdict: {review_report.get('verdict', 'APPROVED')}")
+            for f in review_report.get("findings", []):
+                self._log(f"    * [{f.get('severity', 'INFO')}] {f.get('file', 'general')}: {f.get('issue')}")
+            if not is_approved:
+                GLOBAL_DASHBOARD_STATE.update_agent("CodeReviewAgent", "failed", f"Review rejected (Score: {score})")
                 self._log(f"Skipping {contract.name}: Code review rejected patch: {review_report.get('comments', [])}")
                 continue
-            GLOBAL_DASHBOARD_STATE.update_agent("CodeReviewAgent", "completed", "Patch approved")
+            GLOBAL_DASHBOARD_STATE.update_agent("CodeReviewAgent", "completed", f"Patch approved (Score: {score}/100)")
 
             self._log(f"[+] Patch for '{contract.name}' passed Sandbox, Security Audit, and Code Review!")
             pending_changes.append((contract, accumulated_patch))

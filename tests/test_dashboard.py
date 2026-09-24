@@ -16,7 +16,7 @@ class DashboardTelemetryTests(unittest.TestCase):
         snapshot = state.get_snapshot()
         self.assertEqual(snapshot["counts"]["running"], 0)
         self.assertEqual(snapshot["counts"]["completed"], 0)
-        self.assertEqual(snapshot["counts"]["waiting"], 9)
+        self.assertEqual(snapshot["counts"]["waiting"], len(state.known_agents))
         self.assertEqual(snapshot["active_agent"], "None")
         self.assertEqual(snapshot["user_goal"], "Test Goal")
 
