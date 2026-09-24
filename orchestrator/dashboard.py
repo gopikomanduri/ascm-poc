@@ -9,6 +9,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+from orchestrator.auth.user_manager import USER_MANAGER
+
 HISTORY_DIR = Path.cwd() / ".ascm_history"
 
 
@@ -529,6 +531,60 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
                 
             self.wfile.write(json.dumps(snapshot).encode("utf-8"))
 
+        elif path == "/api/auth/current":
+            user = USER_MANAGER.get_active_user()
+            self._send_json({"status": "ok", "user": user})
+
+        elif path == "/api/repos/detect":
+            detected = []
+            cur = Path.cwd()
+            candidates = [cur]
+            try:
+                for sub in cur.iterdir():
+                    if sub.is_dir() and not sub.name.startswith("."):
+                        candidates.append(sub)
+            except OSError:
+                pass
+            
+            for c in candidates:
+                if (c / ".git").exists() or (c / "go.mod").exists() or (c / "SKILL.md").exists() or (c / "package.json").exists() or (c / "requirements.txt").exists():
+                    detected.append({
+                        "name": c.name,
+                        "path": str(c.resolve()),
+                        "has_contract": (c / "SKILL.md").exists() or (c / ".agents").exists(),
+                    })
+            self._send_json({"status": "ok", "repos": detected[:15]})
+
+        elif path == "/api/topology/visual":
+            snap = get_latest_live_run()
+            agents_count = len(snap.get("agents", {}))
+            repos = []
+            for k in snap.get("pending_changes_data", []):
+                repos.append(k.get("repo", "Service"))
+            if not repos:
+                repos = ["provider-api", "consumer-client"]
+
+            nodes = [
+                {"id": "goal", "label": "Stakeholder Requirement", "type": "input", "active": True},
+                {"id": "product_agent", "label": "Product Agent (PRD)", "type": "agent", "active": True},
+                {"id": "architect_agent", "label": "Architect Agent (HLD/LLD)", "type": "agent", "active": True},
+                {"id": "provider_repo", "label": f"Provider: {repos[0]}", "type": "repo", "active": True},
+                {"id": "consumer_repo", "label": f"Consumer: {repos[-1] if len(repos) > 1 else 'client-sdk'}", "type": "repo", "active": True},
+                {"id": "sandbox_verifier", "label": "Docker Hermetic Verifier", "type": "verifier", "active": True},
+                {"id": "unit_tests", "label": "Unit Test Suites (TDD)", "type": "tests", "active": True},
+                {"id": "audit_log", "label": "SOC2 & PII Audit Log", "type": "compliance", "active": True},
+            ]
+            edges = [
+                {"from": "goal", "to": "product_agent", "label": "Grilling & Clarifications (>=90%)"},
+                {"from": "product_agent", "to": "architect_agent", "label": "Functional + NFR Spec"},
+                {"from": "architect_agent", "to": "provider_repo", "label": "Go/Python Coder Agent"},
+                {"from": "provider_repo", "to": "consumer_repo", "label": "Synchronized Client Callers"},
+                {"from": "provider_repo", "to": "sandbox_verifier", "label": "Isolated Checks"},
+                {"from": "sandbox_verifier", "to": "unit_tests", "label": "Testify / Pytest / Jest"},
+                {"from": "unit_tests", "to": "audit_log", "label": "Tamper-proof Telemetry"},
+            ]
+            self._send_json({"status": "ok", "nodes": nodes, "edges": edges, "phase": snap.get("phase", "")})
+
         elif path == "/" or path == "/index.html":
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -572,6 +628,51 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             feedback = payload.get("feedback", "")
             GLOBAL_DASHBOARD_STATE.submit_milestone_review(proceed, feedback)
             self._send_json({"status": "ok", "message": f"Milestone review submitted: proceed={proceed}"})
+        elif path == "/api/auth/send-otp":
+            ident = payload.get("identifier", "").strip()
+            name = payload.get("name")
+            res = USER_MANAGER.send_otp(ident, name=name)
+            self._send_json(res)
+        elif path == "/api/auth/verify-otp":
+            ident = payload.get("identifier", "").strip()
+            otp = payload.get("otp", "").strip()
+            name = payload.get("name")
+            phone = payload.get("phone")
+            email = payload.get("email")
+            res = USER_MANAGER.verify_otp(ident, otp, name=name, phone=phone, email=email)
+            self._send_json(res)
+        elif path == "/api/auth/profile":
+            ident = payload.get("identifier") or (USER_MANAGER.get_active_user() or {}).get("id", "")
+            updates = payload.get("updates", payload)
+            if not ident and updates.get("email"):
+                ident = updates["email"]
+            if not ident and updates.get("phone"):
+                ident = updates["phone"]
+            res = USER_MANAGER.update_profile(ident, updates) if ident else {"status": "error", "message": "No active user session"}
+            self._send_json(res)
+        elif path == "/api/auth/logout":
+            USER_MANAGER.logout()
+            self._send_json({"status": "ok", "message": "Logged out successfully"})
+        elif path == "/api/action/launch":
+            goal = payload.get("goal", "").strip()
+            repos = payload.get("repos", [])
+            auto_approve = bool(payload.get("auto_approve", False))
+            if not goal:
+                self._send_json({"status": "error", "message": "Goal cannot be empty"}, status=400)
+                return
+            if not repos:
+                repos = [str(Path.cwd().resolve())]
+
+            def _run_bg():
+                from orchestrator.orchestrator_core import OrchestratorEngine
+                try:
+                    engine = OrchestratorEngine(repo_paths=repos, initial_goal=goal, enable_dashboard=False)
+                    engine.run(auto_approve=auto_approve)
+                except Exception as ex:
+                    GLOBAL_DASHBOARD_STATE.record_crash(ex)
+
+            threading.Thread(target=_run_bg, daemon=True).start()
+            self._send_json({"status": "ok", "message": f"Orchestrator launched for goal: '{goal}'"})
         else:
             self.send_response(404)
             self.end_headers()
@@ -621,14 +722,14 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ASCM Orchestrator - Persistent Telemetry & Unit Test Dashboard</title>
+  <title>ASCM Orchestrator - Autonomous Engineering Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-dark: #0d1117;
       --card-bg: #161b22;
-      --card-sub-bg: #0d1117;
+      --card-sub-bg: #090d13;
       --border-color: #30363d;
       --text-main: #c9d1d9;
       --text-muted: #8b949e;
@@ -647,6 +748,8 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       line-height: 1.5;
       padding: 24px;
     }
+
+    /* Header */
     .header {
       display: flex;
       justify-content: space-between;
@@ -654,15 +757,18 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       margin-bottom: 20px;
       padding-bottom: 16px;
       border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+      gap: 12px;
     }
     .logo { display: flex; align-items: center; gap: 12px; }
     .logo h1 { font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px; }
-    .run-controls { display: flex; align-items: center; gap: 12px; }
+    .header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    
     .run-select {
       background: var(--card-bg);
       color: var(--text-main);
       border: 1px solid var(--border-color);
-      padding: 6px 12px;
+      padding: 7px 12px;
       border-radius: 6px;
       font-size: 13px;
       outline: none;
@@ -672,7 +778,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 12px;
+      padding: 5px 12px;
       border-radius: 20px;
       font-size: 12px;
       font-weight: 600;
@@ -690,6 +796,34 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     }
     @keyframes pulse-anim { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
 
+    /* User Profile Pill */
+    .user-profile-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      color: #ffffff;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .user-profile-btn:hover {
+      border-color: var(--accent-blue);
+      background: rgba(88, 166, 255, 0.1);
+    }
+    .user-avatar-mini {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--accent-purple);
+      display: inline-block;
+    }
+
+    /* Phase Bar */
     .phase-bar {
       background: var(--card-bg);
       border: 1px solid var(--border-color);
@@ -699,6 +833,8 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
     }
     .phase-title { font-size: 12px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
     .phase-name { font-size: 16px; font-weight: 600; color: var(--accent-blue); margin-top: 2px; }
@@ -710,12 +846,13 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       margin-bottom: 20px;
       border-bottom: 1px solid var(--border-color);
       padding-bottom: 8px;
+      overflow-x: auto;
     }
     .tab-btn {
       background: transparent;
       border: 1px solid transparent;
       color: var(--text-muted);
-      padding: 8px 18px;
+      padding: 8px 16px;
       border-radius: 6px;
       font-size: 13px;
       font-weight: 600;
@@ -723,6 +860,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       display: inline-flex;
       align-items: center;
       gap: 8px;
+      white-space: nowrap;
       transition: all 0.2s ease;
     }
     .tab-btn:hover {
@@ -752,26 +890,17 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    /* Alert Banners */
-    .gov-banner {
-      background: rgba(210, 153, 34, 0.15);
-      border: 1px solid rgba(210, 153, 34, 0.4);
-      border-radius: 8px;
-      padding: 14px 18px;
-      margin-bottom: 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .gov-banner-title { font-weight: 600; color: var(--accent-yellow); font-size: 14px; }
-    .gov-banner-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    /* Buttons */
     .btn {
-      padding: 6px 14px;
+      padding: 8px 16px;
       border-radius: 6px;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       transition: opacity 0.2s;
     }
     .btn:hover { opacity: 0.9; }
@@ -779,6 +908,8 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     .btn-success { background: var(--accent-green); color: #fff; }
     .btn-danger { background: var(--accent-red); color: #fff; }
     .btn-warning { background: var(--accent-yellow); color: #000; }
+    .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+    .btn-outline:hover { background: rgba(255, 255, 255, 0.05); }
 
     /* Stats Grid */
     .stats-grid {
@@ -877,7 +1008,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     .log-box {
       font-family: 'Fira Code', monospace;
       font-size: 12px;
-      background: #090d13;
+      background: var(--card-sub-bg);
       border: 1px solid var(--border-color);
       border-radius: 6px;
       padding: 12px;
@@ -915,40 +1046,12 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       gap: 10px;
       flex-wrap: wrap;
     }
-    .ut-repo-name {
-      font-size: 16px;
-      font-weight: 700;
-      color: #ffffff;
-    }
-    .ut-stats-summary {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .ut-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-      margin-top: 8px;
-    }
-    .ut-table th {
-      text-align: left;
-      padding: 8px 12px;
-      color: var(--text-muted);
-      border-bottom: 1px solid var(--border-color);
-      font-size: 11px;
-      text-transform: uppercase;
-      font-weight: 600;
-    }
-    .ut-table td {
-      padding: 8px 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    .ut-case-name {
-      font-family: 'Fira Code', monospace;
-      color: var(--text-main);
-      font-weight: 500;
-    }
+    .ut-repo-name { font-size: 16px; font-weight: 700; color: #ffffff; }
+    .ut-stats-summary { display: flex; align-items: center; gap: 12px; }
+    .ut-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .ut-table th { text-align: left; padding: 8px 12px; color: var(--text-muted); border-bottom: 1px solid var(--border-color); font-size: 11px; text-transform: uppercase; font-weight: 600; }
+    .ut-table td { padding: 8px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+    .ut-case-name { font-family: 'Fira Code', monospace; color: var(--text-main); font-weight: 500; }
     .ut-details-toggle {
       background: rgba(255, 255, 255, 0.04);
       border: 1px solid var(--border-color);
@@ -966,7 +1069,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     .ut-raw-output {
       font-family: 'Fira Code', monospace;
       font-size: 11px;
-      background: #090d13;
+      background: var(--card-sub-bg);
       border: 1px solid var(--border-color);
       border-radius: 6px;
       padding: 12px;
@@ -989,7 +1092,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     .empty-state h3 { color: #ffffff; font-size: 16px; margin-bottom: 6px; }
     .empty-state p { font-size: 13px; }
 
-    /* Governance Form Styles */
+    /* Governance Forms */
     .gov-card {
       background: var(--card-bg);
       border: 1px solid var(--border-color);
@@ -1003,7 +1106,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     .gov-card h3 { font-size: 15px; font-weight: 600; color: #ffffff; }
     .gov-textarea {
       width: 100%;
-      background: #090d13;
+      background: var(--card-sub-bg);
       border: 1px solid var(--border-color);
       border-radius: 6px;
       padding: 10px;
@@ -1013,22 +1116,174 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       resize: vertical;
       min-height: 60px;
     }
+
+    /* Profile & Choices Form Styles */
+    .profile-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.3fr;
+      gap: 24px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .form-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-input, .form-select {
+      background: var(--card-sub-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-input:focus, .form-select:focus {
+      border-color: var(--accent-blue);
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .key-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .key-input-wrapper input {
+      width: 100%;
+      padding-right: 40px;
+    }
+    .key-toggle-btn {
+      position: absolute;
+      right: 8px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    /* Modal Backdrop */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-backdrop.active { display: flex; }
+    .modal-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      width: 90%;
+      max-width: 520px;
+      padding: 28px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: modal-pop 0.25s ease-out;
+    }
+    @keyframes modal-pop { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+    .modal-header h2 { font-size: 18px; font-weight: 700; color: #ffffff; }
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    /* Architecture Flowchart Visualizer */
+    .topology-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .flowchart-svg-box {
+      width: 100%;
+      height: 420px;
+      background: var(--card-sub-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Notification Toast */
+    .toast-msg {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--card-bg);
+      border: 1px solid var(--accent-green);
+      color: #ffffff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .toast-msg.error { border-color: var(--accent-red); }
   </style>
 </head>
 <body>
+  <!-- Header -->
   <div class="header">
     <div class="logo">
       <div class="pulse"></div>
-      <h1>ASCM Persistent Telemetry & Unit Test Dashboard</h1>
+      <h1>ASCM Autonomous Engineering Platform</h1>
     </div>
-    <div class="run-controls">
+    <div class="header-actions">
       <select class="run-select" id="run-selector" onchange="onRunChanged()">
         <option value="live">🔴 Live Active Session</option>
       </select>
+      <button class="btn btn-primary" onclick="openLaunchModal()">
+        <span>+ Launch Goal</span>
+      </button>
+      <div class="user-profile-btn" id="user-nav-btn" onclick="onUserNavClick()">
+        <span class="user-avatar-mini" id="nav-avatar"></span>
+        <span id="nav-username">Guest</span>
+      </div>
       <div class="status-badge" id="live-badge">SYSTEM ACTIVE</div>
     </div>
   </div>
 
+  <!-- Phase & Agent Bar -->
   <div class="phase-bar">
     <div>
       <div class="phase-title">Current Phase / Goal</div>
@@ -1049,9 +1304,15 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       <span>Unit Tests</span>
       <span class="tab-badge" id="tab-badge-tests">0</span>
     </button>
+    <button class="tab-btn" id="tab-btn-architecture" onclick="switchTab('architecture')">
+      <span>System Architecture</span>
+    </button>
     <button class="tab-btn" id="tab-btn-governance" onclick="switchTab('governance')">
       <span>Governance & Milestones</span>
       <span class="tab-badge pending" id="tab-badge-gov" style="display: none;">Action Req</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-profile" onclick="switchTab('profile')">
+      <span>My Profile & Choices</span>
     </button>
   </div>
 
@@ -1140,7 +1401,98 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- VIEW 3: GOVERNANCE & MILESTONES TAB -->
+  <!-- VIEW 3: SYSTEM ARCHITECTURE & FLOWCHART TAB -->
+  <div class="tab-content" id="view-architecture">
+    <div class="topology-container">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h3 style="color: #fff; font-size: 16px;">Live System Topology & Microservice Data Flow</h3>
+          <p style="font-size: 13px; color: var(--text-muted);">Automated cross-repository dependency graph, contract boundaries, and verification gates.</p>
+        </div>
+        <span class="pill pill-running">Hermetic Container Verified</span>
+      </div>
+
+      <div class="flowchart-svg-box" id="flowchart-box">
+        <svg width="100%" height="100%" viewBox="0 0 960 400" style="overflow: visible;">
+          <defs>
+            <linearGradient id="grad-blue" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#1f6feb" stop-opacity="0.3"/>
+              <stop offset="100%" stop-color="#58a6ff" stop-opacity="0.1"/>
+            </linearGradient>
+            <linearGradient id="grad-green" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#2ea043" stop-opacity="0.3"/>
+              <stop offset="100%" stop-color="#3fb950" stop-opacity="0.1"/>
+            </linearGradient>
+            <linearGradient id="grad-purple" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#8957e5" stop-opacity="0.3"/>
+              <stop offset="100%" stop-color="#bc8cff" stop-opacity="0.1"/>
+            </linearGradient>
+            <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#58a6ff"/>
+            </marker>
+          </defs>
+
+          <!-- Step 1: Input Goal -->
+          <g transform="translate(40, 160)">
+            <rect width="160" height="70" rx="8" fill="url(#grad-blue)" stroke="#58a6ff" stroke-width="1.5"/>
+            <text x="80" y="32" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">STAKEHOLDER GOAL</text>
+            <text x="80" y="52" fill="#8b949e" font-size="11" text-anchor="middle">PRD / Feature Request</text>
+          </g>
+
+          <!-- Arrow 1 -->
+          <line x1="200" y1="195" x2="250" y2="195" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- Step 2: Product & Architect Agents -->
+          <g transform="translate(250, 140)">
+            <rect width="180" height="110" rx="8" fill="url(#grad-purple)" stroke="#bc8cff" stroke-width="1.5"/>
+            <text x="90" y="28" fill="#bc8cff" font-size="12" font-weight="700" text-anchor="middle">AUTONOMOUS SQUAD</text>
+            <text x="90" y="52" fill="#ffffff" font-size="11" text-anchor="middle">ProductAgent (90% Conf)</text>
+            <text x="90" y="72" fill="#ffffff" font-size="11" text-anchor="middle">ArchitectAgent (HLD/LLD)</text>
+            <text x="90" y="92" fill="#8b949e" font-size="10" text-anchor="middle">Model Tiering & Cascading</text>
+          </g>
+
+          <!-- Arrow 2 to Provider -->
+          <path d="M 430 170 L 480 170 L 480 100 L 520 100" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+          
+          <!-- Arrow 2 to Consumer -->
+          <path d="M 430 220 L 480 220 L 480 290 L 520 290" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- Step 3a: Provider Microservice -->
+          <g transform="translate(520, 65)">
+            <rect width="190" height="70" rx="8" fill="url(#grad-green)" stroke="#3fb950" stroke-width="1.5"/>
+            <text x="95" y="30" fill="#3fb950" font-size="12" font-weight="700" text-anchor="middle">PROVIDER REPO</text>
+            <text x="95" y="50" fill="#ffffff" font-size="11" text-anchor="middle">gRPC / REST Endpoints</text>
+          </g>
+
+          <!-- Step 3b: Consumer Microservice -->
+          <g transform="translate(520, 255)">
+            <rect width="190" height="70" rx="8" fill="url(#grad-green)" stroke="#3fb950" stroke-width="1.5"/>
+            <text x="95" y="30" fill="#3fb950" font-size="12" font-weight="700" text-anchor="middle">CONSUMER REPO</text>
+            <text x="95" y="50" fill="#ffffff" font-size="11" text-anchor="middle">Synchronized Client SDK</text>
+          </g>
+
+          <!-- Bidirectional sync arrow -->
+          <line x1="615" y1="135" x2="615" y2="255" stroke="#39c5cf" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrow)"/>
+          <text x="625" y="195" fill="#39c5cf" font-size="10">Contract Sync</text>
+
+          <!-- Arrows to Verifier -->
+          <path d="M 710 100 L 750 100 L 750 170 L 770 170" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+          <path d="M 710 290 L 750 290 L 750 210 L 770 210" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- Step 4: Hermetic Sandbox & Unit Tests -->
+          <g transform="translate(770, 145)">
+            <rect width="160" height="95" rx="8" fill="url(#grad-blue)" stroke="#39c5cf" stroke-width="1.5"/>
+            <text x="80" y="28" fill="#39c5cf" font-size="12" font-weight="700" text-anchor="middle">DOCKER VERIFIER</text>
+            <text x="80" y="48" fill="#ffffff" font-size="11" text-anchor="middle">Isolated Execution</text>
+            <text x="80" y="66" fill="#3fb950" font-size="11" text-anchor="middle">Testify / PyTest / Jest</text>
+            <text x="80" y="84" fill="#8b949e" font-size="10" text-anchor="middle">Audit Logs & PII Clean</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW 4: GOVERNANCE & MILESTONES TAB -->
   <div class="tab-content" id="view-governance">
     <div id="gov-container">
       <div class="empty-state">
@@ -1150,9 +1502,213 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- VIEW 5: MY PROFILE & BYOK CHOICES TAB -->
+  <div class="tab-content" id="view-profile">
+    <div class="profile-grid">
+      <!-- Profile Details Card -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>Personal Profile Details</span>
+          <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px;" onclick="logoutUser()">Log Out</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" id="prof-name" class="form-input" placeholder="e.g., Alex Mercer">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" id="prof-email" class="form-input" placeholder="alex@company.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mobile Phone Number</label>
+          <input type="tel" id="prof-phone" class="form-input" placeholder="+1 (555) 000-0000">
+        </div>
+        <div style="font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; margin-top: 10px;">
+          <div><strong>Member ID:</strong> <span id="prof-id" style="font-family: 'Fira Code', monospace; color: var(--accent-purple);">-</span></div>
+          <div><strong>Account Created:</strong> <span id="prof-created">-</span></div>
+          <div><strong>Last Active Login:</strong> <span id="prof-lastlogin">-</span></div>
+        </div>
+      </div>
+
+      <!-- User Choices & BYOK Settings Card -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>User Choices & Bring Your Own Keys (BYOK)</span>
+          <span class="pill pill-lang">Enterprise Encrypted</span>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Preferred LLM Provider</label>
+            <select id="choice-provider" class="form-select">
+              <option value="gemini">Google Gemini</option>
+              <option value="openai">OpenAI (GPT-4o)</option>
+              <option value="anthropic">Anthropic (Claude 3.5)</option>
+              <option value="ollama">Local Open-Source (Ollama)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fast / Triage Model</label>
+            <input type="text" id="choice-fastmodel" class="form-input" placeholder="gemini-1.5-flash, gpt-4o-mini, llama3.2">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Primary Frontier Model</label>
+          <input type="text" id="choice-primarymodel" class="form-input" placeholder="gemini-2.5-flash, gpt-4o, claude-3-5-sonnet">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Google Gemini API Key</label>
+          <div class="key-input-wrapper">
+            <input type="password" id="key-gemini" class="form-input" placeholder="AIzaSy...">
+            <button type="button" class="key-toggle-btn" onclick="toggleKeyVisibility('key-gemini')">👁️</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">OpenAI API Key</label>
+          <div class="key-input-wrapper">
+            <input type="password" id="key-openai" class="form-input" placeholder="sk-proj-...">
+            <button type="button" class="key-toggle-btn" onclick="toggleKeyVisibility('key-openai')">👁️</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Anthropic Claude API Key</label>
+          <div class="key-input-wrapper">
+            <input type="password" id="key-anthropic" class="form-input" placeholder="sk-ant-...">
+            <button type="button" class="key-toggle-btn" onclick="toggleKeyVisibility('key-anthropic')">👁️</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Local Ollama Base URL</label>
+          <input type="text" id="key-ollama" class="form-input" placeholder="http://localhost:11434">
+        </div>
+
+        <div style="display: flex; gap: 20px; margin-top: 10px; margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+            <input type="checkbox" id="choice-sandbox">
+            <span>Hermetic Docker Sandbox</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+            <input type="checkbox" id="choice-autoapprove">
+            <span>Auto-Approve Checkpoints</span>
+          </label>
+        </div>
+
+        <button class="btn btn-primary" style="align-self: flex-start;" onclick="saveUserProfile()">
+          <span>Save Choices & Apply to Engine</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: LOGIN / SIGNUP SINGLE PAGER (EMAIL / MOBILE + OTP) -->
+  <div class="modal-backdrop" id="modal-auth">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Sign In or Create Account</h2>
+        <button class="close-btn" onclick="closeAuthModal()">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted);">
+        Enter your Email address or Mobile phone number. We'll send a 6-digit one-time passcode (OTP) for instant passwordless authentication.
+      </p>
+
+      <div id="auth-step-1">
+        <div class="form-group">
+          <label class="form-label">Email Address or Mobile Number</label>
+          <input type="text" id="auth-identifier" class="form-input" placeholder="you@company.com or +15551234567">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Your Name (Optional for new users)</label>
+          <input type="text" id="auth-name" class="form-input" placeholder="e.g. Jordan Lee">
+        </div>
+        <button class="btn btn-primary" style="width: 100%; margin-top: 8px;" onclick="sendAuthOtp()">
+          <span>Send Verification Code (OTP) &rarr;</span>
+        </button>
+      </div>
+
+      <div id="auth-step-2" style="display: none;">
+        <div style="background: rgba(88, 166, 255, 0.1); border: 1px solid var(--accent-blue); padding: 10px; border-radius: 6px; font-size: 13px;">
+          Verification code dispatched! <span id="auth-dev-hint" style="font-weight: 700; color: var(--accent-cyan);"></span>
+        </div>
+        <div class="form-group" style="margin-top: 14px;">
+          <label class="form-label">Enter 6-Digit OTP</label>
+          <input type="text" id="auth-otp" class="form-input" style="font-size: 20px; letter-spacing: 4px; text-align: center;" placeholder="123456" maxlength="6">
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 12px;">
+          <button class="btn btn-primary" style="flex: 1;" onclick="verifyAuthOtp()">
+            <span>Verify & Sign In</span>
+          </button>
+          <button class="btn btn-outline" onclick="resetAuthFlow()">
+            <span>Back</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NEW GOAL LAUNCHER -->
+  <div class="modal-backdrop" id="modal-launch">
+    <div class="modal-box" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>Launch Autonomous Multi-Agent Sprint</h2>
+        <button class="close-btn" onclick="closeLaunchModal()">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted);">
+        Type your stakeholder requirement or feature goal. The squad will grill for clarifications, generate specs, implement code across repos, write unit tests, and self-heal.
+      </p>
+
+      <div class="form-group">
+        <label class="form-label">Stakeholder Goal / PRD</label>
+        <textarea id="launch-goal-text" class="gov-textarea" style="min-height: 90px;" placeholder="e.g. Implement credit purchase checkout with Stripe webhook and update consumer client..."></textarea>
+      </div>
+
+      <!-- Quick suggestions for founders and non-tech users -->
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+        <button class="pill pill-fw" style="cursor: pointer;" onclick="fillGoalSuggestion('Build Stripe payment webhook and update consumer client SDK with retries')">+ Stripe Webhook</button>
+        <button class="pill pill-fw" style="cursor: pointer;" onclick="fillGoalSuggestion('Add Redis caching layer for user session verification with 15-minute TTL')">+ Redis Cache</button>
+        <button class="pill pill-fw" style="cursor: pointer;" onclick="fillGoalSuggestion('Implement JWT token authentication middleware with sliding expiration')">+ JWT Auth</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Target Repositories</label>
+        <div id="launch-repo-list" style="max-height: 120px; overflow-y: auto; background: var(--card-sub-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px;">
+          <span style="font-size: 12px; color: var(--text-muted);">Detecting workspace repositories...</span>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <input type="checkbox" id="launch-autoapprove" checked>
+        <label for="launch-autoapprove" style="font-size: 13px; color: var(--text-muted); cursor: pointer;">Auto-approve milestones and low-impact checkpoints</label>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button class="btn btn-outline" onclick="closeLaunchModal()">Cancel</button>
+        <button class="btn btn-success" onclick="executeLaunch()">
+          <span>🚀 Start Autonomous Sprint</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-msg" id="toast-msg">Notification</div>
+
   <script>
     let selectedRunId = 'live';
     let currentTab = 'pipeline';
+    let currentUser = null;
+
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('toast-msg');
+      toast.innerText = msg;
+      toast.className = 'toast-msg' + (isError ? ' error' : '');
+      toast.style.display = 'flex';
+      setTimeout(() => { toast.style.display = 'none'; }, 3500);
+    }
 
     function switchTab(tabName) {
       currentTab = tabName;
@@ -1165,6 +1721,268 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       if (activeContent) activeContent.classList.add('active');
     }
 
+    /* Auth & User Management */
+    async function loadCurrentUser() {
+      try {
+        const res = await fetch('/api/auth/current');
+        const data = await res.json();
+        currentUser = data.user;
+        renderNavUser();
+        if (currentUser) {
+          fillProfileForm(currentUser);
+        }
+      } catch (err) {
+        console.error("Failed to load user:", err);
+      }
+    }
+
+    function renderNavUser() {
+      const btn = document.getElementById('user-nav-btn');
+      const nameSpan = document.getElementById('nav-username');
+      if (currentUser && currentUser.name) {
+        nameSpan.innerText = currentUser.name;
+        btn.title = `Logged in as ${currentUser.email || currentUser.phone || currentUser.name}`;
+      } else {
+        nameSpan.innerText = "Sign In / OTP";
+        btn.title = "Click to sign in or create an account with OTP";
+      }
+    }
+
+    function onUserNavClick() {
+      if (currentUser) {
+        switchTab('profile');
+      } else {
+        openAuthModal();
+      }
+    }
+
+    function openAuthModal() {
+      document.getElementById('modal-auth').classList.add('active');
+      resetAuthFlow();
+    }
+
+    function closeAuthModal() {
+      document.getElementById('modal-auth').classList.remove('active');
+    }
+
+    function resetAuthFlow() {
+      document.getElementById('auth-step-1').style.display = 'block';
+      document.getElementById('auth-step-2').style.display = 'none';
+      document.getElementById('auth-otp').value = '';
+    }
+
+    async function sendAuthOtp() {
+      const ident = document.getElementById('auth-identifier').value.trim();
+      const name = document.getElementById('auth-name').value.trim();
+      if (!ident) {
+        alert("Please enter a valid email address or mobile phone number.");
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/send-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: ident, name: name })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          document.getElementById('auth-step-1').style.display = 'none';
+          document.getElementById('auth-step-2').style.display = 'block';
+          if (data.dev_otp) {
+            document.getElementById('auth-dev-hint').innerText = `(Test Passcode: ${data.dev_otp})`;
+            document.getElementById('auth-otp').value = data.dev_otp;
+          }
+          showToast("OTP sent successfully!");
+        } else {
+          alert(data.message || "Failed to send OTP.");
+        }
+      } catch (err) {
+        alert("Request error: " + err);
+      }
+    }
+
+    async function verifyAuthOtp() {
+      const ident = document.getElementById('auth-identifier').value.trim();
+      const otp = document.getElementById('auth-otp').value.trim();
+      const name = document.getElementById('auth-name').value.trim();
+
+      if (!otp) {
+        alert("Please enter the 6-digit OTP.");
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: ident, otp: otp, name: name })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          currentUser = data.user;
+          renderNavUser();
+          fillProfileForm(currentUser);
+          closeAuthModal();
+          showToast(`Welcome, ${currentUser.name}!`);
+          switchTab('profile');
+        } else {
+          alert(data.message || "Invalid OTP verification.");
+        }
+      } catch (err) {
+        alert("Verification error: " + err);
+      }
+    }
+
+    function fillProfileForm(u) {
+      if (!u) return;
+      document.getElementById('prof-name').value = u.name || '';
+      document.getElementById('prof-email').value = u.email || '';
+      document.getElementById('prof-phone').value = u.phone || '';
+      document.getElementById('prof-id').innerText = u.id || '-';
+      document.getElementById('prof-created').innerText = u.created_at ? new Date(u.created_at).toLocaleString() : '-';
+      document.getElementById('prof-lastlogin').innerText = u.last_login ? new Date(u.last_login).toLocaleString() : '-';
+
+      const ch = u.choices || {};
+      if (ch.preferred_provider) document.getElementById('choice-provider').value = ch.preferred_provider;
+      if (ch.fast_model) document.getElementById('choice-fastmodel').value = ch.fast_model;
+      if (ch.primary_model) document.getElementById('choice-primarymodel').value = ch.primary_model;
+      if (ch.gemini_api_key) document.getElementById('key-gemini').value = ch.gemini_api_key;
+      if (ch.openai_api_key) document.getElementById('key-openai').value = ch.openai_api_key;
+      if (ch.anthropic_api_key) document.getElementById('key-anthropic').value = ch.anthropic_api_key;
+      if (ch.ollama_base_url) document.getElementById('key-ollama').value = ch.ollama_base_url;
+      document.getElementById('choice-sandbox').checked = !!ch.use_sandbox;
+      document.getElementById('choice-autoapprove').checked = !!ch.auto_approve;
+    }
+
+    async function saveUserProfile() {
+      const updates = {
+        name: document.getElementById('prof-name').value.trim(),
+        email: document.getElementById('prof-email').value.trim(),
+        phone: document.getElementById('prof-phone').value.trim(),
+        choices: {
+          preferred_provider: document.getElementById('choice-provider').value,
+          fast_model: document.getElementById('choice-fastmodel').value.trim(),
+          primary_model: document.getElementById('choice-primarymodel').value.trim(),
+          gemini_api_key: document.getElementById('key-gemini').value.trim(),
+          openai_api_key: document.getElementById('key-openai').value.trim(),
+          anthropic_api_key: document.getElementById('key-anthropic').value.trim(),
+          ollama_base_url: document.getElementById('key-ollama').value.trim(),
+          use_sandbox: document.getElementById('choice-sandbox').checked,
+          auto_approve: document.getElementById('choice-autoapprove').checked,
+        }
+      };
+
+      try {
+        const res = await fetch('/api/auth/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: (currentUser || {}).id, updates: updates })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          currentUser = data.user;
+          renderNavUser();
+          showToast("Choices & API keys saved successfully!");
+        } else {
+          alert(data.message || "Failed to update profile.");
+        }
+      } catch (err) {
+        alert("Error saving profile: " + err);
+      }
+    }
+
+    async function logoutUser() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        currentUser = null;
+        renderNavUser();
+        showToast("Logged out");
+        switchTab('pipeline');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function toggleKeyVisibility(elemId) {
+      const elem = document.getElementById(elemId);
+      if (elem.type === 'password') {
+        elem.type = 'text';
+      } else {
+        elem.type = 'password';
+      }
+    }
+
+    /* Launch Goal Modal */
+    function openLaunchModal() {
+      document.getElementById('modal-launch').classList.add('active');
+      detectWorkspaceRepos();
+    }
+
+    function closeLaunchModal() {
+      document.getElementById('modal-launch').classList.remove('active');
+    }
+
+    function fillGoalSuggestion(text) {
+      document.getElementById('launch-goal-text').value = text;
+    }
+
+    async function detectWorkspaceRepos() {
+      try {
+        const res = await fetch('/api/repos/detect');
+        const data = await res.json();
+        const container = document.getElementById('launch-repo-list');
+        const repos = data.repos || [];
+        if (repos.length === 0) {
+          container.innerHTML = '<span style="font-size: 12px; color: var(--text-muted);">Current workspace will be used by default.</span>';
+          return;
+        }
+        container.innerHTML = repos.map(r => `
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+            <input type="checkbox" name="launch_repos" value="${r.path}" id="repo_${r.name}" checked>
+            <label for="repo_${r.name}" style="font-size: 12px; color: #fff; cursor: pointer;">
+              <strong>${r.name}</strong> <span style="color: var(--text-muted); font-size: 11px;">(${r.path})</span>
+            </label>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error("Failed to detect repos:", err);
+      }
+    }
+
+    async function executeLaunch() {
+      const goal = document.getElementById('launch-goal-text').value.trim();
+      if (!goal) {
+        alert("Please enter a goal.");
+        return;
+      }
+      const checkedBoxes = Array.from(document.querySelectorAll('input[name="launch_repos"]:checked'));
+      const repos = checkedBoxes.map(c => c.value);
+      const autoApprove = document.getElementById('launch-autoapprove').checked;
+
+      try {
+        const res = await fetch('/api/action/launch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ goal: goal, repos: repos, auto_approve: autoApprove })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          closeLaunchModal();
+          showToast("Squad launched! Connecting live stream...");
+          selectedRunId = 'live';
+          document.getElementById('run-selector').value = 'live';
+          switchTab('pipeline');
+          fetchState();
+        } else {
+          alert(data.message || "Launch failed.");
+        }
+      } catch (err) {
+        alert("Launch error: " + err);
+      }
+    }
+
+    /* Core Runs & Telemetry */
     async function loadRunsList() {
       try {
         const res = await fetch('/api/runs');
@@ -1209,9 +2027,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
 
     function toggleRawOutput(id) {
       const box = document.getElementById(id);
-      if (box) {
-        box.classList.toggle('visible');
-      }
+      if (box) box.classList.toggle('visible');
     }
 
     async function fetchState() {
@@ -1469,6 +2285,7 @@ HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
       }
     }
 
+    loadCurrentUser();
     loadRunsList();
     setInterval(loadRunsList, 5000);
     setInterval(() => {

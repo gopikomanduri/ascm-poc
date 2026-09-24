@@ -33,6 +33,9 @@ This document outlines the items required to transform ASCM into a commercially 
 | **P1-4** | **Linked PR & Git Remote Automation** | Automated cross-repository Git branch creation, linked Markdown Pull Request descriptions, and GitHub CLI (`gh pr create`) integration. | 🟢 Completed |
 | **P1-5** | **Cost-Optimized Model Cascading** | Tiered model routing (fast/small models like `gpt-4o-mini`, `gemini-1.5-flash`, `llama3.2:3b` for triage/grilling/reviews; frontier models for code & architecture). | 🟢 Completed |
 | **P1-6** | **Polyglot TDD & Live Unit Tests Dashboard** | Automatically generate production-grade code alongside complete unit test suites using famous language testing libraries (`stretchr/testify` for Go, `pytest`/`unittest` for Python, `jest` for Node). Track test metrics (total, passed, failed, pass rate %) and publish real-time results to a dedicated **Unit Tests** dashboard tab. | 🟢 Completed |
+| **P1-7** | **Single-Pager Auth & User Profile Persistence** | Passwordless login & signup with Email or Mobile Number via 6-digit OTP. Persists user profile (name, email, phone) and personal BYOK choices (Google Gemini, OpenAI, Claude, Ollama API keys, and model preferences) across sessions. | 🟢 Completed |
+| **P1-8** | **System Architecture & Flowchart Visualizer** | Interactive visual SVG topology and data flow diagram displaying stakeholder requirements, microservice boundaries, provider/consumer contract links, Docker sandbox, and test gates. | 🟢 Completed |
+| **P1-9** | **Web Dashboard Autonomous Sprint Launcher** | Frictionless feature launcher enabling non-technical stakeholders and startup founders to kick off multi-agent engineering sprints with goal suggestions and repo selection directly from the browser. | 🟢 Completed |
 
 ---
 
@@ -59,8 +62,9 @@ This document outlines the items required to transform ASCM into a commercially 
 - **[2026-09-24] P1-4 Completed**: Implemented automated Git branch creation, cross-repository linked Pull Request Markdown descriptions (`PULL_REQUEST.md`), and GitHub CLI (`gh pr create`) integration in `GitService`.
 - **[2026-09-24] P1-5 Completed**: Built intelligent model cascading and tiering (`tier="fast"` vs `tier="primary"`, `--fast-model` CLI flag, `FAST_MODEL` env var, and per-agent role overrides like `PRODUCT_AGENT_MODEL`) reducing API costs by up to 80%.
 - **[2026-09-24] P1-6 Completed**: Implemented polyglot TDD prompt enforcement across Coder agents (famous unit test libraries: `stretchr/testify`, `pytest`, `unittest`, `jest`), test output parser (`VerifierEngine.parse_test_suite`), live test tracking in `DashboardState`, and dedicated interactive **Unit Tests** tab on the web dashboard.
+- **[2026-09-24] P1-7, P1-8 & P1-9 Completed**: Built passwordless single-pager authentication (Email/Mobile OTP), user profile persistence (name, email, phone), BYOK API key choices (Gemini, OpenAI, Anthropic, Ollama), live system architecture flowchart visualizer, and browser-native goal launcher.
 - **[2026-09-24] P2-2 Completed**: Added hermetic Docker container sandboxing to `VerifierEngine` (`--sandbox` flag or `USE_DOCKER_SANDBOX=true`) with unprivileged network-isolated execution.
 - **[2026-09-24] P2-3 Completed**: Built enterprise security `PIIScrubber` (redacts API keys, credentials, emails, SSNs, credit cards, IPs) and structured `AuditLogger` writing dual human-readable text logs (`ascm_audit.log`) and open-source aggregator ready NDJSON logs (`ascm_audit.jsonl`).
-- **[2026-09-24] Verification**: 53 unit tests passing across all components.
+- **[2026-09-24] Verification**: 57 unit tests passing across all components.
 
 
