@@ -82,7 +82,10 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         self.provider_name = "openai"
         self.api_key = api_key
         self.base_url = (base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
-        self.model = model or os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o-mini")
+        gen_m = os.environ.get("LLM_MODEL")
+        if gen_m and ("gemini" in gen_m or "claude" in gen_m):
+            gen_m = None
+        self.model = model or os.environ.get("OPENAI_MODEL") or gen_m or "gpt-4o"
 
     def generate(self, prompt: str, system_instruction: str, json_mode: bool = False) -> str:
         url = f"{self.base_url}/chat/completions"
@@ -124,7 +127,10 @@ class AnthropicProvider(BaseLLMProvider):
     def __init__(self, api_key: str, model: Optional[str] = None):
         self.provider_name = "anthropic"
         self.api_key = api_key
-        self.model = model or os.environ.get("ANTHROPIC_MODEL") or os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20241022")
+        gen_m = os.environ.get("LLM_MODEL")
+        if gen_m and ("gemini" in gen_m or "gpt" in gen_m):
+            gen_m = None
+        self.model = model or os.environ.get("ANTHROPIC_MODEL") or gen_m or "claude-3-5-sonnet-20241022"
 
     def generate(self, prompt: str, system_instruction: str, json_mode: bool = False) -> str:
         url = "https://api.anthropic.com/v1/messages"
@@ -281,12 +287,19 @@ def get_configured_provider(
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key:
             raise RuntimeError("GEMINI_API_KEY is required for 'gemini' provider.")
-        # If it's a deep review/critic agent on Gemini, prefer 1.5-pro over flash to avoid bias
+        gen_m = os.environ.get("LLM_MODEL")
+        if gen_m and ("gpt" in gen_m.lower() or "claude" in gen_m.lower()):
+            gen_m = None
+        fast_m = os.environ.get("GEMINI_FAST_MODEL") or os.environ.get("FAST_MODEL")
+        if fast_m and ("gpt" in fast_m.lower() or "claude" in fast_m.lower()):
+            fast_m = None
         default_gemini = (
             "gemini-1.5-pro" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent")
-            else "gemini-1.5-flash" if tier == "fast"
-            else os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-2.5-flash")
+            else (fast_m or "gemini-1.5-flash") if tier == "fast"
+            else os.environ.get("GEMINI_MODEL") or gen_m or "gemini-2.5-flash"
         )
+        if resolved_model and ("gpt" in resolved_model.lower() or "claude" in resolved_model.lower()):
+            resolved_model = None
         target_model = resolved_model or default_gemini
         return GeminiProvider(api_key=key, model=target_model)
 
@@ -294,11 +307,19 @@ def get_configured_provider(
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
             raise RuntimeError("OPENAI_API_KEY is required for 'openai' provider.")
+        gen_m = os.environ.get("LLM_MODEL")
+        if gen_m and ("gemini" in gen_m.lower() or "claude" in gen_m.lower()):
+            gen_m = None
+        fast_m = os.environ.get("OPENAI_FAST_MODEL") or os.environ.get("FAST_MODEL")
+        if fast_m and ("gemini" in fast_m.lower() or "claude" in fast_m.lower()):
+            fast_m = None
         default_openai = (
             "gpt-4o" if agent_name in ("ArchitectureReviewAgent", "CodeReviewAgent", "BusinessStrategyAgent")
-            else "gpt-4o-mini" if tier == "fast"
-            else os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
+            else (fast_m or "gpt-4o-mini") if tier == "fast"
+            else os.environ.get("OPENAI_MODEL") or gen_m or "gpt-4o"
         )
+        if resolved_model and ("gemini" in resolved_model.lower() or "claude" in resolved_model.lower()):
+            resolved_model = None
         target_model = resolved_model or default_openai
         return OpenAICompatibleProvider(api_key=key, base_url=base_url, model=target_model)
 
@@ -306,11 +327,19 @@ def get_configured_provider(
         key = os.environ.get("ANTHROPIC_API_KEY")
         if not key:
             raise RuntimeError("ANTHROPIC_API_KEY is required for 'anthropic' provider.")
+        gen_m = os.environ.get("LLM_MODEL")
+        if gen_m and ("gemini" in gen_m.lower() or "gpt" in gen_m.lower()):
+            gen_m = None
+        fast_m = os.environ.get("ANTHROPIC_FAST_MODEL") or os.environ.get("FAST_MODEL")
+        if fast_m and ("gemini" in fast_m.lower() or "gpt" in fast_m.lower()):
+            fast_m = None
         default_anthropic = (
             "claude-3-5-sonnet-20241022" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent", "CodeReviewAgent")
-            else "claude-3-5-haiku-latest" if tier == "fast"
-            else os.environ.get("ANTHROPIC_MODEL") or os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20241022")
+            else (fast_m or "claude-3-5-haiku-latest") if tier == "fast"
+            else os.environ.get("ANTHROPIC_MODEL") or gen_m or "claude-3-5-sonnet-20241022"
         )
+        if resolved_model and ("gemini" in resolved_model.lower() or "gpt" in resolved_model.lower()):
+            resolved_model = None
         target_model = resolved_model or default_anthropic
         return AnthropicProvider(api_key=key, model=target_model)
 
@@ -326,29 +355,55 @@ def get_configured_provider(
     # 2. Auto-detection based on present environment keys (BYOK)
     if has_gemini:
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        gen_m = os.environ.get("LLM_MODEL")
+        if gen_m and ("gpt" in gen_m.lower() or "claude" in gen_m.lower()):
+            gen_m = None
+        fast_m = os.environ.get("GEMINI_FAST_MODEL") or os.environ.get("FAST_MODEL")
+        if fast_m and ("gpt" in fast_m.lower() or "claude" in fast_m.lower()):
+            fast_m = None
         default_gemini = (
             "gemini-1.5-pro" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent")
-            else "gemini-1.5-flash" if tier == "fast"
-            else os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-2.5-flash")
+            else (fast_m or "gemini-1.5-flash") if tier == "fast"
+            else os.environ.get("GEMINI_MODEL") or gen_m or "gemini-2.5-flash"
         )
+        if resolved_model and ("gpt" in resolved_model.lower() or "claude" in resolved_model.lower()):
+            resolved_model = None
         target_model = resolved_model or default_gemini
         return GeminiProvider(api_key=key, model=target_model)
 
     if has_openai:
+        openai_env_model = os.environ.get("OPENAI_MODEL")
+        gen_m = os.environ.get("LLM_MODEL")
+        if gen_m and ("gemini" in gen_m.lower() or "claude" in gen_m.lower()):
+            gen_m = None
+        fast_m = os.environ.get("OPENAI_FAST_MODEL") or os.environ.get("FAST_MODEL")
+        if fast_m and ("gemini" in fast_m.lower() or "claude" in fast_m.lower()):
+            fast_m = None
         default_openai = (
             "gpt-4o" if agent_name in ("ArchitectureReviewAgent", "CodeReviewAgent", "BusinessStrategyAgent")
-            else "gpt-4o-mini" if tier == "fast"
-            else os.environ.get("OPENAI_MODEL") or os.environ.get("LLM_MODEL", "gpt-4o")
+            else (fast_m or "gpt-4o-mini") if tier == "fast"
+            else openai_env_model or gen_m or "gpt-4o"
         )
+        if resolved_model and ("gemini" in resolved_model.lower() or "claude" in resolved_model.lower()):
+            resolved_model = None
         target_model = resolved_model or default_openai
         return OpenAICompatibleProvider(api_key=os.environ["OPENAI_API_KEY"], base_url=base_url, model=target_model)
 
     if has_anthropic:
+        anthropic_env_model = os.environ.get("ANTHROPIC_MODEL")
+        gen_m = os.environ.get("LLM_MODEL")
+        if gen_m and ("gemini" in gen_m.lower() or "gpt" in gen_m.lower()):
+            gen_m = None
+        fast_m = os.environ.get("ANTHROPIC_FAST_MODEL") or os.environ.get("FAST_MODEL")
+        if fast_m and ("gemini" in fast_m.lower() or "gpt" in fast_m.lower()):
+            fast_m = None
         default_anthropic = (
             "claude-3-5-sonnet-20241022" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent", "CodeReviewAgent")
-            else "claude-3-5-haiku-latest" if tier == "fast"
-            else os.environ.get("ANTHROPIC_MODEL") or os.environ.get("LLM_MODEL", "claude-3-5-sonnet-20241022")
+            else (fast_m or "claude-3-5-haiku-latest") if tier == "fast"
+            else anthropic_env_model or gen_m or "claude-3-5-sonnet-20241022"
         )
+        if resolved_model and ("gemini" in resolved_model.lower() or "gpt" in resolved_model.lower()):
+            resolved_model = None
         target_model = resolved_model or default_anthropic
         return AnthropicProvider(api_key=os.environ["ANTHROPIC_API_KEY"], model=target_model)
 

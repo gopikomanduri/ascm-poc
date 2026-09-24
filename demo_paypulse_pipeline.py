@@ -51,6 +51,7 @@ def main():
     print("📊 PRE-FLIGHT BUDGET RADAR & ARCHITECTURAL KNOWLEDGE BASE")
     print("=" * 70)
     goal = "Build a multi-tenant Stripe payment and AI token escrow gateway with real-time observability dashboard"
+    GLOBAL_DASHBOARD_STATE.new_session(user_goal=goal)
     
     # Check Local Knowledge Blueprints
     matched_bps = GLOBAL_BLUEPRINT_ENGINE.match(goal)

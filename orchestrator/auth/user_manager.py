@@ -349,6 +349,15 @@ class UserManager:
 
         return {"status": "ok", "message": "Profile and preferences updated successfully.", "user": user}
 
+    def update_user_choices(self, identifier: Optional[str] = None, **choices) -> Dict[str, Any]:
+        ident = identifier or self.active_user_id
+        if not ident:
+            active = self.get_active_user()
+            ident = active.get("id") if active else None
+        if not ident:
+            return {"status": "error", "message": "No active user"}
+        return self.update_profile(ident, {"choices": choices})
+
     def apply_user_api_keys(self, user: Dict[str, Any]) -> None:
         """
         Synchronizes user's saved API keys and choices into the active process environment.
