@@ -1,0 +1,954 @@
+import json
+import os
+import socketserver
+import threading
+import time
+import uuid
+from datetime import datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from typing import Dict, List, Any, Optional
+
+HISTORY_DIR = Path.cwd() / ".ascm_history"
+
+
+class DashboardState:
+    def __init__(self, user_goal: str = ""):
+        self.lock = threading.Lock()
+        self.heartbeat_thread: Optional[threading.Thread] = None
+        self.stop_heartbeat = False
+        self.run_id: Optional[str] = None
+        self.file_path: Optional[Path] = None
+        self.start_time: str = ""
+        self.last_heartbeat: float = time.time()
+        self.user_goal: str = user_goal
+        self.phase: str = "Initializing Orchestrator"
+        self.active_agent: str = "None"
+        self.active_action: str = "Waiting for workflow start"
+        self.logs: List[str] = []
+        self.timeline_events: List[Dict[str, Any]] = []
+        self.known_agents = [
+            "DiscoveryAgent",
+            "ProductAgent",
+            "DesignAgent",
+            "ArchitectAgent",
+            "PlannerAgent",
+            "DatabaseAgent",
+            "GoCoderAgent",
+            "SecurityAuditorAgent",
+            "CodeReviewAgent",
+        ]
+        self.agents: Dict[str, Dict[str, Any]] = {}
+        self.tasks: List[Dict[str, Any]] = []
+
+        # Interactive Governance & Human Gate State
+        self.pending_approval: bool = False
+        self.pending_changes_data: List[Dict[str, Any]] = []
+        self.approval_decision: Optional[bool] = None
+        self.approval_event = threading.Event()
+
+        self.clarification_needed: bool = False
+        self.clarification_questions: List[str] = []
+        self.clarification_answer: Optional[str] = None
+        self.clarification_event = threading.Event()
+
+        self.pending_milestone: bool = False
+        self.milestone_name: str = ""
+        self.milestone_summary: str = ""
+        self.milestone_decision: Optional[bool] = None
+        self.milestone_feedback_text: str = ""
+        self.milestone_event = threading.Event()
+
+        if user_goal:
+            self.new_session(user_goal)
+
+    def new_session(self, user_goal: str = "") -> None:
+        HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+        now_dt = datetime.now()
+        timestamp_str = now_dt.strftime("%Y%m%d_%H%M%S")
+        short_id = uuid.uuid4().hex[:6]
+        
+        with getattr(self, "lock", threading.Lock()):
+            self.run_id = f"run_{timestamp_str}_{short_id}"
+            self.file_path = HISTORY_DIR / f"{self.run_id}.json"
+            self.start_time = now_dt.isoformat()
+            self.last_heartbeat = time.time()
+            self.user_goal = user_goal
+            self.phase = "Initializing Orchestrator"
+            self.active_agent = "None"
+            self.active_action = "Waiting for workflow start"
+            
+            t_fmt = now_dt.strftime("%I:%M:%S %p")
+            self.logs = [f"[{t_fmt}] Dashboard server initialized."]
+            self.timeline_events = [
+                {"timestamp": t_fmt, "agent": "System", "status": "info", "action": "Workflow Session Created"}
+            ]
+            
+            self.agents = {
+                name: {
+                    "status": "waiting",
+                    "action": "Idle",
+                    "updated_at": t_fmt,
+                    "duration_sec": 0,
+                    "started_at": None,
+                }
+                for name in self.known_agents
+            }
+            
+            self.tasks = []
+            self.pending_approval = False
+            self.pending_changes_data = []
+            self.approval_decision = None
+            self.approval_event.clear()
+            self.clarification_needed = False
+            self.clarification_questions = []
+            self.clarification_answer = None
+            self.clarification_event.clear()
+            self.pending_milestone = False
+            self.milestone_name = ""
+            self.milestone_summary = ""
+            self.milestone_decision = None
+            self.milestone_feedback_text = ""
+            self.milestone_event.clear()
+            self._flush_to_disk()
+
+        self._start_heartbeat_worker()
+
+    def request_approval(self, pending_changes: List[Dict[str, Any]]) -> None:
+        with self.lock:
+            self.pending_approval = True
+            self.pending_changes_data = pending_changes
+            self.approval_decision = None
+            self.approval_event.clear()
+            self.phase = "Waiting for Human Approval (Web Dashboard or CLI)"
+            self.logs.append(f"[{datetime.now().strftime('%I:%M:%S %p')}] [GOVERNANCE] Approval requested for {len(pending_changes)} repos.")
+            self._flush_to_disk()
+
+    def submit_approval(self, approved: bool) -> None:
+        with self.lock:
+            self.approval_decision = approved
+            self.pending_approval = False
+            self.approval_event.set()
+            status_text = "APPROVED" if approved else "REJECTED"
+            self.logs.append(f"[{datetime.now().strftime('%I:%M:%S %p')}] [GOVERNANCE] Human decision received: {status_text}")
+            self._flush_to_disk()
+
+    def request_clarification(self, questions: List[str]) -> None:
+        with self.lock:
+            self.clarification_needed = True
+            self.clarification_questions = questions
+            self.clarification_answer = None
+            self.clarification_event.clear()
+            self.phase = "Waiting for PRD Clarification (Web Dashboard or CLI)"
+            self.logs.append(f"[{datetime.now().strftime('%I:%M:%S %p')}] [GOVERNANCE] Clarification questions submitted to human.")
+            self._flush_to_disk()
+
+    def submit_clarification(self, answer: str) -> None:
+        with self.lock:
+            self.clarification_answer = answer
+            self.clarification_needed = False
+            self.clarification_event.set()
+            self.logs.append(f"[{datetime.now().strftime('%I:%M:%S %p')}] [GOVERNANCE] Human clarification response received.")
+            self._flush_to_disk()
+
+    def request_milestone_review(self, name: str, summary: str) -> None:
+        with self.lock:
+            self.pending_milestone = True
+            self.milestone_name = name
+            self.milestone_summary = summary
+            self.milestone_decision = None
+            self.milestone_feedback_text = ""
+            self.milestone_event.clear()
+            self.phase = f"Milestone Review Gate: {name}"
+            self.logs.append(f"[{datetime.now().strftime('%I:%M:%S %p')}] [MILESTONE] User feedback requested for: '{name}'.")
+            self._flush_to_disk()
+
+    def submit_milestone_review(self, proceed: bool, feedback: str = "") -> None:
+        with self.lock:
+            self.milestone_decision = proceed
+            self.milestone_feedback_text = feedback
+            self.pending_milestone = False
+            self.milestone_event.set()
+            decision_label = "CONFIRMED & PROCEED" if proceed else f"REWORK REQUESTED ({feedback})"
+            self.logs.append(f"[{datetime.now().strftime('%I:%M:%S %p')}] [MILESTONE] User decision for '{self.milestone_name}': {decision_label}")
+            self._flush_to_disk()
+
+    def _start_heartbeat_worker(self) -> None:
+        self.stop_heartbeat = True
+        if self.heartbeat_thread and self.heartbeat_thread.is_alive():
+            self.heartbeat_thread.join(timeout=0.5)
+        self.stop_heartbeat = False
+
+        def _worker():
+            while not self.stop_heartbeat:
+                time.sleep(2)
+                with self.lock:
+                    if any(term in self.phase.upper() for term in ("FAILED", "CRASHED", "COMPLETED", "ABORTED")):
+                        break
+                    self.last_heartbeat = time.time()
+                    self._flush_to_disk()
+
+        self.heartbeat_thread = threading.Thread(target=_worker, daemon=True)
+        self.heartbeat_thread.start()
+
+    def set_phase(self, phase_name: str) -> None:
+        t_fmt = datetime.now().strftime("%I:%M:%S %p")
+        with self.lock:
+            self.phase = phase_name
+            self.last_heartbeat = time.time()
+            self.logs.append(f"[{t_fmt}] [PHASE] {phase_name}")
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": "System",
+                "status": "phase",
+                "action": f"Entered {phase_name}"
+            })
+            self._flush_to_disk()
+
+    def update_agent(self, agent_name: str, status: str, action: str = "") -> None:
+        t_fmt = datetime.now().strftime("%I:%M:%S %p")
+        now_ts = time.time()
+        with self.lock:
+            self.last_heartbeat = now_ts
+            if status == "running":
+                self.active_agent = agent_name
+                self.active_action = action or f"{agent_name} is running"
+            elif self.active_agent == agent_name and status in ("completed", "failed"):
+                self.active_agent = "None"
+                self.active_action = "Idle"
+
+            if agent_name in self.agents:
+                ag = self.agents[agent_name]
+                if status == "running" and ag["status"] != "running":
+                    ag["started_at_ts"] = now_ts
+                elif status in ("completed", "failed") and ag.get("started_at_ts"):
+                    ag["duration_sec"] = round(now_ts - ag["started_at_ts"], 1)
+
+                ag["status"] = status
+                if action:
+                    ag["action"] = action
+                ag["updated_at"] = t_fmt
+            else:
+                self.agents[agent_name] = {
+                    "status": status,
+                    "action": action or "Running",
+                    "updated_at": t_fmt,
+                    "duration_sec": 0,
+                }
+
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": agent_name,
+                "status": status,
+                "action": action or f"Agent status set to {status}"
+            })
+            self._flush_to_disk()
+
+    def set_tasks(self, tasks_list: List[Dict[str, Any]]) -> None:
+        with self.lock:
+            self.tasks = tasks_list
+            self.last_heartbeat = time.time()
+            self._flush_to_disk()
+
+    def update_task_status(self, task_id: str, status: str) -> None:
+        t_fmt = datetime.now().strftime("%I:%M:%S %p")
+        with self.lock:
+            self.last_heartbeat = time.time()
+            for task in self.tasks:
+                if task.get("id") == task_id:
+                    task["status"] = status
+                    task["updated_at"] = t_fmt
+            self._flush_to_disk()
+
+    def log(self, message: str) -> None:
+        t_fmt = datetime.now().strftime("%I:%M:%S %p")
+        with self.lock:
+            self.last_heartbeat = time.time()
+            formatted_msg = f"[{t_fmt}] {message}"
+            self.logs.append(formatted_msg)
+            if len(self.logs) > 300:
+                self.logs.pop(0)
+            self._flush_to_disk()
+
+    def record_crash(self, error: Exception) -> None:
+        import traceback
+        t_fmt = datetime.now().strftime("%I:%M:%S %p")
+        err_msg = str(error) or type(error).__name__
+        with self.lock:
+            self.phase = f"FAILED / CRASHED ({err_msg})"
+            self.last_heartbeat = time.time()
+            tb_str = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+            formatted_crash = f"[{t_fmt}] [CRASH] Execution failed: {error}\n{tb_str}"
+            self.logs.append(formatted_crash)
+            
+            if self.active_agent and self.active_agent != "None":
+                if self.active_agent in self.agents:
+                    self.agents[self.active_agent]["status"] = "failed"
+                    self.agents[self.active_agent]["action"] = f"CRASHED: {error}"
+            
+            self.timeline_events.append({
+                "timestamp": t_fmt,
+                "agent": self.active_agent if self.active_agent != "None" else "System",
+                "status": "failed",
+                "action": f"FAILED / CRASHED: {error}"
+            })
+            self._flush_to_disk()
+
+    def get_snapshot(self) -> Dict[str, Any]:
+        with self.lock:
+            return self._build_snapshot_dict()
+
+    def _build_snapshot_dict(self) -> Dict[str, Any]:
+        running_cnt = sum(1 for a in self.agents.values() if a["status"] == "running")
+        completed_cnt = sum(1 for a in self.agents.values() if a["status"] == "completed")
+        waiting_cnt = sum(1 for a in self.agents.values() if a["status"] == "waiting")
+
+        return {
+            "run_id": self.run_id,
+            "start_time": self.start_time,
+            "last_heartbeat": getattr(self, "last_heartbeat", time.time()),
+            "user_goal": self.user_goal,
+            "phase": self.phase,
+            "active_agent": self.active_agent,
+            "active_action": self.active_action,
+            "counts": {
+                "running": running_cnt,
+                "completed": completed_cnt,
+                "waiting": waiting_cnt,
+                "total_agents": len(self.agents),
+                "total_tasks": len(self.tasks),
+            },
+            "agents": self.agents,
+            "tasks": self.tasks,
+            "pending_approval": getattr(self, "pending_approval", False),
+            "pending_changes_data": getattr(self, "pending_changes_data", []),
+            "approval_decision": getattr(self, "approval_decision", None),
+            "clarification_needed": getattr(self, "clarification_needed", False),
+            "clarification_questions": getattr(self, "clarification_questions", []),
+            "pending_milestone": getattr(self, "pending_milestone", False),
+            "milestone_name": getattr(self, "milestone_name", ""),
+            "milestone_summary": getattr(self, "milestone_summary", ""),
+            "milestone_decision": getattr(self, "milestone_decision", None),
+            "timeline_events": self.timeline_events[-100:],
+            "logs": self.logs[-100:],
+        }
+
+    def _flush_to_disk(self) -> None:
+        try:
+            snapshot = self._build_snapshot_dict()
+            temp_path = self.file_path.with_suffix(".tmp")
+            temp_path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+            temp_path.replace(self.file_path)
+        except OSError:
+            pass
+
+
+def check_and_update_staleness(snapshot: Dict[str, Any], filepath: Optional[Path] = None) -> Dict[str, Any]:
+    if not snapshot or not isinstance(snapshot, dict):
+        return snapshot
+
+    phase = snapshot.get("phase", "")
+    terminal_keywords = ["FAILED", "CRASHED", "COMPLETED", "ABORTED"]
+    if any(k in phase.upper() for k in terminal_keywords):
+        return snapshot
+
+    last_hb = snapshot.get("last_heartbeat", 0)
+    if not last_hb and filepath and filepath.exists():
+        try:
+            last_hb = filepath.stat().st_mtime
+        except OSError:
+            last_hb = 0
+
+    if last_hb > 0 and (time.time() - last_hb > 10.0):
+        t_fmt = datetime.now().strftime("%I:%M:%S %p")
+        snapshot["phase"] = "FAILED / CRASHED (Process Disconnected)"
+        snapshot["active_agent"] = "None"
+        snapshot["active_action"] = "Process heartbeat stopped (> 10s)"
+
+        logs = snapshot.setdefault("logs", [])
+        logs.append(
+            f"[{t_fmt}] [CRASH] Application process heartbeat stopped (> 10s delay limit reached). Execution marked as crashed."
+        )
+
+        events = snapshot.setdefault("timeline_events", [])
+        events.append({
+            "timestamp": t_fmt,
+            "agent": "System",
+            "status": "failed",
+            "action": "FAILED / CRASHED: Process heartbeat stopped (> 10s delay limit reached)",
+        })
+
+        if filepath and filepath.exists():
+            try:
+                temp_path = filepath.with_suffix(".tmp")
+                temp_path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+                temp_path.replace(filepath)
+            except OSError:
+                pass
+
+    return snapshot
+
+
+def get_latest_live_run() -> Dict[str, Any]:
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    run_files = sorted(HISTORY_DIR.glob("run_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    if run_files:
+        latest_file = run_files[0]
+        if GLOBAL_DASHBOARD_STATE.file_path and GLOBAL_DASHBOARD_STATE.file_path.name == latest_file.name:
+            snap = GLOBAL_DASHBOARD_STATE.get_snapshot()
+            return check_and_update_staleness(snap, GLOBAL_DASHBOARD_STATE.file_path)
+
+        try:
+            data = json.loads(latest_file.read_text(encoding="utf-8"))
+            return check_and_update_staleness(data, latest_file)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    return GLOBAL_DASHBOARD_STATE.get_snapshot()
+
+
+def list_historical_runs() -> List[Dict[str, Any]]:
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    runs = []
+    for filepath in sorted(HISTORY_DIR.glob("run_*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(filepath.read_text(encoding="utf-8"))
+            data = check_and_update_staleness(data, filepath)
+            runs.append({
+                "run_id": data.get("run_id", filepath.stem),
+                "start_time": data.get("start_time", ""),
+                "goal": data.get("user_goal", "No Goal Specified"),
+                "phase": data.get("phase", "Unknown"),
+            })
+        except (json.JSONDecodeError, OSError):
+            continue
+    return runs
+
+
+def load_historical_run(run_id: str) -> Optional[Dict[str, Any]]:
+    filepath = HISTORY_DIR / f"{run_id}.json"
+    if not filepath.exists():
+        return None
+    try:
+        data = json.loads(filepath.read_text(encoding="utf-8"))
+        return check_and_update_staleness(data, filepath)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+# Global dashboard state singleton
+GLOBAL_DASHBOARD_STATE = DashboardState()
+
+
+class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        return
+
+    def do_GET(self):
+        from urllib.parse import urlparse, parse_qs
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        query_params = parse_qs(parsed_url.query)
+
+        if path == "/api/runs":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            history_list = list_historical_runs()
+            self.wfile.write(json.dumps(history_list).encode("utf-8"))
+
+        elif path == "/api/state":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            
+            run_id = query_params.get("run_id", [None])[0]
+            if run_id and run_id != "live":
+                snapshot = load_historical_run(run_id) or get_latest_live_run()
+            else:
+                snapshot = get_latest_live_run()
+                
+            self.wfile.write(json.dumps(snapshot).encode("utf-8"))
+
+        elif path == "/" or path == "/index.html":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(HTML_DASHBOARD_PAGE.encode("utf-8"))
+
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_POST(self):
+        from urllib.parse import urlparse
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            payload = {}
+
+        if path == "/api/action/approve":
+            GLOBAL_DASHBOARD_STATE.submit_approval(True)
+            self._send_json({"status": "ok", "message": "Changes approved via dashboard"})
+        elif path == "/api/action/reject":
+            GLOBAL_DASHBOARD_STATE.submit_approval(False)
+            self._send_json({"status": "ok", "message": "Changes rejected via dashboard"})
+        elif path == "/api/action/clarify":
+            answer = payload.get("answer", "")
+            GLOBAL_DASHBOARD_STATE.submit_clarification(answer)
+            self._send_json({"status": "ok", "message": "Clarification submitted via dashboard"})
+        elif path == "/api/action/milestone":
+            proceed = bool(payload.get("proceed", True))
+            feedback = payload.get("feedback", "")
+            GLOBAL_DASHBOARD_STATE.submit_milestone_review(proceed, feedback)
+            self._send_json({"status": "ok", "message": f"Milestone review submitted: proceed={proceed}"})
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def _send_json(self, data: Dict[str, Any], status: int = 200):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode("utf-8"))
+
+
+
+class DashboardServer:
+    def __init__(self, host: str = "0.0.0.0", port: int = 8080):
+        self.host = host
+        self.port = port
+        self.server: Optional[HTTPServer] = None
+        self.thread: Optional[threading.Thread] = None
+        self.actual_port = port
+
+    def start(self) -> int:
+        for p in range(self.port, self.port + 10):
+            try:
+                self.server = HTTPServer((self.host, p), DashboardHTTPRequestHandler)
+                self.actual_port = p
+                break
+            except OSError:
+                continue
+        
+        if not self.server:
+            print(f"[!] Warning: Could not bind dashboard server on ports {self.port}-{self.port+10}")
+            return 0
+
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        print(f"[+] 🌐 Dashboard live & persistent at: http://localhost:{self.actual_port}")
+        return self.actual_port
+
+    def stop(self) -> None:
+        if self.server:
+            self.server.shutdown()
+
+
+HTML_DASHBOARD_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASCM Orchestrator - Persistent Telemetry Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0d1117;
+      --card-bg: #161b22;
+      --border-color: #30363d;
+      --text-main: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent-blue: #58a6ff;
+      --accent-green: #3fb950;
+      --accent-yellow: #d29922;
+      --accent-red: #f85149;
+      --accent-purple: #bc8cff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 24px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo h1 { font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px; }
+    .run-controls { display: flex; align-items: center; gap: 12px; }
+    .run-select {
+      background: var(--card-bg);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+    }
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse-anim 1.5s infinite;
+    }
+    @keyframes pulse-anim { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+
+    .phase-bar {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .phase-title { font-size: 12px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
+    .phase-name { font-size: 16px; font-weight: 600; color: var(--accent-blue); margin-top: 2px; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+    .stat-val { font-size: 28px; font-weight: 700; margin-top: 4px; }
+    .val-running { color: var(--accent-blue); }
+    .val-completed { color: var(--accent-green); }
+    .val-waiting { color: var(--accent-yellow); }
+    .val-tasks { color: var(--accent-purple); }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .panel-header {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffffff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .agent-list { display: flex; flex-direction: column; gap: 10px; }
+    .agent-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+    }
+    .agent-name { font-weight: 600; font-size: 13px; }
+    .agent-action { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    .pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 12px;
+      text-transform: uppercase;
+    }
+    .pill-running { background: rgba(88, 166, 255, 0.15); color: var(--accent-blue); border: 1px solid rgba(88, 166, 255, 0.3); }
+    .pill-completed { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); border: 1px solid rgba(63, 185, 80, 0.3); }
+    .pill-waiting { background: rgba(210, 153, 34, 0.15); color: var(--accent-yellow); border: 1px solid rgba(210, 153, 34, 0.3); }
+    .pill-failed { background: rgba(248, 81, 73, 0.15); color: var(--accent-red); border: 1px solid rgba(248, 81, 73, 0.3); }
+
+    .timeline-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 380px;
+      overflow-y: auto;
+    }
+    .timeline-item {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.02);
+      border-left: 2px solid var(--accent-blue);
+      border-radius: 4px;
+    }
+    .time-stamp { font-family: 'Fira Code', monospace; color: var(--accent-purple); font-weight: 500; min-width: 85px; }
+
+    .log-box {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      background: #090d13;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      height: 380px;
+      overflow-y: auto;
+      color: #8b949e;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .log-line { white-space: pre-wrap; word-break: break-all; }
+    .log-line.phase { color: var(--accent-blue); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <div class="pulse"></div>
+      <h1>ASCM Persistent Telemetry Dashboard</h1>
+    </div>
+    <div class="run-controls">
+      <select class="run-select" id="run-selector" onchange="onRunChanged()">
+        <option value="live">🔴 Live Active Session</option>
+      </select>
+      <div class="status-badge" id="live-badge">SYSTEM ACTIVE</div>
+    </div>
+  </div>
+
+  <div class="phase-bar">
+    <div>
+      <div class="phase-title">Current Phase / Goal</div>
+      <div class="phase-name" id="phase-name">Initializing...</div>
+    </div>
+    <div>
+      <div class="phase-title">Active Agent</div>
+      <div class="phase-name" id="active-agent" style="color: var(--accent-purple);">None</div>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <span class="stat-label">RUNNING AGENTS</span>
+      <span class="stat-val val-running" id="cnt-running">0</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">COMPLETED AGENTS</span>
+      <span class="stat-val val-completed" id="cnt-completed">0</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">WAITING AGENTS</span>
+      <span class="stat-val val-waiting" id="cnt-waiting">0</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">TOTAL SUB-TASKS</span>
+      <span class="stat-val val-tasks" id="cnt-tasks">0</span>
+    </div>
+  </div>
+
+  <div class="main-grid">
+    <div class="panel">
+      <div class="panel-header">
+        <span>Agent Pipeline & Status</span>
+        <span style="font-size: 12px; color: var(--text-muted);" id="active-action-text">Idle</span>
+      </div>
+      <div class="agent-list" id="agent-list"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span>Timestamped Audit Timeline</span>
+        <span style="font-size: 12px; color: var(--text-muted);">Exact Start & Transition Times</span>
+      </div>
+      <div class="timeline-list" id="timeline-list"></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top: 24px;">
+    <div class="panel-header">
+      <span>Execution Log Audit Stream</span>
+      <span style="font-size: 12px; color: var(--text-muted);">Timestamped Output</span>
+    </div>
+    <div class="log-box" id="log-box"></div>
+  </div>
+
+  <script>
+    let selectedRunId = 'live';
+
+    async function loadRunsList() {
+      try {
+        const res = await fetch('/api/runs');
+        const runs = await res.json();
+        const sel = document.getElementById('run-selector');
+        
+        // Preserve selection if present
+        const currentVal = sel.value;
+        sel.innerHTML = '<option value="live">🔴 Live Active Session</option>';
+        
+        runs.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r.run_id;
+          opt.innerText = `📁 ${r.run_id} - Goal: "${r.goal.substring(0, 30)}"`;
+          sel.appendChild(opt);
+        });
+
+        if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
+          sel.value = currentVal;
+        }
+      } catch (err) {
+        console.error("Failed to fetch runs list:", err);
+      }
+    }
+
+    function onRunChanged() {
+      selectedRunId = document.getElementById('run-selector').value;
+      fetchState();
+    }
+
+    async function fetchState() {
+      try {
+        const url = `/api/state?run_id=${selectedRunId}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        const phaseElem = document.getElementById('phase-name');
+        phaseElem.innerText = data.phase + (data.user_goal ? ` (${data.user_goal})` : '');
+        
+        const badge = document.getElementById('live-badge');
+        const isCrashed = data.phase && (data.phase.includes('FAILED') || data.phase.includes('CRASHED'));
+        const isCompleted = data.phase && data.phase.includes('Completed');
+
+        if (isCrashed) {
+          phaseElem.style.color = 'var(--accent-red)';
+          badge.innerText = 'SYSTEM CRASHED';
+          badge.style.background = 'rgba(248, 81, 73, 0.15)';
+          badge.style.color = 'var(--accent-red)';
+          badge.style.borderColor = 'rgba(248, 81, 73, 0.3)';
+        } else if (isCompleted) {
+          phaseElem.style.color = 'var(--accent-green)';
+          badge.innerText = 'WORKFLOW COMPLETED';
+          badge.style.background = 'rgba(63, 185, 80, 0.15)';
+          badge.style.color = 'var(--accent-green)';
+          badge.style.borderColor = 'rgba(63, 185, 80, 0.3)';
+        } else {
+          phaseElem.style.color = 'var(--accent-blue)';
+          badge.innerText = 'SYSTEM ACTIVE';
+          badge.style.background = 'rgba(88, 166, 255, 0.15)';
+          badge.style.color = 'var(--accent-blue)';
+          badge.style.borderColor = 'rgba(88, 166, 255, 0.3)';
+        }
+
+        document.getElementById('active-agent').innerText = data.active_agent || 'None';
+        document.getElementById('active-action-text').innerText = data.active_action || 'Idle';
+
+        document.getElementById('cnt-running').innerText = data.counts.running || 0;
+        document.getElementById('cnt-completed').innerText = data.counts.completed || 0;
+        document.getElementById('cnt-waiting').innerText = data.counts.waiting || 0;
+        document.getElementById('cnt-tasks').innerText = data.counts.total_tasks || 0;
+
+        // Render Agents
+        const agentContainer = document.getElementById('agent-list');
+        agentContainer.innerHTML = '';
+        for (const [name, info] of Object.entries(data.agents || {})) {
+          const item = document.createElement('div');
+          item.className = 'agent-item';
+          const durText = info.duration_sec ? ` (${info.duration_sec}s)` : '';
+          item.innerHTML = `
+            <div>
+              <div class="agent-name">${name}${durText}</div>
+              <div class="agent-action">${info.action || 'Idle'}</div>
+            </div>
+            <span class="pill pill-${info.status}">${info.status}</span>
+          `;
+          agentContainer.appendChild(item);
+        }
+
+        // Render Timeline
+        const timeContainer = document.getElementById('timeline-list');
+        timeContainer.innerHTML = '';
+        (data.timeline_events || []).forEach(evt => {
+          const div = document.createElement('div');
+          div.className = 'timeline-item';
+          div.innerHTML = `
+            <span class="time-stamp">${evt.timestamp}</span>
+            <div><strong>${evt.agent}</strong>: ${evt.action}</div>
+          `;
+          timeContainer.appendChild(div);
+        });
+        timeContainer.scrollTop = timeContainer.scrollHeight;
+
+        // Render Logs
+        const logBox = document.getElementById('log-box');
+        logBox.innerHTML = '';
+        (data.logs || []).forEach(line => {
+          const div = document.createElement('div');
+          div.className = 'log-line' + (line.includes('[PHASE]') ? ' phase' : '');
+          div.innerText = line;
+          logBox.appendChild(div);
+        });
+        logBox.scrollTop = logBox.scrollHeight;
+
+      } catch (err) {
+        console.error("Failed to fetch state:", err);
+      }
+    }
+
+    loadRunsList();
+    setInterval(loadRunsList, 5000);
+    setInterval(() => {
+      if (selectedRunId === 'live') fetchState();
+    }, 1000);
+    fetchState();
+  </script>
+</body>
+</html>
+"""
