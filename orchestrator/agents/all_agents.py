@@ -68,13 +68,16 @@ class ProductAgent(BaseAgent):
         )
 
     def run(self, user_input: str, conversation_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
+        from orchestrator.domain import DomainAdapter
+        domain = DomainAdapter.detect_domain(user_input)
         history_str = json.dumps(conversation_history or [], indent=2)
         prompt = (
+            f"Target Domain: {domain.display_name}\n"
             f"User Requirement / PRD:\n{user_input}\n\n"
             f"Clarification History:\n{history_str}\n\n"
-            "Analyze with deep domain expertise. Compute confidence_score (0.00 to 1.00). "
-            "If the request lacks domain-critical specifics (such as chains, crypto-to-fiat/INR vs crypto-to-crypto, transfer mechanics, or custody), "
-            "set confidence < 0.60, is_clear=False, and generate prioritized domain-expert clarification_questions. "
+            f"Analyze with deep {domain.display_name} domain expertise. Compute confidence_score (0.00 to 1.00). "
+            f"If the request lacks domain-critical specifics (such as {', '.join(domain.core_primitives[:4])}), "
+            "set confidence < 0.60, is_clear=False, and generate prioritized domain-expert clarification_questions matching the domain's critical dimensions. "
             "If confidence >= 0.90, set is_clear=True, place non-blocking edge cases (<10%) in checkpoint_clarification_items, "
             "and set clarification_questions=[]."
         )
@@ -85,6 +88,8 @@ class ProductAgent(BaseAgent):
         if confidence >= 0.90:
             data["is_clear"] = True
             data["clarification_questions"] = []
+        if not data.get("detected_domain"):
+            data["detected_domain"] = domain.display_name
         return data
 
 

@@ -498,181 +498,102 @@ class BaseAgent:
 
 def _synthesize_fallback_response(agent_name: str, prompt: str, json_mode: bool) -> str:
     """Provides high-fidelity, schema-valid fallback analysis when upstream LLMs hit 429/503 limits."""
-    prompt_lower = prompt.lower()
-    is_crypto = any(k in prompt_lower for k in ["crypto", "token", "web3", "chain", "wallet", "usdt", "eth", "inr"])
-    has_details = any(k in prompt_lower for k in ["clarification:", "supported chains", "polygon", "evm", "qr invoice", "settlement flow", "hybrid", "non-custodial", "usdt, usdc"])
+    from orchestrator.domain import DomainAdapter
+    user_goal = prompt
+    if "User Requirement / PRD:\n" in prompt:
+        user_goal = prompt.split("User Requirement / PRD:\n", 1)[1].split("\n\n", 1)[0]
+    elif "Feature Goal:\n" in prompt:
+        user_goal = prompt.split("Feature Goal:\n", 1)[1].split("\n\n", 1)[0]
+    domain = DomainAdapter.detect_domain(user_goal)
+
+    user_goal_lower = user_goal.lower()
+    has_details = any(k in user_goal_lower for k in [
+        "clarification:", "supported chains", "polygon", "evm", "qr invoice", "settlement flow", "hybrid", "non-custodial",
+        "b-rep", "g-code", "toolpath", "3-axis", "5-axis", "fanuc", "haas", "grbl", "tolerance",
+        "fhir", "hl7", "dicom", "hipaa", "ros2", "rtos", "can bus", "ast", "lexer"
+    ])
 
     if agent_name in ("ProductAgent", "ProductManagerAgent"):
-        if is_crypto:
-            if not has_details:
-                payload = {
-                    "detected_domain": "Crypto/Web3 Payments & Settlement Infrastructure",
-                    "confidence_score": 0.42,
-                    "functional_completeness": 0.38,
-                    "nfr_completeness": 0.46,
-                    "is_clear": False,
-                    "understanding": (
-                        "High-level request to build 'Pay Through Crypto' payment product. "
-                        "Critical domain parameters are undefined: supported blockchain networks, settlement currency flow (Crypto-to-Crypto vs Crypto-to-Fiat/INR conversion), "
-                        "wallet transfer execution mechanics (Web3 injected wallet vs dynamic QR deposit address), and gas fee/volatility guarantees."
-                    ),
-                    "clarification_questions": [
-                        "1. Chains & Tokens: Which blockchains (EVM e.g. Ethereum/Polygon/Arbitrum, Solana, Bitcoin) and assets (USDT, USDC, native ETH) must be accepted?",
-                        "2. Settlement Flow: What is the settlement logic — direct on-chain Crypto-to-Crypto transfer to merchant self-custody cold wallet, or automatic Crypto-to-Fiat liquidation into INR/USD bank accounts via on/off-ramp APIs?",
-                        "3. Transfer Mechanics & UX: How does the customer execute payment — injected Web3 wallet connect (MetaMask/WalletConnect), or a dynamic one-time deposit address with live QR code and mempool confirmation watcher?",
-                        "4. Volatility & Gas Economics: Who covers blockchain network gas fees (customer vs merchant subsidized via ERC-4337), and what is the exchange rate price-lock window (e.g. 15-minute price freeze with slippage buffer)?",
-                        "5. Regulatory & Tax: Do you require Indian FIU-IND compliance, customer KYC tiering, and 1% TDS (Tax Deducted at Source) on Virtual Digital Assets (VDA)?"
-                    ],
-                    "checkpoint_clarification_items": []
-                }
-            else:
-                payload = {
-                    "detected_domain": "Crypto/Web3 Payments & Settlement Infrastructure",
-                    "confidence_score": 0.96,
-                    "functional_completeness": 0.97,
-                    "nfr_completeness": 0.95,
-                    "is_clear": True,
-                    "understanding": (
-                        "### Pay Through Crypto: Production PRD & Technical Transfer Architecture\n\n"
-                        "**1. Core Functional Architecture**:\n"
-                        "  - **Supported Assets & Chains**: Multi-currency checkout supporting EVM networks (Ethereum L1, Polygon PoS) with USDT, USDC, and native ETH.\n"
-                        "  - **Settlement Logic**: Hybrid settlement engine. Direct on-chain non-custodial transfer to merchant treasury for crypto-native merchants, with an extensible webhook pipeline for automated Crypto-to-INR/USD fiat off-ramping.\n"
-                        "  - **Transfer Flow & Execution**:\n"
-                        "    1. Merchant creates a payment invoice with unique UUID, amount, and currency.\n"
-                        "    2. Checkout displays a dynamic QR code and designated recipient EVM address (`0x...`) with a live 15-minute price lock timer.\n"
-                        "    3. Customer completes transfer via Web3 wallet injection (MetaMask/WalletConnect) or direct transfer from their hardware/exchange wallet.\n"
-                        "    4. Gateway verifier validates timing-safe HMAC signature (`hmac.compare_digest`), checks 42-char EVM address checksum, enforces 300-second replay tolerance, and rejects duplicate `tx_hash` submissions.\n"
-                        "    5. Real-time WebSocket/polling confirmation confirms settlement on-chain.\n\n"
-                        "**2. Non-Functional Requirements (NFRs)**:\n"
-                        "  - **Security**: Double-spend immunity via in-memory and persistent transaction hash registry. Constant-time digest comparison to prevent timing side-channels.\n"
-                        "  - **Latency**: P99 verification < 15ms; optimistic settlement acknowledgement with background block finality tracker.\n"
-                        "  - **Compliance Readiness**: Modular data schema supporting FIU-IND travel rule logging and 1% TDS withholding calculation."
-                    ),
-                    "clarification_questions": [],
-                    "checkpoint_clarification_items": [
-                        {
-                            "checkpoint": "TASK-POLYGON-GAS",
-                            "question": "Deploy Polygon EIP-1559 dynamic gas fee multiplier?",
-                            "default_assumption": "Use 1.15x base fee buffer for fast block inclusion."
-                        }
-                    ]
-                }
+        if not has_details:
+            payload = {
+                "detected_domain": domain.display_name,
+                "confidence_score": 0.40,
+                "functional_completeness": 0.38,
+                "nfr_completeness": 0.45,
+                "is_clear": False,
+                "understanding": (
+                    f"High-level request in [{domain.display_name}]. "
+                    f"Foundational architectural parameters are undefined for {', '.join(domain.core_primitives[:4])}. "
+                    "A principal systems architect must grill for specific mathematical, structural, and operational choices."
+                ),
+                "clarification_questions": domain.grilling_dimensions,
+                "checkpoint_clarification_items": []
+            }
         else:
             payload = {
-                "detected_domain": "Software Microservice & API Infrastructure",
-                "confidence_score": 0.94 if has_details else 0.45,
-                "functional_completeness": 0.95 if has_details else 0.40,
-                "nfr_completeness": 0.93 if has_details else 0.50,
-                "is_clear": True if has_details else False,
-                "understanding": "Validated microservice requirements and contracts." if has_details else "Ambiguous request; requires feature and NFR clarifications.",
-                "clarification_questions": [] if has_details else ["What API protocols are required?", "What database and caching layer?"],
-                "checkpoint_clarification_items": []
+                "detected_domain": domain.display_name,
+                "confidence_score": 0.95,
+                "functional_completeness": 0.96,
+                "nfr_completeness": 0.94,
+                "is_clear": True,
+                "understanding": (
+                    f"### {domain.display_name}: Production Technical Architecture & PRD\n\n"
+                    f"**1. Core Functional Architecture**:\n"
+                    f"  - **Domain Primitives**: {', '.join(domain.core_primitives)}.\n"
+                    f"  - **Architectural Patterns**: {', '.join(domain.architectural_patterns)}.\n"
+                    f"  - **Execution & Data Flow**: Verified end-to-end data pipeline adhering to domain standards.\n\n"
+                    f"**2. Non-Functional Requirements (NFRs)**:\n"
+                    f"  - **Safety & Precision**: {', '.join(domain.safety_and_nfr_focus)}.\n"
+                    f"  - **Performance**: Low-latency execution optimized with domain-appropriate libraries."
+                ),
+                "clarification_questions": [],
+                "checkpoint_clarification_items": [
+                    {
+                        "checkpoint": f"TASK-{domain.domain_id[:6]}-OPTS",
+                        "question": f"Configure domain-specific optimization flags for {domain.domain_id}?",
+                        "default_assumption": "Apply standard production safety tolerance."
+                    }
+                ]
             }
         return json.dumps(payload, indent=2)
 
-    if agent_name in ("BusinessStrategyAgent", "BusinessAgent") and is_crypto:
-        payload = {
-            "detected_domain": "Crypto/Web3 Payments & Settlement Infrastructure",
-            "market_strategy": "Direct-to-merchant non-custodial checkout eliminating traditional 2.5%-3.5% credit card interchange fees and chargeback fraud.",
-            "user_cohorts": [
-                {
-                    "cohort_name": "Cross-Border Exporters & Digital SaaS",
-                    "pain_point": "Losing 3%-5% on PayPal/Stripe international FX spreads plus 3-day SWIFT wire delays.",
-                    "why_adopt": "Instant global settlement in USDT/USDC in < 30 seconds with 0% chargebacks and 80% lower fees.",
-                    "willingness_to_pay": "$99 - $299 / month"
-                },
-                {
-                    "cohort_name": "Indian & Emerging Market E-Commerce Merchants",
-                    "pain_point": "High international card drop-off rates and complex RBI/export compliance hurdles.",
-                    "why_adopt": "Crypto-to-INR hybrid offramp with automated 1% TDS reporting and PAN capture.",
-                    "willingness_to_pay": "$49 - $149 / month"
-                },
-                {
-                    "cohort_name": "Web3 Gaming & dApp Ecosystems",
-                    "pain_point": "High friction in onboarding traditional gamers to on-chain token payments.",
-                    "why_adopt": "One-click Web3 wallet connect (MetaMask/WalletConnect) with instant QR invoice fallback.",
-                    "willingness_to_pay": "$499+ / month"
-                }
-            ],
-            "competitor_analysis": [
-                {
-                    "competitor": "BitPay / Coinbase Commerce",
-                    "limitations": "Custodial holdbacks, 1% withdrawal fees, mandatory merchant KYC lockouts, restrictive terms of service.",
-                    "ascm_advantage": "100% self-sovereign non-custodial code inside merchant repo; zero middleman escrow; zero custodial risk.",
-                    "verdict": "ASCM provides true sovereign merchant infrastructure vs walled-garden custodial processors."
-                },
-                {
-                    "competitor": "Stripe Crypto",
-                    "limitations": "Limited geography (US/EU only), high fees (1.5%+), strict invite-only onboarding, doesn't support INR fiat offramps.",
-                    "ascm_advantage": "Global accessibility, supports local fiat conversion gateways, zero lock-in with open-source contracts.",
-                    "verdict": "ASCM enables hyper-localized crypto payment solutions for emerging markets."
-                },
-                {
-                    "competitor": "Helio / Solana Pay",
-                    "limitations": "Single-chain bias (Solana-focused), lacks deep EVM multi-chain support and brownfield microservice integration.",
-                    "ascm_advantage": "Multi-chain EVM (Ethereum, Polygon, Arbitrum) + multi-token (USDT/USDC/ETH) with unified REST APIs.",
-                    "verdict": "ASCM delivers enterprise-ready, cross-repo payment gateway code tailored to existing tech stacks."
-                }
-            ],
-            "value_proposition": "Accept global crypto payments in USDT, USDC, and ETH with zero chargebacks, sub-second verification, and instant non-custodial settlement.",
-            "gtm_channels": [
-                "Product Hunt & Devpost Web3 hackathon showcase",
-                "Open-source 'Built by ASCM' checkout badge on npm/PyPI",
-                "Direct partnerships with cross-border Shopify/WooCommerce plugins"
-            ],
-            "executive_summary": "Pay Through Crypto eliminates the #1 pain point of international commerce: high interchange fees and chargeback fraud. ASCM automates full-stack implementation in minutes."
-        }
-        return json.dumps(payload, indent=2)
     if agent_name in ("BusinessStrategyAgent", "BusinessAgent"):
+        competitors = domain.competitor_archetypes or [
+            {"competitor": "Generic Market Alternatives", "limitations": "Walled monolithic playgrounds; lacks cross-repo orchestration.", "ascm_advantage": "Full-stack Git native brownfield synchronization."}
+        ]
         payload = {
-            "market_strategy": "Direct-to-developer open-core adoption with automated cross-repo contract verification.",
+            "detected_domain": domain.display_name,
+            "market_strategy": f"Direct-to-engineer adoption for {domain.display_name} with automated multi-repo contract verification.",
             "user_cohorts": [
                 {
-                    "cohort_name": "AI SaaS & API Founders",
-                    "pain_point": "Manual Stripe billing reconciliation and runaway AI inference token costs without pre-funded escrow.",
-                    "why_adopt": "Unified HMAC webhook security and atomic token rate limiting in 10 lines of code.",
+                    "cohort_name": f"{domain.display_name} Engineering Specialists",
+                    "pain_point": f"Manual custom scripting and lack of verified cross-stack integrations in {domain.domain_id}.",
+                    "why_adopt": "Automated code synthesis with deterministic unit testing and zero vendor lock-in.",
+                    "willingness_to_pay": "$99 - $499 / month"
+                },
+                {
+                    "cohort_name": "Agile Hardware & Software Startups",
+                    "pain_point": "Prohibitive annual licensing costs of legacy proprietary tools.",
+                    "why_adopt": "Open-core headless architecture integrated directly into Git workflows.",
                     "willingness_to_pay": "$49 - $199 / month"
-                },
-                {
-                    "cohort_name": "Fintech & Developer Tool Platforms",
-                    "pain_point": "Duplicate chargebacks and webhook replay attacks damaging platform reputation.",
-                    "why_adopt": "Cryptographic HMAC-SHA256 signature verification with 5-minute replay tolerance and UUID idempotency.",
-                    "willingness_to_pay": "$499 / month"
-                },
-                {
-                    "cohort_name": "Enterprise Engineering Teams",
-                    "pain_point": "Broken client-server releases and schema divergence across disparate microservice repos.",
-                    "why_adopt": "ASCM synchronized cross-repository contracts and verified unit tests.",
-                    "willingness_to_pay": "$2,000+ / month"
                 }
             ],
             "competitor_analysis": [
                 {
-                    "competitor": "GitHub Copilot / Cursor",
-                    "limitations": "Single-file autocomplete; lacks cross-repo orchestration, contract enforcement, and business analysis.",
-                    "ascm_advantage": "Autonomous multi-repo synchronization with strict architectural boundaries, NFR audits, and unit tests.",
-                    "verdict": "ASCM operates at architectural and organizational scale vs single-dev tab completion."
-                },
-                {
-                    "competitor": "Replit Agent / Bolt.new / Lovable",
-                    "limitations": "Walled monolithic playgrounds; cannot touch existing production GitHub repos or microservice topologies.",
-                    "ascm_advantage": "Native brownfield Git repository integration, zero lock-in, and independent adversarial critic agents.",
-                    "verdict": "ASCM builds production-grade enterprise software directly inside customer repositories."
-                },
-                {
-                    "competitor": "Devin / Cognition",
-                    "limitations": "Opaque black-box reasoning, high latency, expensive single-agent prompts, prone to hallucinations without contract boundaries.",
-                    "ascm_advantage": "Multi-model role separation (Business, Revenue, Architect Critic, Code Reviewer) with deterministic sandboxed verification.",
-                    "verdict": "ASCM provides transparent, auditable governance and 10x faster execution."
+                    "competitor": c.get("competitor", "Legacy Suite"),
+                    "limitations": c.get("limitations", "High cost and vendor lock-in"),
+                    "ascm_advantage": c.get("ascm_advantage", "Autonomous, test-verified code in customer repos"),
+                    "verdict": f"ASCM delivers modular, programmable software vs monolithic legacy tooling."
                 }
+                for c in competitors
             ],
-            "value_proposition": "ASCM delivers end-to-end autonomous software development with adversarial architecture critique, multi-tenant billing security, and guaranteed cross-repo contract integrity.",
+            "value_proposition": f"Autonomous, production-grade {domain.display_name} software engineered and verified in minutes.",
             "gtm_channels": [
-                "Product Hunt launch with interactive live portal demo",
-                "Open-source GitHub release of SDK with 'Built by ASCM' badge",
-                "Technical case study on automated HMAC webhook protection and token escrow"
+                f"Domain-specific showcase launches and developer hackathons for {domain.display_name}",
+                "Open-source reference implementations with 'Built by ASCM' badge",
+                "Technical case studies demonstrating automated verification and NFR audits"
             ],
-            "executive_summary": "PayPulse Sentinel solves the critical intersection of billing security and LLM token budget control. ASCM brings it from concept to verified cross-repo deployment in minutes."
+            "executive_summary": f"ASCM eliminates the friction of building complex {domain.display_name} infrastructure with autonomous multi-agent engineering."
         }
         return json.dumps(payload, indent=2)
 
