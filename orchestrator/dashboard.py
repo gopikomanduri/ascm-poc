@@ -1,4 +1,5 @@
 import json
+import mimetypes
 import os
 import socketserver
 import threading
@@ -8,6 +9,9 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+
+# Directory where landing.html and onboarding.html live
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 from orchestrator.auth.user_manager import USER_MANAGER
 from orchestrator.budget.token_forecaster import GLOBAL_TOKEN_FORECASTER, PROVIDER_RATES
@@ -792,6 +796,17 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(HTML_DASHBOARD_PAGE.encode("utf-8"))
 
+        elif path in ("/landing", "/landing.html"):
+            self._serve_static_file("landing.html")
+
+        elif path in ("/onboarding", "/onboarding.html"):
+            self._serve_static_file("onboarding.html")
+
+        elif path.startswith("/static/"):
+            # Serve any file inside the static/ directory
+            rel = path[len("/static/"):].lstrip("/")
+            self._serve_static_file(rel)
+
         else:
             self.send_response(404)
             self.end_headers()
@@ -948,6 +963,28 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(json.dumps(data).encode("utf-8"))
+
+    def _serve_static_file(self, filename: str) -> None:
+        """Read a file from STATIC_DIR and write it to the response."""
+        file_path = STATIC_DIR / filename
+        if not file_path.exists() or not file_path.is_file():
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"Not found")
+            return
+        mime, _ = mimetypes.guess_type(str(file_path))
+        mime = mime or "application/octet-stream"
+        try:
+            content = file_path.read_bytes()
+        except OSError:
+            self.send_response(500)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
 
 
 

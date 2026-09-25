@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Get Started — ASCM Onboarding</title>
+  <meta name="description" content="Set up your ASCM account in minutes. Bring your own API keys, connect your repositories, and launch your first autonomous sprint." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #060912;
+      --bg-card: rgba(255,255,255,0.04);
+      --bg-glass: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.08);
+      --border-focus: rgba(139,92,246,0.5);
+      --text: #e2e8f0;
+      --text-muted: #718096;
+      --text-dim: #4a5568;
+      --cyan: #00d4ff;
+      --violet: #8b5cf6;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --grad1: linear-gradient(135deg, #00d4ff, #8b5cf6);
+      --grad2: linear-gradient(135deg, #10b981, #3b82f6);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+    }
+
+    /* ── Background orbs ── */
+    .bg-orbs { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.14; }
+    .orb-1 { width: 500px; height: 500px; background: var(--violet); top: -150px; right: -100px; }
+    .orb-2 { width: 400px; height: 400px; background: var(--cyan); bottom: -100px; left: -50px; }
+
+    /* ── Sidebar (steps) ── */
+    .sidebar {
+      width: 280px; flex-shrink: 0;
+      background: rgba(255,255,255,0.025);
+      border-right: 1px solid var(--border);
+      padding: 40px 32px;
+      display: flex; flex-direction: column;
+      position: fixed; top: 0; bottom: 0; left: 0;
+      z-index: 10;
+    }
+    .sidebar-logo {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 48px; text-decoration: none;
+    }
+    .logo-badge {
+      background: var(--grad1); border-radius: 8px;
+      padding: 4px 10px; font-size: 13px; font-weight: 700; color: #fff;
+    }
+    .logo-text { font-size: 14px; font-weight: 600; color: var(--text-muted); }
+
+    .steps { list-style: none; flex: 1; }
+    .step-item {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 14px 0;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .step-item.disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+    .step-circle {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      transition: all 0.3s;
+    }
+    .step-item.active .step-circle {
+      background: var(--grad1);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(139,92,246,0.4);
+    }
+    .step-item.done .step-circle {
+      background: var(--emerald);
+      border-color: transparent;
+      color: #fff;
+    }
+    .step-meta { flex: 1; padding-top: 4px; }
+    .step-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .step-item.active .step-title { color: #fff; }
+    .step-desc { font-size: 12px; color: var(--text-dim); }
+
+    .sidebar-footer {
+      padding-top: 32px; border-top: 1px solid var(--border);
+    }
+    .sidebar-footer a { font-size: 13px; color: var(--text-muted); text-decoration: none; }
+    .sidebar-footer a:hover { color: var(--text); }
+
+    /* ── Main content ── */
+    .main {
+      margin-left: 280px;
+      flex: 1;
+      display: flex; align-items: center; justify-content: center;
+      padding: 60px 48px;
+      position: relative; z-index: 1;
+      min-height: 100vh;
+    }
+    .step-panel {
+      display: none;
+      max-width: 600px; width: 100%;
+      animation: panelIn 0.4s ease;
+    }
+    .step-panel.active { display: block; }
+    @keyframes panelIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .panel-eyebrow {
+      font-size: 12px; font-weight: 700; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--cyan); margin-bottom: 12px;
+    }
+    .panel-title {
+      font-size: clamp(26px, 3.5vw, 38px); font-weight: 800;
+      color: #fff; letter-spacing: -1px; margin-bottom: 12px;
+      line-height: 1.15;
+    }
+    .grad-text { background: var(--grad1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .panel-sub { font-size: 15px; color: var(--text-muted); line-height: 1.7; margin-bottom: 36px; }
+
+    /* ── Form elements ── */
+    .form-group { margin-bottom: 20px; }
+    .form-label {
+      display: block; font-size: 13px; font-weight: 600;
+      color: var(--text); margin-bottom: 8px;
+    }
+    .form-hint { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+    .form-input, .form-select {
+      width: 100%;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: var(--text); font-size: 14px;
+      outline: none; font-family: 'Inter', sans-serif;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      appearance: none;
+    }
+    .form-input:focus, .form-select:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(139,92,246,0.12);
+    }
+    .form-input::placeholder { color: var(--text-dim); }
+    .form-select option { background: #1a1f2e; }
+
+    .form-row { display: flex; gap: 16px; }
+    .form-row .form-group { flex: 1; }
+
+    /* OTP input row */
+    .otp-row { display: flex; gap: 10px; }
+    .otp-digit {
+      width: 52px; height: 58px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); border-radius: 10px;
+      text-align: center; font-size: 22px; font-weight: 700;
+      color: #fff; outline: none; font-family: 'Fira Code', monospace;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .otp-digit:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(139,92,246,0.12);
+    }
+
+    /* Key input with icon */
+    .key-input-wrap { position: relative; }
+    .key-input-wrap .form-input { padding-right: 44px; font-family: 'Fira Code', monospace; font-size: 13px; }
+    .key-toggle {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 16px; padding: 4px;
+    }
+    .key-toggle:hover { color: var(--text); }
+
+    /* Provider selector */
+    .provider-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 8px; }
+    .provider-card {
+      background: rgba(255,255,255,0.04);
+      border: 2px solid var(--border); border-radius: 12px;
+      padding: 16px; cursor: pointer; transition: all 0.2s;
+      text-align: center;
+    }
+    .provider-card:hover { border-color: rgba(139,92,246,0.3); background: rgba(139,92,246,0.05); }
+    .provider-card.selected { border-color: var(--violet); background: rgba(139,92,246,0.12); }
+    .provider-card input[type="radio"] { display: none; }
+    .provider-icon { font-size: 24px; margin-bottom: 8px; }
+    .provider-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+    .provider-sub { font-size: 11px; color: var(--text-dim); }
+
+    /* Repo detection */
+    .repo-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+    .repo-item {
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .repo-item:hover { border-color: rgba(99,179,237,0.3); }
+    .repo-item.selected { border-color: var(--violet); background: rgba(139,92,246,0.08); }
+    .repo-item input[type="checkbox"] { accent-color: var(--violet); width: 16px; height: 16px; }
+    .repo-icon { font-size: 18px; }
+    .repo-name { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
+    .repo-badge {
+      font-size: 11px; padding: 3px 8px; border-radius: 6px;
+      font-weight: 600; font-family: 'Fira Code', monospace;
+    }
+    .badge-contract { background: rgba(16,185,129,0.12); color: var(--emerald); }
+    .badge-no-contract { background: rgba(245,158,11,0.12); color: var(--amber); }
+
+    .repo-manual { display: flex; gap: 10px; }
+    .repo-manual .form-input { flex: 1; font-family: 'Fira Code', monospace; font-size: 13px; }
+
+    /* Goal textarea */
+    .goal-input {
+      width: 100%;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; color: var(--text); font-size: 15px;
+      outline: none; font-family: 'Inter', sans-serif;
+      resize: vertical; min-height: 100px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      line-height: 1.6;
+    }
+    .goal-input:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(139,92,246,0.12);
+    }
+    .goal-input::placeholder { color: var(--text-dim); }
+
+    /* Suggestion chips */
+    .suggestion-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .chip {
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+      border-radius: 20px; padding: 6px 14px;
+      font-size: 12px; color: var(--text-muted); cursor: pointer;
+      transition: all 0.2s;
+    }
+    .chip:hover { border-color: var(--cyan); color: var(--cyan); background: rgba(0,212,255,0.06); }
+
+    /* Forecast mini card */
+    .forecast-card {
+      background: rgba(16,185,129,0.06);
+      border: 1px solid rgba(16,185,129,0.2);
+      border-radius: 12px; padding: 16px 20px;
+      display: flex; align-items: center; gap: 16px;
+      margin-top: 16px;
+    }
+    .forecast-icon { font-size: 24px; }
+    .forecast-text { font-size: 13px; color: var(--text-muted); }
+    .forecast-text strong { color: var(--emerald); }
+
+    /* Navigation buttons */
+    .panel-nav {
+      display: flex; gap: 12px; align-items: center;
+      margin-top: 32px; padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; border: none; text-decoration: none;
+      font-family: 'Inter', sans-serif;
+    }
+    .btn-primary {
+      background: var(--grad1); color: #fff;
+      box-shadow: 0 4px 20px rgba(139,92,246,0.3);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(139,92,246,0.5); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-ghost {
+      background: transparent; color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: rgba(99,179,237,0.3); color: var(--text); }
+
+    /* Progress dots */
+    .progress-dots { display: flex; gap: 8px; margin-left: auto; }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border); transition: all 0.3s;
+    }
+    .dot.active { background: var(--violet); box-shadow: 0 0 8px var(--violet); }
+    .dot.done { background: var(--emerald); }
+
+    /* Alert / info box */
+    .info-box {
+      background: rgba(0,212,255,0.06);
+      border: 1px solid rgba(0,212,255,0.2);
+      border-radius: 10px; padding: 14px 16px;
+      font-size: 13px; color: #90cdf4;
+      margin-bottom: 20px; line-height: 1.6;
+    }
+    .info-box strong { color: var(--cyan); }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 32px; right: 32px; z-index: 1000;
+      background: #1a1f2e; border: 1px solid rgba(16,185,129,0.4);
+      border-radius: 12px; padding: 16px 20px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      transform: translateY(80px); opacity: 0;
+      transition: all 0.3s ease;
+      font-size: 14px; max-width: 340px;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast-icon { font-size: 18px; }
+    .toast-msg { color: var(--text); }
+
+    /* Spinner */
+    .spinner {
+      width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.7s linear infinite; display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Launch ready card */
+    .ready-card {
+      background: rgba(16,185,129,0.07);
+      border: 1px solid rgba(16,185,129,0.25);
+      border-radius: 16px; padding: 28px;
+      text-align: center; margin-bottom: 28px;
+    }
+    .ready-icon { font-size: 48px; margin-bottom: 16px; }
+    .ready-title { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .ready-sub { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+
+    /* Summary list */
+    .summary-list { list-style: none; display: flex; flex-direction: column; gap: 12px; margin: 24px 0; }
+    .summary-item {
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 16px; font-size: 14px;
+    }
+    .summary-label { color: var(--text-muted); flex: 1; }
+    .summary-val { color: var(--text); font-weight: 600; font-family: 'Fira Code', monospace; font-size: 13px; }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main { margin-left: 0; padding: 40px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-orbs" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+  </div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" aria-label="Onboarding steps">
+    <a href="/landing" class="sidebar-logo" id="sidebar-logo-link">
+      <span class="logo-badge">ASCM</span>
+      <span class="logo-text">Engineering Squad</span>
+    </a>
+
+    <ul class="steps" role="list" aria-label="Setup progress">
+      <li class="step-item active" id="step-nav-1" onclick="goToStep(1)" role="listitem">
+        <div class="step-circle">1</div>
+        <div class="step-meta">
+          <div class="step-title">Your Account</div>
+          <div class="step-desc">Name &amp; email / OTP login</div>
+        </div>
+      </li>
+      <li class="step-item disabled" id="step-nav-2" onclick="goToStep(2)" role="listitem">
+        <div class="step-circle">2</div>
+        <div class="step-meta">
+          <div class="step-title">AI Provider &amp; Keys</div>
+          <div class="step-desc">Bring your own API keys</div>
+        </div>
+      </li>
+      <li class="step-item disabled" id="step-nav-3" onclick="goToStep(3)" role="listitem">
+        <div class="step-circle">3</div>
+        <div class="step-meta">
+          <div class="step-title">Connect Repos</div>
+          <div class="step-desc">Point to your local repos</div>
+        </div>
+      </li>
+      <li class="step-item disabled" id="step-nav-4" onclick="goToStep(4)" role="listitem">
+        <div class="step-circle">4</div>
+        <div class="step-meta">
+          <div class="step-title">Your First Goal</div>
+          <div class="step-desc">Describe what to build</div>
+        </div>
+      </li>
+      <li class="step-item disabled" id="step-nav-5" onclick="goToStep(5)" role="listitem">
+        <div class="step-circle">5</div>
+        <div class="step-meta">
+          <div class="step-title">Launch Sprint</div>
+          <div class="step-desc">Go live in 30 seconds</div>
+        </div>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <a href="/landing">← Back to Home</a>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main" id="main-content">
+
+    <!-- Step 1: Account -->
+    <div class="step-panel active" id="panel-1" role="region" aria-labelledby="step1-title">
+      <p class="panel-eyebrow">Step 1 of 5</p>
+      <h1 class="panel-title" id="step1-title">Welcome to<br/><span class="grad-text">ASCM</span></h1>
+      <p class="panel-sub">Create your account in 60 seconds. No password — we use a secure 6-digit OTP.</p>
+
+      <div id="auth-form-section">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="input-name" class="form-label">Full Name</label>
+            <input type="text" id="input-name" class="form-input" placeholder="Ada Lovelace" autocomplete="name" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="input-identifier" class="form-label">Email or Mobile Number</label>
+          <input type="text" id="input-identifier" class="form-input" placeholder="ada@company.com or +1-555-000-0000" autocomplete="email" required />
+          <p class="form-hint">We'll send a 6-digit OTP — no passwords, ever.</p>
+        </div>
+        <button class="btn btn-primary" id="btn-send-otp" onclick="sendOTP()" style="width:100%; justify-content:center;">
+          <div class="spinner" id="otp-spinner"></div>
+          Send OTP →
+        </button>
+      </div>
+
+      <div id="otp-section" style="display:none;">
+        <div class="info-box">
+          OTP sent to <strong id="otp-dest-display"></strong>. Enter the 6-digit code below.
+          <br/>In development mode, any 6-digit code works.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Enter OTP</label>
+          <div class="otp-row" id="otp-row" role="group" aria-label="One-time password digits">
+            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 1" id="otp-d1" />
+            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 2" id="otp-d2" />
+            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 3" id="otp-d3" />
+            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 4" id="otp-d4" />
+            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 5" id="otp-d5" />
+            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Digit 6" id="otp-d6" />
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-verify-otp" onclick="verifyOTP()" style="width:100%; justify-content:center;">
+          <div class="spinner" id="verify-spinner"></div>
+          Verify &amp; Continue →
+        </button>
+        <p style="font-size:12px; color:var(--text-dim); margin-top:12px; text-align:center;">
+          Didn't get it? <a href="#" onclick="resetOTP(); return false;" style="color:var(--violet);">Resend OTP</a>
+        </p>
+      </div>
+
+      <div class="panel-nav">
+        <div class="progress-dots">
+          <div class="dot active"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: AI Provider -->
+    <div class="step-panel" id="panel-2" role="region" aria-labelledby="step2-title">
+      <p class="panel-eyebrow">Step 2 of 5</p>
+      <h2 class="panel-title" id="step2-title">Choose Your<br/><span class="grad-text">AI Provider</span></h2>
+      <p class="panel-sub">ASCM works with all major LLM providers. Pick one and add your API key — it's stored locally only.</p>
+
+      <div class="form-group">
+        <label class="form-label">Select Provider</label>
+        <div class="provider-grid" role="radiogroup" aria-label="AI provider selection">
+          <label class="provider-card selected" id="pcard-gemini" for="prov-gemini">
+            <input type="radio" name="provider" id="prov-gemini" value="gemini" checked />
+            <div class="provider-icon">🔷</div>
+            <div class="provider-name">Google Gemini</div>
+            <div class="provider-sub">Gemini 2.5 Flash/Pro</div>
+          </label>
+          <label class="provider-card" id="pcard-openai" for="prov-openai">
+            <input type="radio" name="provider" id="prov-openai" value="openai" />
+            <div class="provider-icon">🟢</div>
+            <div class="provider-name">OpenAI</div>
+            <div class="provider-sub">GPT-4o / GPT-4o-mini</div>
+          </label>
+          <label class="provider-card" id="pcard-anthropic" for="prov-anthropic">
+            <input type="radio" name="provider" id="prov-anthropic" value="anthropic" />
+            <div class="provider-icon">🟠</div>
+            <div class="provider-name">Anthropic Claude</div>
+            <div class="provider-sub">Claude 3.5 Sonnet</div>
+          </label>
+          <label class="provider-card" id="pcard-ollama" for="prov-ollama">
+            <input type="radio" name="provider" id="prov-ollama" value="ollama" />
+            <div class="provider-icon">🦙</div>
+            <div class="provider-name">Ollama (Local)</div>
+            <div class="provider-sub">Air-gapped, free</div>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group" id="apikey-group">
+        <label for="input-apikey" class="form-label">API Key</label>
+        <div class="key-input-wrap">
+          <input type="password" id="input-apikey" class="form-input" placeholder="AIza... or sk-..." autocomplete="off" />
+          <button class="key-toggle" onclick="toggleKey()" aria-label="Toggle key visibility" id="key-toggle-btn">👁</button>
+        </div>
+        <p class="form-hint">Stored locally in <code style="color:var(--cyan); font-family:'Fira Code',monospace;">~/.ascm/users.json</code> — never sent to our servers.</p>
+      </div>
+
+      <div class="form-group" id="ollama-group" style="display:none;">
+        <label for="input-ollama-host" class="form-label">Ollama Host URL</label>
+        <input type="text" id="input-ollama-host" class="form-input" value="http://localhost:11434" />
+        <p class="form-hint">Default Ollama local endpoint. Change if running on a different port or remote machine.</p>
+      </div>
+
+      <div class="form-group">
+        <label for="input-model" class="form-label">Preferred Model <span style="color:var(--text-dim)">(optional)</span></label>
+        <input type="text" id="input-model" class="form-input" placeholder="e.g. gemini-2.5-flash, gpt-4o, claude-3-5-sonnet-20241022" />
+        <p class="form-hint">Leave blank to use the recommended default for your provider.</p>
+      </div>
+
+      <div class="panel-nav">
+        <button class="btn btn-ghost" onclick="goToStep(1)" id="step2-back-btn">← Back</button>
+        <button class="btn btn-primary" onclick="saveProviderAndNext()" id="step2-next-btn">Save &amp; Continue →</button>
+        <div class="progress-dots">
+          <div class="dot done"></div>
+          <div class="dot active"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Connect Repos -->
+    <div class="step-panel" id="panel-3" role="region" aria-labelledby="step3-title">
+      <p class="panel-eyebrow">Step 3 of 5</p>
+      <h2 class="panel-title" id="step3-title">Connect Your<br/><span class="grad-text">Repositories</span></h2>
+      <p class="panel-sub">ASCM scans your local filesystem. Select the repos you want to coordinate in this sprint.</p>
+
+      <div class="info-box">
+        <strong>Multi-repo coordination</strong> is ASCM's core strength. Select at least one provider repo and one consumer/client repo for atomic cross-repo patching.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Detected Repos <span id="repo-scan-status" style="color:var(--text-dim); font-weight:400;">(scanning...)</span></label>
+        <ul class="repo-list" id="repo-list" aria-label="Detected repositories">
+          <li style="color:var(--text-dim); font-size:14px; padding:12px 0;">Scanning local filesystem...</li>
+        </ul>
+      </div>
+
+      <div class="form-group">
+        <label for="manual-repo-input" class="form-label">Or add a path manually</label>
+        <div class="repo-manual">
+          <input type="text" id="manual-repo-input" class="form-input" placeholder="/Users/you/projects/my-api" />
+          <button class="btn btn-ghost" onclick="addManualRepo()" id="add-repo-btn">Add</button>
+        </div>
+      </div>
+
+      <div class="panel-nav">
+        <button class="btn btn-ghost" onclick="goToStep(2)" id="step3-back-btn">← Back</button>
+        <button class="btn btn-primary" onclick="validateReposAndNext()" id="step3-next-btn">Continue →</button>
+        <div class="progress-dots">
+          <div class="dot done"></div><div class="dot done"></div>
+          <div class="dot active"></div>
+          <div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Goal -->
+    <div class="step-panel" id="panel-4" role="region" aria-labelledby="step4-title">
+      <p class="panel-eyebrow">Step 4 of 5</p>
+      <h2 class="panel-title" id="step4-title">What Should<br/><span class="grad-text">ASCM Build?</span></h2>
+      <p class="panel-sub">Describe the feature or change in plain English. The ProductAgent will grill you for specifics and ensure 90%+ confidence before writing a single line of code.</p>
+
+      <div class="form-group">
+        <label for="goal-input" class="form-label">Your Engineering Goal / PRD</label>
+        <textarea id="goal-input" class="goal-input" placeholder="e.g. Add a crypto payment checkout supporting USDT on Polygon and Solana, with QR code invoices, 15-minute price locks, and India 1% TDS compliance." rows="4"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Quick Suggestions</label>
+        <div class="suggestion-chips">
+          <div class="chip" onclick="fillGoal('Add Stripe webhook gateway with replay protection and HMAC verification')">💳 Stripe Webhooks</div>
+          <div class="chip" onclick="fillGoal('Build a crypto payment checkout for EVM (USDT/USDC) and Solana with QR invoices')">🔗 Crypto Checkout</div>
+          <div class="chip" onclick="fillGoal('Create a 3-axis CNC milling toolpath generator with Fanuc G-code output')">📐 CNC Toolpath</div>
+          <div class="chip" onclick="fillGoal('Add FHIR R4 REST endpoints for patient record CRUD with HIPAA de-identification')">🏥 FHIR Healthcare</div>
+          <div class="chip" onclick="fillGoal('Build a REST API rate limiter with Redis sliding window and per-tenant quotas')">⚡ Rate Limiter</div>
+        </div>
+      </div>
+
+      <div class="forecast-card" id="forecast-card" style="display:none;">
+        <div class="forecast-icon">📊</div>
+        <div class="forecast-text">
+          <strong>P90 Forecast:</strong> ~<span id="forecast-tokens">0</span> tokens
+          · Est. cost: $<span id="forecast-cost">0.00</span>
+          · <strong id="forecast-status">SAFE</strong>
+        </div>
+      </div>
+
+      <div class="panel-nav">
+        <button class="btn btn-ghost" onclick="goToStep(3)" id="step4-back-btn">← Back</button>
+        <button class="btn btn-primary" onclick="validateGoalAndNext()" id="step4-next-btn">Preview &amp; Launch →</button>
+        <div class="progress-dots">
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot active"></div>
+          <div class="dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: Launch -->
+    <div class="step-panel" id="panel-5" role="region" aria-labelledby="step5-title">
+      <p class="panel-eyebrow">Step 5 of 5</p>
+      <h2 class="panel-title" id="step5-title">Ready to<br/><span class="grad-text">Launch 🚀</span></h2>
+
+      <div class="ready-card">
+        <div class="ready-icon">✅</div>
+        <div class="ready-title">Your Sprint is Configured</div>
+        <div class="ready-sub">Review your settings below, then click Launch Sprint. The multi-agent squad will begin immediately — you'll approve each milestone in the live dashboard.</div>
+      </div>
+
+      <ul class="summary-list" id="summary-list" aria-label="Sprint configuration summary">
+        <li class="summary-item">
+          <span style="font-size:16px;">👤</span>
+          <span class="summary-label">Account</span>
+          <span class="summary-val" id="sum-account">—</span>
+        </li>
+        <li class="summary-item">
+          <span style="font-size:16px;">🔷</span>
+          <span class="summary-label">AI Provider</span>
+          <span class="summary-val" id="sum-provider">—</span>
+        </li>
+        <li class="summary-item">
+          <span style="font-size:16px;">📁</span>
+          <span class="summary-label">Repositories</span>
+          <span class="summary-val" id="sum-repos">—</span>
+        </li>
+        <li class="summary-item">
+          <span style="font-size:16px;">🎯</span>
+          <span class="summary-label">Goal</span>
+          <span class="summary-val" id="sum-goal" style="font-family:'Inter',sans-serif; max-width:260px; word-break:break-word;">—</span>
+        </li>
+      </ul>
+
+      <div class="panel-nav">
+        <button class="btn btn-ghost" onclick="goToStep(4)" id="step5-back-btn">← Back</button>
+        <button class="btn btn-primary btn-launch" onclick="launchSprint()" id="launch-btn" style="flex:1; justify-content:center; font-size:16px; padding:14px;">
+          <div class="spinner" id="launch-spinner"></div>
+          🚀 Launch Sprint
+        </button>
+        <div class="progress-dots">
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot active"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" role="alert" aria-live="polite">
+    <span class="toast-icon" id="toast-icon">✅</span>
+    <span class="toast-msg" id="toast-msg"></span>
+  </div>
+
+  <script>
+    // ── State ──────────────────────────────────────────────────
+    const state = {
+      currentStep: 1,
+      completedSteps: new Set(),
+      name: '',
+      identifier: '',
+      provider: 'gemini',
+      apiKey: '',
+      model: '',
+      ollamaHost: 'http://localhost:11434',
+      selectedRepos: [],
+      goal: '',
+    };
+
+    // Pre-fill email from URL param (from landing CTA)
+    const urlParams = new URLSearchParams(window.location.search);
+    const emailParam = urlParams.get('email');
+    if (emailParam) document.getElementById('input-identifier').value = emailParam;
+
+    // ── Step navigation ────────────────────────────────────────
+    function goToStep(n) {
+      if (n > state.currentStep && !state.completedSteps.has(state.currentStep)) return;
+      state.currentStep = n;
+
+      document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById(`panel-${n}`).classList.add('active');
+
+      document.querySelectorAll('.step-item').forEach((item, i) => {
+        item.classList.remove('active', 'disabled');
+        const stepNum = i + 1;
+        if (state.completedSteps.has(stepNum)) item.classList.add('done');
+        else if (stepNum === n) item.classList.add('active');
+        else if (stepNum > n && !state.completedSteps.has(stepNum)) item.classList.add('disabled');
+      });
+
+      if (n === 3) scanRepos();
+      if (n === 5) buildSummary();
+    }
+
+    // ── OTP Flow ───────────────────────────────────────────────
+    async function sendOTP() {
+      const name = document.getElementById('input-name').value.trim();
+      const identifier = document.getElementById('input-identifier').value.trim();
+      if (!name) { showToast('Please enter your name.', '⚠️'); return; }
+      if (!identifier) { showToast('Please enter your email or phone.', '⚠️'); return; }
+
+      state.name = name;
+      state.identifier = identifier;
+
+      const spinner = document.getElementById('otp-spinner');
+      const btn = document.getElementById('btn-send-otp');
+      spinner.style.display = 'block';
+      btn.disabled = true;
+      btn.textContent = '';
+      btn.appendChild(spinner);
+
+      try {
+        const res = await fetch('/api/auth/send-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, name })
+        });
+        const data = await res.json();
+        spinner.style.display = 'none';
+        btn.disabled = false;
+        btn.innerHTML = '<div class="spinner" id="otp-spinner" style="display:none;"></div>Send OTP →';
+
+        if (data.status === 'ok' || data.status === 'otp_sent') {
+          document.getElementById('otp-dest-display').textContent = identifier;
+          document.getElementById('auth-form-section').style.display = 'none';
+          document.getElementById('otp-section').style.display = 'block';
+          document.getElementById('otp-d1').focus();
+          showToast('OTP sent! Check your inbox.', '📬');
+          setupOTPInputs();
+        } else {
+          showToast(data.message || 'Failed to send OTP', '❌');
+        }
+      } catch(e) {
+        spinner.style.display = 'none';
+        btn.disabled = false;
+        btn.innerHTML = 'Send OTP →';
+        // Dev mode fallback — simulate OTP sent
+        document.getElementById('otp-dest-display').textContent = identifier;
+        document.getElementById('auth-form-section').style.display = 'none';
+        document.getElementById('otp-section').style.display = 'block';
+        document.getElementById('otp-d1').focus();
+        showToast('Dev mode: any 6-digit code works.', '🔧');
+        setupOTPInputs();
+      }
+    }
+
+    function setupOTPInputs() {
+      const digits = document.querySelectorAll('.otp-digit');
+      digits.forEach((d, i) => {
+        d.addEventListener('input', () => {
+          d.value = d.value.replace(/\D/, '');
+          if (d.value && i < digits.length - 1) digits[i+1].focus();
+          if (getOTPValue().length === 6) verifyOTP();
+        });
+        d.addEventListener('keydown', (e) => {
+          if (e.key === 'Backspace' && !d.value && i > 0) digits[i-1].focus();
+        });
+      });
+    }
+
+    function getOTPValue() {
+      return [...document.querySelectorAll('.otp-digit')].map(d => d.value).join('');
+    }
+
+    async function verifyOTP() {
+      const otp = getOTPValue();
+      if (otp.length < 6) { showToast('Enter all 6 digits.', '⚠️'); return; }
+
+      const spinner = document.getElementById('verify-spinner');
+      const btn = document.getElementById('btn-verify-otp');
+      spinner.style.display = 'block';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/auth/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: state.identifier, otp, name: state.name })
+        });
+        const data = await res.json();
+        spinner.style.display = 'none';
+        btn.disabled = false;
+
+        if (data.status === 'ok') {
+          showToast(`Welcome, ${state.name}! ✨`, '✅');
+          state.completedSteps.add(1);
+          goToStep(2);
+        } else {
+          showToast(data.message || 'Invalid OTP', '❌');
+        }
+      } catch(e) {
+        spinner.style.display = 'none';
+        btn.disabled = false;
+        // Dev mode — accept any 6-digit code
+        showToast(`Welcome, ${state.name}! (dev mode)`, '✅');
+        state.completedSteps.add(1);
+        goToStep(2);
+      }
+    }
+
+    function resetOTP() {
+      document.getElementById('auth-form-section').style.display = 'block';
+      document.getElementById('otp-section').style.display = 'none';
+      document.querySelectorAll('.otp-digit').forEach(d => d.value = '');
+    }
+
+    // ── Provider selection ─────────────────────────────────────
+    document.querySelectorAll('input[name="provider"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        state.provider = this.value;
+        document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('selected'));
+        document.getElementById(`pcard-${this.value}`).classList.add('selected');
+        document.getElementById('ollama-group').style.display = this.value === 'ollama' ? 'block' : 'none';
+        document.getElementById('apikey-group').style.display = this.value === 'ollama' ? 'none' : 'block';
+      });
+    });
+
+    function toggleKey() {
+      const inp = document.getElementById('input-apikey');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+    }
+
+    async function saveProviderAndNext() {
+      state.provider = document.querySelector('input[name="provider"]:checked').value;
+      state.apiKey = document.getElementById('input-apikey').value.trim();
+      state.model = document.getElementById('input-model').value.trim();
+      state.ollamaHost = document.getElementById('input-ollama-host').value.trim();
+
+      if (state.provider !== 'ollama' && !state.apiKey) {
+        showToast('Please enter your API key.', '⚠️'); return;
+      }
+
+      // Save to backend
+      try {
+        await fetch('/api/auth/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: state.identifier,
+            updates: {
+              llm_provider: state.provider,
+              llm_api_key: state.apiKey,
+              llm_model: state.model,
+              ollama_host: state.ollamaHost,
+            }
+          })
+        });
+      } catch(e) {}
+
+      showToast('Provider settings saved!', '🔑');
+      state.completedSteps.add(2);
+      goToStep(3);
+    }
+
+    // ── Repo detection ─────────────────────────────────────────
+    async function scanRepos() {
+      const list = document.getElementById('repo-list');
+      const status = document.getElementById('repo-scan-status');
+      list.innerHTML = '<li style="color:var(--text-dim);font-size:14px;padding:12px 0;">Scanning...</li>';
+      try {
+        const res = await fetch('/api/repos/detect');
+        const data = await res.json();
+        if (data.repos && data.repos.length > 0) {
+          status.textContent = `(${data.repos.length} found)`;
+          list.innerHTML = data.repos.map(r => `
+            <li class="repo-item" onclick="toggleRepo('${r.path}')" id="repo-${btoa(r.path).slice(0,10)}">
+              <input type="checkbox" id="chk-${btoa(r.path).slice(0,10)}" aria-label="Select ${r.name}" />
+              <span class="repo-icon">📁</span>
+              <span class="repo-name">${r.name}<br/><span style="font-size:11px;color:var(--text-dim);font-family:'Fira Code',monospace;">${r.path}</span></span>
+              <span class="repo-badge ${r.has_contract ? 'badge-contract' : 'badge-no-contract'}">${r.has_contract ? 'SKILLS.md ✓' : 'No contract'}</span>
+            </li>
+          `).join('');
+        } else {
+          status.textContent = '(none found)';
+          list.innerHTML = '<li style="color:var(--text-dim);font-size:14px;padding:12px 0;">No repos detected. Add paths manually below.</li>';
+        }
+      } catch(e) {
+        status.textContent = '(add manually)';
+        list.innerHTML = '<li style="color:var(--text-dim);font-size:14px;padding:12px 0;">Could not scan — add repo paths manually below.</li>';
+      }
+    }
+
+    function toggleRepo(path) {
+      const li = document.getElementById('repo-' + btoa(path).slice(0,10));
+      const chk = li ? li.querySelector('input[type="checkbox"]') : null;
+      if (!li) return;
+      const idx = state.selectedRepos.indexOf(path);
+      if (idx === -1) {
+        state.selectedRepos.push(path);
+        li.classList.add('selected');
+        if (chk) chk.checked = true;
+      } else {
+        state.selectedRepos.splice(idx, 1);
+        li.classList.remove('selected');
+        if (chk) chk.checked = false;
+      }
+    }
+
+    function addManualRepo() {
+      const inp = document.getElementById('manual-repo-input');
+      const path = inp.value.trim();
+      if (!path) return;
+      if (!state.selectedRepos.includes(path)) state.selectedRepos.push(path);
+      const list = document.getElementById('repo-list');
+      const id = Math.random().toString(36).slice(2, 8);
+      list.insertAdjacentHTML('beforeend', `
+        <li class="repo-item selected" id="repo-m-${id}">
+          <input type="checkbox" checked aria-label="Select manually added repo" />
+          <span class="repo-icon">📁</span>
+          <span class="repo-name">${path.split('/').pop()}<br/><span style="font-size:11px;color:var(--text-dim);font-family:'Fira Code',monospace;">${path}</span></span>
+          <span class="repo-badge badge-no-contract">Manual</span>
+        </li>
+      `);
+      inp.value = '';
+      showToast('Repo added!', '📁');
+    }
+
+    function validateReposAndNext() {
+      if (state.selectedRepos.length === 0) {
+        showToast('Select at least one repository.', '⚠️'); return;
+      }
+      state.completedSteps.add(3);
+      goToStep(4);
+    }
+
+    // ── Goal ──────────────────────────────────────────────────
+    function fillGoal(text) {
+      document.getElementById('goal-input').value = text;
+      state.goal = text;
+      getForecast();
+    }
+
+    document.getElementById('goal-input').addEventListener('input', function() {
+      state.goal = this.value;
+      clearTimeout(window._forecastTimer);
+      window._forecastTimer = setTimeout(getForecast, 900);
+    });
+
+    async function getForecast() {
+      const goal = state.goal.trim();
+      if (!goal || goal.length < 20) return;
+      try {
+        const res = await fetch('/api/forecast', { method: 'GET',
+          headers: { 'Content-Type': 'application/json' } });
+        // Use GET forecast endpoint
+        const url = `/api/forecast?goal=${encodeURIComponent(goal)}&repos=${encodeURIComponent(state.selectedRepos.join(','))}`;
+        const r2 = await fetch(url);
+        const data = await r2.json();
+        if (data.forecast) {
+          document.getElementById('forecast-card').style.display = 'flex';
+          document.getElementById('forecast-tokens').textContent = (data.forecast.p90_total_tokens || 0).toLocaleString();
+          document.getElementById('forecast-cost').textContent = (data.forecast.p90_total_cost_usd || 0).toFixed(3);
+          document.getElementById('forecast-status').textContent = data.forecast.circuit_breaker_status || 'SAFE';
+        }
+      } catch(e) {}
+    }
+
+    function validateGoalAndNext() {
+      const goal = document.getElementById('goal-input').value.trim();
+      if (!goal || goal.length < 10) {
+        showToast('Please describe what you want to build.', '⚠️'); return;
+      }
+      state.goal = goal;
+      state.completedSteps.add(4);
+      goToStep(5);
+    }
+
+    // ── Summary ───────────────────────────────────────────────
+    function buildSummary() {
+      document.getElementById('sum-account').textContent = `${state.name} (${state.identifier})`;
+      document.getElementById('sum-provider').textContent = state.provider + (state.model ? ` / ${state.model}` : '');
+      document.getElementById('sum-repos').textContent = state.selectedRepos.length + ' repo(s)';
+      const goal = state.goal;
+      document.getElementById('sum-goal').textContent = goal.length > 80 ? goal.slice(0, 80) + '…' : goal;
+    }
+
+    // ── Launch ────────────────────────────────────────────────
+    async function launchSprint() {
+      const spinner = document.getElementById('launch-spinner');
+      const btn = document.getElementById('launch-btn');
+      spinner.style.display = 'block';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/action/launch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            goal: state.goal,
+            repos: state.selectedRepos,
+            auto_approve: false,
+          })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          showToast('Sprint launched! Redirecting to dashboard…', '🚀');
+          setTimeout(() => { window.location.href = '/'; }, 1800);
+        } else {
+          throw new Error(data.message || 'Launch failed');
+        }
+      } catch(e) {
+        spinner.style.display = 'none';
+        btn.disabled = false;
+        showToast(`Error: ${e.message}. Redirecting anyway…`, '⚠️');
+        setTimeout(() => { window.location.href = '/'; }, 2000);
+      }
+    }
+
+    // ── Toast ─────────────────────────────────────────────────
+    function showToast(msg, icon = '✅') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-msg').textContent = msg;
+      document.getElementById('toast-icon').textContent = icon;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+  </script>
+</body>
+</html>

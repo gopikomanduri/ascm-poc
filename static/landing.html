@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASCM — Autonomous Multi-Agent Engineering Squad</title>
+  <meta name="description" content="ASCM deploys a coordinated AI engineering squad — Product, Architect, Coder, Critic, Auditor — to autonomously coordinate changes across multiple repositories with human-in-the-loop governance." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #060912;
+      --bg-card: rgba(255,255,255,0.04);
+      --bg-glass: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.08);
+      --border-glow: rgba(99,179,237,0.3);
+      --text: #e2e8f0;
+      --text-muted: #718096;
+      --text-dim: #4a5568;
+      --cyan: #00d4ff;
+      --violet: #8b5cf6;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --blue: #3b82f6;
+      --grad1: linear-gradient(135deg, #00d4ff, #8b5cf6);
+      --grad2: linear-gradient(135deg, #10b981, #3b82f6);
+      --grad3: linear-gradient(135deg, #f59e0b, #f43f5e);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* ── Animated background ── */
+    .bg-orbs {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      overflow: hidden;
+    }
+    .orb {
+      position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.18;
+      animation: orbFloat 12s ease-in-out infinite alternate;
+    }
+    .orb-1 { width: 600px; height: 600px; background: var(--violet); top: -200px; left: -100px; animation-delay: 0s; }
+    .orb-2 { width: 500px; height: 500px; background: var(--cyan); top: 30%; right: -150px; animation-delay: -4s; }
+    .orb-3 { width: 400px; height: 400px; background: var(--blue); bottom: -100px; left: 30%; animation-delay: -8s; }
+    @keyframes orbFloat {
+      from { transform: translate(0, 0) scale(1); }
+      to   { transform: translate(30px, -40px) scale(1.08); }
+    }
+
+    /* ── Nav ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 48px;
+      background: rgba(6,9,18,0.7);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 18px; font-weight: 800; color: #fff; text-decoration: none;
+    }
+    .nav-logo-badge {
+      background: var(--grad1);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 13px; font-weight: 700; color: #fff;
+      letter-spacing: 0.05em;
+    }
+    .nav-links { display: flex; align-items: center; gap: 32px; }
+    .nav-links a {
+      color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta { display: flex; gap: 12px; align-items: center; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 22px; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; border: none; text-decoration: none;
+    }
+    .btn-ghost {
+      background: transparent; color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--border-glow); color: var(--text); }
+    .btn-primary {
+      background: var(--grad1); color: #fff;
+      box-shadow: 0 4px 20px rgba(139,92,246,0.35);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(139,92,246,0.5); }
+    .btn-lg { padding: 14px 32px; font-size: 16px; border-radius: 12px; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.15);
+      color: var(--text);
+    }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan); }
+
+    /* ── Sections ── */
+    section { position: relative; z-index: 1; }
+
+    /* ── Hero ── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center;
+      padding: 140px 24px 80px;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(139,92,246,0.12);
+      border: 1px solid rgba(139,92,246,0.3);
+      border-radius: 100px;
+      padding: 6px 16px; margin-bottom: 32px;
+      font-size: 13px; font-weight: 600; color: var(--violet);
+    }
+    .hero-badge-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--violet);
+      box-shadow: 0 0 8px var(--violet);
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 0.4; } 50% { opacity: 1; }
+    }
+    .hero h1 {
+      font-size: clamp(42px, 7vw, 84px);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -2px;
+      color: #fff;
+      margin-bottom: 24px;
+      max-width: 900px;
+    }
+    .hero h1 .grad-text {
+      background: var(--grad1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: clamp(16px, 2.5vw, 20px);
+      color: var(--text-muted);
+      max-width: 640px;
+      line-height: 1.7;
+      margin-bottom: 40px;
+    }
+    .hero-actions { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-bottom: 64px; }
+    .hero-stats {
+      display: flex; gap: 48px; flex-wrap: wrap; justify-content: center;
+      padding-top: 40px;
+      border-top: 1px solid var(--border);
+    }
+    .stat-item { text-align: center; }
+    .stat-num { font-size: 32px; font-weight: 800; color: #fff; }
+    .stat-num .stat-accent { background: var(--grad1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stat-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── Agent Flow Diagram ── */
+    .flow-section {
+      padding: 100px 24px;
+    }
+    .section-label {
+      text-align: center;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--cyan);
+      margin-bottom: 16px;
+    }
+    .section-title {
+      text-align: center;
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -1px;
+      margin-bottom: 16px;
+    }
+    .section-sub {
+      text-align: center;
+      font-size: 16px; color: var(--text-muted);
+      max-width: 560px; margin: 0 auto 64px;
+    }
+
+    .agent-flow {
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 8px;
+      max-width: 1100px; margin: 0 auto;
+    }
+    .agent-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px 20px;
+      text-align: center;
+      width: 160px;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .agent-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: var(--grad1);
+      transform: scaleX(0); transform-origin: left;
+      transition: transform 0.3s;
+    }
+    .agent-card:hover { transform: translateY(-4px); border-color: rgba(99,179,237,0.3); }
+    .agent-card:hover::before { transform: scaleX(1); }
+    .agent-icon { font-size: 28px; margin-bottom: 12px; }
+    .agent-name { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .agent-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+    .flow-arrow { font-size: 20px; color: var(--text-dim); padding: 0 4px; }
+
+    /* ── Features Grid ── */
+    .features-section { padding: 100px 24px; }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+      max-width: 1100px; margin: 0 auto;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      transition: all 0.3s;
+      position: relative; overflow: hidden;
+    }
+    .feature-card:hover { border-color: rgba(139,92,246,0.3); transform: translateY(-4px); }
+    .feature-icon-wrap {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-bottom: 20px;
+    }
+    .ic-violet { background: rgba(139,92,246,0.15); }
+    .ic-cyan { background: rgba(0,212,255,0.12); }
+    .ic-emerald { background: rgba(16,185,129,0.12); }
+    .ic-amber { background: rgba(245,158,11,0.12); }
+    .ic-rose { background: rgba(244,63,94,0.12); }
+    .ic-blue { background: rgba(59,130,246,0.12); }
+    .feature-title { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 10px; }
+    .feature-desc { font-size: 14px; color: var(--text-muted); line-height: 1.7; }
+    .feature-tag {
+      display: inline-block; margin-top: 16px;
+      background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+      padding: 4px 10px; border-radius: 6px;
+      font-size: 11px; font-weight: 600; color: var(--text-dim);
+      font-family: 'Fira Code', monospace;
+    }
+
+    /* ── Domain Verticals ── */
+    .domains-section { padding: 80px 24px; }
+    .domains-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px; max-width: 1000px; margin: 0 auto;
+    }
+    .domain-pill {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 18px 20px;
+      transition: all 0.2s;
+    }
+    .domain-pill:hover { border-color: rgba(99,179,237,0.3); background: var(--bg-glass); }
+    .domain-emoji { font-size: 22px; }
+    .domain-text { font-size: 14px; font-weight: 600; color: var(--text); }
+
+    /* ── Pricing ── */
+    .pricing-section { padding: 100px 24px; }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 24px; max-width: 1100px; margin: 0 auto;
+    }
+    .pricing-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 32px;
+      display: flex; flex-direction: column;
+      transition: all 0.3s;
+      position: relative; overflow: hidden;
+    }
+    .pricing-card.featured {
+      border-color: rgba(139,92,246,0.5);
+      background: rgba(139,92,246,0.07);
+    }
+    .pricing-card.featured::before {
+      content: 'Most Popular';
+      position: absolute; top: 16px; right: 16px;
+      background: var(--grad1);
+      color: #fff; font-size: 11px; font-weight: 700;
+      padding: 4px 10px; border-radius: 6px;
+      letter-spacing: 0.05em;
+    }
+    .pricing-tier { font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+    .pricing-price { font-size: 42px; font-weight: 900; color: #fff; line-height: 1; margin-bottom: 4px; }
+    .pricing-price sup { font-size: 20px; vertical-align: top; margin-top: 8px; }
+    .pricing-price sub { font-size: 16px; color: var(--text-muted); font-weight: 500; }
+    .pricing-desc { font-size: 14px; color: var(--text-muted); margin: 16px 0 24px; }
+    .pricing-features { list-style: none; flex: 1; }
+    .pricing-features li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 14px; color: var(--text); margin-bottom: 12px; line-height: 1.4;
+    }
+    .pricing-features li::before { content: '✓'; color: var(--emerald); font-weight: 700; flex-shrink: 0; }
+    .pricing-cta { margin-top: 28px; display: block; text-align: center; }
+
+    /* ── Testimonials / Social Proof ── */
+    .proof-section { padding: 80px 24px; }
+    .proof-banner {
+      max-width: 900px; margin: 0 auto;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 48px;
+      text-align: center;
+    }
+    .proof-quote {
+      font-size: clamp(18px, 2.5vw, 24px);
+      font-weight: 600; color: #fff;
+      line-height: 1.5; margin-bottom: 24px;
+      font-style: italic;
+    }
+    .proof-stat-row { display: flex; gap: 48px; justify-content: center; flex-wrap: wrap; margin-top: 32px; }
+    .proof-stat { text-align: center; }
+    .proof-stat-num { font-size: 36px; font-weight: 900; background: var(--grad1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .proof-stat-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── CTA Section ── */
+    .cta-section {
+      padding: 120px 24px;
+      text-align: center;
+    }
+    .cta-inner {
+      max-width: 680px; margin: 0 auto;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 64px 48px;
+      position: relative; overflow: hidden;
+    }
+    .cta-inner::before {
+      content: '';
+      position: absolute; top: -100px; left: 50%;
+      transform: translateX(-50%);
+      width: 400px; height: 300px;
+      background: radial-gradient(ellipse, rgba(139,92,246,0.25) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-inner h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 900; color: #fff; letter-spacing: -1px; margin-bottom: 16px; }
+    .cta-inner p { font-size: 16px; color: var(--text-muted); margin-bottom: 36px; line-height: 1.7; }
+    .cta-email-row { display: flex; gap: 12px; max-width: 440px; margin: 0 auto; }
+    .cta-input {
+      flex: 1; background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 16px; color: var(--text); font-size: 14px;
+      outline: none; font-family: 'Inter', sans-serif;
+      transition: border-color 0.2s;
+    }
+    .cta-input:focus { border-color: var(--violet); }
+    .cta-input::placeholder { color: var(--text-dim); }
+    .cta-disclaimer { font-size: 12px; color: var(--text-dim); margin-top: 16px; }
+
+    /* ── Footer ── */
+    footer {
+      padding: 40px 48px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 16px;
+    }
+    .footer-logo { font-size: 16px; font-weight: 800; color: #fff; }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a { font-size: 13px; color: var(--text-muted); text-decoration: none; }
+    .footer-links a:hover { color: var(--text); }
+    .footer-copy { font-size: 13px; color: var(--text-dim); }
+
+    /* ── Animations ── */
+    .fade-up {
+      opacity: 0; transform: translateY(24px);
+      animation: fadeUp 0.7s ease forwards;
+    }
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+    .delay-4 { animation-delay: 0.4s; }
+    .delay-5 { animation-delay: 0.5s; }
+
+    /* ── Code terminal widget ── */
+    .terminal {
+      background: #0d1117; border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px 24px;
+      font-family: 'Fira Code', monospace; font-size: 13px;
+      color: #a9b1d6; text-align: left;
+      max-width: 620px; margin: 40px auto 0;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .terminal-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+    }
+    .t-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .t-red { background: #ff5f57; } .t-yellow { background: #ffbd2e; } .t-green { background: #28c840; }
+    .t-line { margin-bottom: 6px; }
+    .t-cmd { color: #00d4ff; }
+    .t-out { color: #a9b1d6; }
+    .t-ok { color: #10b981; }
+    .t-comment { color: #4a5568; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      nav { padding: 14px 20px; }
+      .nav-links { display: none; }
+      .hero { padding: 120px 20px 60px; }
+      .hero-stats { gap: 24px; }
+      .cta-email-row { flex-direction: column; }
+      footer { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Animated background -->
+  <div class="bg-orbs" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <!-- Navigation -->
+  <nav role="navigation" aria-label="Main navigation">
+    <a href="/landing" class="nav-logo" id="nav-logo">
+      <span class="nav-logo-badge">ASCM</span>
+      <span style="color:var(--text-muted); font-weight:400; font-size:14px;">Engineering Squad</span>
+    </a>
+    <div class="nav-links" role="menubar">
+      <a href="#how-it-works" role="menuitem">How it Works</a>
+      <a href="#features" role="menuitem">Features</a>
+      <a href="#pricing" role="menuitem">Pricing</a>
+      <a href="https://github.com/gopikomanduri/ascm-poc" target="_blank" rel="noopener" role="menuitem">GitHub</a>
+    </div>
+    <div class="nav-cta">
+      <a href="/" class="btn btn-ghost" id="nav-signin-btn">Sign in</a>
+      <a href="/onboarding" class="btn btn-primary" id="nav-getstarted-btn">Get Started Free</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero" aria-labelledby="hero-headline">
+    <div class="hero-badge fade-up">
+      <span class="hero-badge-dot"></span>
+      Open-Source · Self-Hostable · BYOK
+    </div>
+    <h1 id="hero-headline" class="fade-up delay-1">
+      Your AI<br/><span class="grad-text">Engineering Squad</span><br/>Ships Features, Not Typos
+    </h1>
+    <p class="hero-sub fade-up delay-2">
+      ASCM coordinates a squad of specialized AI agents — Product, Architect, Coder, Adversarial Critic, and Security Auditor — to autonomously deliver features across <strong style="color:#fff;">multiple repositories</strong>, with human approval at every gate.
+    </p>
+    <div class="hero-actions fade-up delay-3">
+      <a href="/onboarding" class="btn btn-primary btn-lg" id="hero-cta-primary">
+        🚀 Start Free Sprint
+      </a>
+      <a href="/" class="btn btn-outline btn-lg" id="hero-cta-dashboard">
+        View Live Dashboard
+      </a>
+    </div>
+
+    <!-- Terminal demo -->
+    <div class="terminal fade-up delay-4">
+      <div class="terminal-header">
+        <div class="t-dot t-red"></div>
+        <div class="t-dot t-yellow"></div>
+        <div class="t-dot t-green"></div>
+        <span style="font-size:12px; color:var(--text-dim); margin-left:8px;">ascm — zsh</span>
+      </div>
+      <div class="t-line"><span class="t-comment"># Start a sprint in 3 lines</span></div>
+      <div class="t-line"><span class="t-cmd">$</span> git clone https://github.com/gopikomanduri/ascm-poc</div>
+      <div class="t-line"><span class="t-cmd">$</span> pip install -r requirements.txt &amp;&amp; cp .env.example .env</div>
+      <div class="t-line"><span class="t-cmd">$</span> python main.py --repos ../api ../sdk --goal <span style="color:#f59e0b;">"Add crypto checkout with Solana"</span></div>
+      <div class="t-line" style="margin-top:8px;"><span class="t-ok">✓</span> ProductAgent  <span class="t-out">→ Grilling requirements (confidence: 94%)</span></div>
+      <div class="t-line"><span class="t-ok">✓</span> ArchitectAgent <span class="t-out">→ HLD/LLD generated — 4 tasks planned</span></div>
+      <div class="t-line"><span class="t-ok">✓</span> CoderAgent    <span class="t-out">→ Code + 23 unit tests written (Go + Python)</span></div>
+      <div class="t-line"><span class="t-ok">✓</span> CriticAgent   <span class="t-out">→ Adversarial review: Score 91/100, Grade A</span></div>
+      <div class="t-line"><span class="t-ok">✓</span> Git commit    <span class="t-out">→ Branch created. Awaiting your approval.</span></div>
+    </div>
+
+    <div class="hero-stats fade-up delay-5">
+      <div class="stat-item">
+        <div class="stat-num"><span class="stat-accent">89</span>/89</div>
+        <div class="stat-label">Unit tests passing</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num"><span class="stat-accent">87%</span></div>
+        <div class="stat-label">LLM cost reduction</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num"><span class="stat-accent">38.5</span>h</div>
+        <div class="stat-label">Saved per sprint</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num"><span class="stat-accent">6</span></div>
+        <div class="stat-label">Industry verticals</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works — Agent Flow -->
+  <section class="flow-section" id="how-it-works" aria-labelledby="flow-title">
+    <p class="section-label">How it Works</p>
+    <h2 id="flow-title" class="section-title">Five Specialists. One Autonomous Sprint.</h2>
+    <p class="section-sub">Each agent has a distinct role. A different model reviews the code, eliminating self-confirmation bias.</p>
+
+    <div class="agent-flow" role="list">
+      <div class="agent-card" role="listitem">
+        <div class="agent-icon">🎯</div>
+        <div class="agent-name">Product Agent</div>
+        <div class="agent-desc">Grills stakeholders until confidence hits 90%+</div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">→</div>
+      <div class="agent-card" role="listitem">
+        <div class="agent-icon">🏛️</div>
+        <div class="agent-name">Architect Agent</div>
+        <div class="agent-desc">Generates HLD / LLD and task DAGs</div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">→</div>
+      <div class="agent-card" role="listitem">
+        <div class="agent-icon">💻</div>
+        <div class="agent-name">Coder Agent</div>
+        <div class="agent-desc">Writes prod code + full unit test suites</div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">→</div>
+      <div class="agent-card" role="listitem">
+        <div class="agent-icon">🔍</div>
+        <div class="agent-name">Critic Agent</div>
+        <div class="agent-desc">Independent model audits for bugs & OWASP</div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">→</div>
+      <div class="agent-card" role="listitem">
+        <div class="agent-icon">👤</div>
+        <div class="agent-name">Human Gate</div>
+        <div class="agent-desc">You approve every milestone before commit</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features-section" id="features" aria-labelledby="features-title">
+    <p class="section-label">Capabilities</p>
+    <h2 id="features-title" class="section-title">Built for Real Engineering Teams</h2>
+    <p class="section-sub">Not another autocomplete tool. A full autonomous engineering pipeline.</p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon-wrap ic-violet">🔀</div>
+        <div class="feature-title">Multi-Repo Coordination</div>
+        <div class="feature-desc">Synchronously updates provider APIs and consumer SDKs across multiple repositories, keeping contracts in sync with zero drift.</div>
+        <span class="feature-tag">SKILLS.md contracts</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap ic-cyan">🛡️</div>
+        <div class="feature-title">Adversarial Critic Tier</div>
+        <div class="feature-desc">A completely different LLM (Claude 3.5 Sonnet) independently reviews all generated code — no self-confirmation bias.</div>
+        <span class="feature-tag">Multi-model diversity</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap ic-emerald">🏠</div>
+        <div class="feature-title">Air-Gapped Local SLMs</div>
+        <div class="feature-desc">Run 100% on-premise via Ollama (Qwen 2.5 Coder, Phi-4, BioMistral). Zero code leaves your network. SOC 2 ready.</div>
+        <span class="feature-tag">HIPAA · ITAR · Legal</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap ic-amber">💰</div>
+        <div class="feature-title">Pre-flight Cost Radar</div>
+        <div class="feature-desc">P50/P90 token forecaster with automatic circuit breakers. Blueprint reuse cuts LLM inference costs by up to 87%.</div>
+        <span class="feature-tag">No surprise API bills</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap ic-rose">✅</div>
+        <div class="feature-title">Mandatory TDD Enforcement</div>
+        <div class="feature-desc">Every code generation task requires unit tests using testify, pytest, or Jest. 100% pass rate gated before milestone confirm.</div>
+        <span class="feature-tag">Go · Python · TypeScript</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap ic-blue">🔑</div>
+        <div class="feature-title">BYOK Multi-Provider</div>
+        <div class="feature-desc">Bring your own keys for Gemini, OpenAI, Anthropic Claude, or local Ollama. No vendor lock-in, fully decoupled.</div>
+        <span class="feature-tag">Gemini · GPT-4o · Claude</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Domain Verticals -->
+  <section class="domains-section" aria-labelledby="domains-title">
+    <p class="section-label">Universal Adaptation</p>
+    <h2 id="domains-title" class="section-title">Works Across Every Industry Vertical</h2>
+    <p class="section-sub">ASCM auto-detects your domain and switches agent personas — no prompt engineering required.</p>
+    <div class="domains-grid">
+      <div class="domain-pill"><span class="domain-emoji">📐</span><span class="domain-text">CAD / CAM &amp; Manufacturing</span></div>
+      <div class="domain-pill"><span class="domain-emoji">💳</span><span class="domain-text">Web3 &amp; FinTech Payments</span></div>
+      <div class="domain-pill"><span class="domain-emoji">🏥</span><span class="domain-text">MedTech &amp; Healthcare</span></div>
+      <div class="domain-pill"><span class="domain-emoji">⚖️</span><span class="domain-text">LegalTech &amp; Compliance</span></div>
+      <div class="domain-pill"><span class="domain-emoji">🤖</span><span class="domain-text">Robotics &amp; Embedded</span></div>
+      <div class="domain-pill"><span class="domain-emoji">⚙️</span><span class="domain-text">Compilers &amp; DevTools</span></div>
+    </div>
+  </section>
+
+  <!-- Social Proof -->
+  <section class="proof-section" aria-labelledby="proof-title">
+    <div class="proof-banner">
+      <p class="section-label" id="proof-title">Reference Implementations</p>
+      <p class="proof-quote">"Three production-grade applications across wildly different domains — all built autonomously by ASCM and verified by 89 automated unit tests."</p>
+      <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
+        <span class="feature-tag" style="font-size:13px; padding:8px 16px;">💳 PayPulse Sentinel (Stripe Webhooks)</span>
+        <span class="feature-tag" style="font-size:13px; padding:8px 16px;">🔗 Pay Through Crypto (EVM + Solana)</span>
+        <span class="feature-tag" style="font-size:13px; padding:8px 16px;">📐 CNC CAD/CAM Engine (G-code)</span>
+      </div>
+      <div class="proof-stat-row">
+        <div class="proof-stat">
+          <div class="proof-stat-num">89/89</div>
+          <div class="proof-stat-label">Tests Passing</div>
+        </div>
+        <div class="proof-stat">
+          <div class="proof-stat-num">$4,800+</div>
+          <div class="proof-stat-label">Saved per Module</div>
+        </div>
+        <div class="proof-stat">
+          <div class="proof-stat-num">3 min</div>
+          <div class="proof-stat-label">To First Sprint</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="pricing-section" id="pricing" aria-labelledby="pricing-title">
+    <p class="section-label">Pricing</p>
+    <h2 id="pricing-title" class="section-title">Start Free. Scale When You Need It.</h2>
+    <p class="section-sub">Open-source core, enterprise-ready layers.</p>
+
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div class="pricing-tier">Community</div>
+        <div class="pricing-price">Free</div>
+        <div class="pricing-desc">Full CLI orchestrator for individual developers. Bring your own keys.</div>
+        <ul class="pricing-features">
+          <li>Full CLI orchestrator</li>
+          <li>BYOK (Gemini, OpenAI, Anthropic, Ollama)</li>
+          <li>Local SQLite dashboard</li>
+          <li>All 6 domain verticals</li>
+          <li>89 unit tests included</li>
+        </ul>
+        <a href="/onboarding" class="btn btn-outline pricing-cta" id="pricing-free-cta">Get Started Free</a>
+      </div>
+
+      <div class="pricing-card featured">
+        <div class="pricing-tier">Pro</div>
+        <div class="pricing-price"><sup>$</sup>49<sub>/seat/mo</sub></div>
+        <div class="pricing-desc">For startup teams shipping fast with multi-repo sprints.</div>
+        <ul class="pricing-features">
+          <li>Multi-repo sync (up to 5 repos)</li>
+          <li>Pre-flight cost radar dashboard</li>
+          <li>Visual architecture flowchart</li>
+          <li>Priority model cascade routing</li>
+          <li>GitHub PR automation</li>
+          <li>Everything in Community</li>
+        </ul>
+        <a href="/onboarding" class="btn btn-primary pricing-cta" id="pricing-pro-cta">Start Pro Trial</a>
+      </div>
+
+      <div class="pricing-card">
+        <div class="pricing-tier">Enterprise</div>
+        <div class="pricing-price"><sup>$</sup>15k<sub>/yr</sub></div>
+        <div class="pricing-desc">Air-gapped deployment for regulated industries.</div>
+        <ul class="pricing-features">
+          <li>100% on-premise / air-gapped SLMs</li>
+          <li>SAML / Okta SSO</li>
+          <li>SOC 2 audit trail &amp; PII scrubbing</li>
+          <li>Unlimited repos</li>
+          <li>Dedicated TAM + custom SLA</li>
+          <li>Docker hermetic sandbox</li>
+        </ul>
+        <a href="mailto:founders@ascm.dev" class="btn btn-outline pricing-cta" id="pricing-enterprise-cta">Contact Sales</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section" aria-labelledby="cta-title">
+    <div class="cta-inner">
+      <h2 id="cta-title">Ready to Ship Your First Autonomous Sprint?</h2>
+      <p>Join hundreds of engineers replacing fragmented AI autocomplete with a coordinated multi-agent engineering squad.</p>
+      <div class="cta-email-row">
+        <input type="email" id="cta-email-input" class="cta-input" placeholder="your@company.com" aria-label="Work email address" />
+        <a href="/onboarding" class="btn btn-primary" id="cta-email-cta-btn">Get Early Access</a>
+      </div>
+      <p class="cta-disclaimer">Free forever for open-source. No credit card required.</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer role="contentinfo">
+    <div class="footer-logo">ASCM</div>
+    <div class="footer-links">
+      <a href="https://github.com/gopikomanduri/ascm-poc" target="_blank" rel="noopener">GitHub</a>
+      <a href="/">Dashboard</a>
+      <a href="/onboarding">Get Started</a>
+      <a href="mailto:founders@ascm.dev">Contact</a>
+    </div>
+    <div class="footer-copy">© 2026 ASCM. Open-source &amp; self-hostable.</div>
+  </footer>
+
+  <script>
+    // Intersection observer for scroll animations
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(el => {
+        if (el.isIntersecting) {
+          el.target.style.opacity = '1';
+          el.target.style.transform = 'translateY(0)';
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.feature-card, .agent-card, .pricing-card, .domain-pill').forEach(el => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(20px)';
+      el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+      observer.observe(el);
+    });
+
+    // CTA email → onboarding with pre-fill
+    document.getElementById('cta-email-cta-btn').addEventListener('click', function(e) {
+      const email = document.getElementById('cta-email-input').value.trim();
+      if (email) {
+        e.preventDefault();
+        window.location.href = '/onboarding?email=' + encodeURIComponent(email);
+      }
+    });
+  </script>
+</body>
+</html>
