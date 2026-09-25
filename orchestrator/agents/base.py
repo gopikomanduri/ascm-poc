@@ -510,7 +510,8 @@ def _synthesize_fallback_response(agent_name: str, prompt: str, json_mode: bool)
     has_details = any(k in user_goal_lower for k in [
         "clarification:", "supported chains", "polygon", "evm", "qr invoice", "settlement flow", "hybrid", "non-custodial",
         "b-rep", "g-code", "toolpath", "3-axis", "5-axis", "fanuc", "haas", "grbl", "tolerance",
-        "fhir", "hl7", "dicom", "hipaa", "ros2", "rtos", "can bus", "ast", "lexer"
+        "fhir", "hl7", "dicom", "hipaa", "ros2", "rtos", "can bus", "ast", "lexer",
+        "jurisdiction:", "statutory scope:", "clause ast", "redlining diff", "zero-retention", "gdpr article"
     ])
 
     if agent_name in ("ProductAgent", "ProductManagerAgent"):

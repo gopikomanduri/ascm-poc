@@ -99,8 +99,14 @@ class OrchestratorEngine:
     def _resolve_task_files(self, repo_path: str, task: TaskItem, contract) -> Tuple[str, str, str]:
         """
         Determines the source file path, test file path, and existing file content
-        for a specific task, respecting allowed_paths.
+        for a specific task, respecting allowed_paths and the detected domain/language.
         """
+        from orchestrator.domain import DomainAdapter
+        user_goal = self.state.user_goal if getattr(self, "state", None) else ""
+        domain = DomainAdapter.detect_domain(user_goal)
+        lang = DomainAdapter.detect_language(user_goal, domain)
+        default_ext = ".py" if lang == "python" else ".go" if lang == "go" else ".ts" if lang == "typescript" else ".go"
+
         repo_dir = Path(repo_path).resolve()
         target = task.target_file.strip() if getattr(task, "target_file", None) else ""
 
@@ -118,21 +124,32 @@ class OrchestratorEngine:
                 elif target_p.suffix in (".js", ".ts"):
                     test_path = target_p.with_name(f"{stem}.test{target_p.suffix}").as_posix()
                 else:
-                    test_path = target_p.with_name(f"{stem}_test.go").as_posix()
+                    test_path = target_p.with_name(f"test_{stem}.py" if lang == "python" else f"{stem}_test.go").as_posix()
 
                 existing_content = full_target.read_text(encoding="utf-8") if full_target.is_file() else ""
                 return source_path, test_path, existing_content
 
-        # 2. Match against existing files in repo
-        source_files = [
-            p for p in repo_dir.rglob("*.go")
-            if not p.name.endswith("_test.go") and not any(part in {".git", ".agents", ".codex"} for part in p.parts)
-        ]
-        if not source_files:
+        # 2. Match against existing files in repo (prioritizing detected language)
+        if lang == "python":
             source_files = [
                 p for p in repo_dir.rglob("*.py")
                 if not p.name.startswith("test_") and not any(part in {".git", ".agents", ".codex", ".venv"} for part in p.parts)
             ]
+            if not source_files:
+                source_files = [
+                    p for p in repo_dir.rglob("*.go")
+                    if not p.name.endswith("_test.go") and not any(part in {".git", ".agents", ".codex"} for part in p.parts)
+                ]
+        else:
+            source_files = [
+                p for p in repo_dir.rglob("*.go")
+                if not p.name.endswith("_test.go") and not any(part in {".git", ".agents", ".codex"} for part in p.parts)
+            ]
+            if not source_files:
+                source_files = [
+                    p for p in repo_dir.rglob("*.py")
+                    if not p.name.startswith("test_") and not any(part in {".git", ".agents", ".codex", ".venv"} for part in p.parts)
+                ]
 
         if source_files:
             source = source_files[0]
@@ -147,15 +164,15 @@ class OrchestratorEngine:
             existing_content = source.read_text(encoding="utf-8") if source.is_file() else ""
             return source_path, test_path, existing_content
 
-        # 3. Fallback to first allowed path
-        allowed = contract.allowed_paths[0] if contract.allowed_paths else "main.go"
+        # 3. Fallback to first allowed path or language-appropriate default
+        allowed = contract.allowed_paths[0] if contract.allowed_paths else f"main{default_ext}"
         if allowed.endswith("/"):
-            source_path = f"{allowed}main.go"
-            test_path = f"{allowed}main_test.go"
+            source_path = f"{allowed}main{default_ext}"
+            test_path = f"{allowed}test_main.py" if lang == "python" else f"{allowed}main_test.go"
         else:
             source_path = allowed
             stem = Path(allowed).stem
-            test_path = str(Path(allowed).with_name(f"{stem}_test.go"))
+            test_path = str(Path(allowed).with_name(f"test_{stem}.py" if (allowed.endswith(".py") or lang == "python") else f"{stem}_test.go"))
         full_target = repo_dir / source_path
         existing_content = full_target.read_text(encoding="utf-8") if full_target.is_file() else ""
         return source_path, test_path, existing_content
@@ -416,11 +433,14 @@ class OrchestratorEngine:
                     patch = db_agent.run(instructions, contract.raw_content, source_path)
                     GLOBAL_DASHBOARD_STATE.update_agent("DatabaseAgent", "completed", f"DB code ready for {task.id}")
                 else:
-                    GLOBAL_DASHBOARD_STATE.update_agent("GoCoderAgent", "running", f"Writing Go code for {task.id}")
+                    from orchestrator.domain import DomainAdapter
+                    domain = DomainAdapter.detect_domain(self.state.user_goal)
+                    lang = DomainAdapter.detect_language(self.state.user_goal, domain)
+                    GLOBAL_DASHBOARD_STATE.update_agent("CoderAgent", "running", f"Writing {lang.upper()} code for {task.id}")
                     patch = coder_agent.run(
                         existing_code, instructions, source_path, test_path, contract.raw_content
                     )
-                    GLOBAL_DASHBOARD_STATE.update_agent("GoCoderAgent", "completed", f"Go code ready for {task.id}")
+                    GLOBAL_DASHBOARD_STATE.update_agent("CoderAgent", "completed", f"{lang.upper()} code ready for {task.id}")
 
                 accumulated_patch.update(patch)
                 task.status = "completed"

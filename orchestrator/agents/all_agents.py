@@ -70,8 +70,11 @@ class ProductAgent(BaseAgent):
     def run(self, user_input: str, conversation_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
         from orchestrator.domain import DomainAdapter
         domain = DomainAdapter.detect_domain(user_input)
+        lang = DomainAdapter.detect_language(user_input, domain)
+        role_prompt = DomainAdapter.get_agent_domain_prompt("product", domain, lang)
         history_str = json.dumps(conversation_history or [], indent=2)
         prompt = (
+            f"{role_prompt}\n"
             f"Target Domain: {domain.display_name}\n"
             f"User Requirement / PRD:\n{user_input}\n\n"
             f"Clarification History:\n{history_str}\n\n"
@@ -105,10 +108,15 @@ class DesignAgent(BaseAgent):
         )
 
     def run(self, clarified_prd: str, contracts: Dict[str, Any]) -> Dict[str, str]:
+        from orchestrator.domain import DomainAdapter
+        domain = DomainAdapter.detect_domain(clarified_prd)
+        lang = DomainAdapter.detect_language(clarified_prd, domain)
+        role_prompt = DomainAdapter.get_agent_domain_prompt("architect", domain, lang)
         prompt = (
+            f"{role_prompt}\n"
             f"Clarified Requirement / PRD:\n{clarified_prd}\n\n"
             f"Repository Contracts:\n{json.dumps(contracts, indent=2)}\n\n"
-            "Produce comprehensive HLD (architecture, modules, component flow) and LLD (functions, data structures, error handling)."
+            f"Produce comprehensive HLD (architecture, modules, component flow) and LLD (functions, data structures, error handling) for {domain.display_name} in {lang.upper()}."
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
@@ -120,18 +128,25 @@ class ArchitectAgent(BaseAgent):
             "You are a Principal Systems Architect. Break down the user requirement and design specs into discrete execution sub-tasks. "
             "Output JSON with this exact schema:\n"
             '{\n  "tasks": [\n'
-            '    {\n      "id": "TASK-1",\n      "title": "short title",\n      "description": "detailed instructions",\n      "assigned_agent": "coder|database|security",\n      "target_file": "relative/file/path.go"\n    }\n  ]\n}',
+            '    {\n      "id": "TASK-1",\n      "title": "short title",\n      "description": "detailed instructions",\n      "assigned_agent": "coder|database|security",\n      "target_file": "relative/file/path"\n    }\n  ]\n}',
             provider=provider,
             tier="primary",
         )
 
     def run(self, clarified_prd: str, hld: str, lld: str, contracts: Dict[str, Any]) -> Dict[str, Any]:
+        from orchestrator.domain import DomainAdapter
+        domain = DomainAdapter.detect_domain(clarified_prd)
+        lang = DomainAdapter.detect_language(clarified_prd, domain)
+        role_prompt = DomainAdapter.get_agent_domain_prompt("architect", domain, lang)
+        ext = ".py" if lang == "python" else ".go" if lang == "go" else ".ts" if lang == "typescript" else ".rs" if lang == "rust" else ".go"
         prompt = (
+            f"{role_prompt}\n"
             f"PRD:\n{clarified_prd}\n\n"
             f"HLD:\n{hld}\n\n"
             f"LLD:\n{lld}\n\n"
             f"Repository Contracts:\n{json.dumps(contracts, indent=2)}\n\n"
-            "Decompose this work into granular execution tasks assigned to specialized agents ('coder', 'database', 'security')."
+            f"Decompose this work into granular execution tasks assigned to specialized agents ('coder', 'database', 'security'). "
+            f"Target file extensions should use '{ext}' matching target language {lang.upper()}."
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
@@ -149,7 +164,16 @@ class PlannerAgent(BaseAgent):
         )
 
     def run(self, task: Dict[str, Any], context: str) -> Dict[str, Any]:
-        prompt = f"Sub-task:\n{json.dumps(task, indent=2)}\n\nArchitecture Context:\n{context}\nSelect agent and formulate instructions."
+        from orchestrator.domain import DomainAdapter
+        domain = DomainAdapter.detect_domain(context)
+        lang = DomainAdapter.detect_language(context, domain)
+        role_prompt = DomainAdapter.get_agent_domain_prompt("orchestrator", domain, lang)
+        prompt = (
+            f"{role_prompt}\n"
+            f"Sub-task:\n{json.dumps(task, indent=2)}\n\n"
+            f"Architecture Context:\n{context}\n"
+            f"Select agent and formulate instructions in {lang.upper()}."
+        )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
 
@@ -175,34 +199,40 @@ class DatabaseAgent(BaseAgent):
         return json.loads(raw)
 
 
-class GoCoderAgent(BaseAgent):
+class PolyglotCoderAgent(BaseAgent):
     def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             "You are a Principal Software Engineer & Test-Driven Development (TDD) Specialist. "
             "When generating or modifying source code, you MUST ALWAYS generate comprehensive unit tests alongside the implementation.\n\n"
             "Language-Specific Testing Guidelines:\n"
+            "- Python: Use 'unittest' (with TestCase, setUp, mock.patch, MagicMock) or 'pytest' parameterized tests.\n"
             "- Go: Use native 'testing' package with idiomatic table-driven test cases (tests := []struct{...}) and "
             "  popular assertion libraries like 'github.com/stretchr/testify/assert' or standard t.Errorf.\n"
-            "- Python: Use 'unittest' (with TestCase, setUp, mock.patch, MagicMock) or 'pytest' parameterized tests.\n"
-            "- Node.js/TypeScript: Use 'jest' (describe/it/expect) or standard 'node:test' + 'node:assert'.\n\n"
+            "- Node.js/TypeScript: Use 'jest' (describe/it/expect) or standard 'node:test' + 'node:assert'.\n"
+            "- Rust: Use standard #[cfg(test)] mod tests with assert! / assert_eq!.\n\n"
             "Testing Scope:\n"
             "- Positive / Happy Path execution.\n"
             "- Negative Path: invalid arguments, error propagation, null/nil guards.\n"
             "- Boundary & Edge Cases: zero values, empty collections, concurrency, maximum thresholds.\n\n"
             "Output JSON mapping repository-relative allowed file paths to complete source strings:\n"
-            '{"path/to/source.go": "<complete source code>", "path/to/source_test.go": "<complete unit test suite>"}',
+            '{"path/to/source": "<complete source code>", "path/to/source_test": "<complete unit test suite>"}',
             provider=provider,
             tier="primary",
         )
 
     def run(self, existing_code: str, selected_arch: str, source_filename: str, test_filename: str, contract: str) -> Dict[str, str]:
+        from orchestrator.domain import DomainAdapter
+        domain = DomainAdapter.detect_domain(selected_arch)
+        lang = DomainAdapter.detect_language(selected_arch, domain)
+        role_prompt = DomainAdapter.get_agent_domain_prompt("coder", domain, lang)
         prompt = (
+            f"{role_prompt}\n"
             f"Existing Code:\n{existing_code}\n\n"
             f"Repository Contract:\n{contract}\n\n"
             f"Selected Architecture / Instructions:\n{selected_arch}\n\n"
             f"Target Source File: '{source_filename}'\n"
             f"Target Unit Test File: '{test_filename}'\n\n"
-            "Generate a JSON object mapping repository-relative allowlisted paths to complete code strings. "
+            f"Generate a JSON object mapping repository-relative allowlisted paths to complete code strings in {lang.upper()}. "
             f"You MUST generate production-grade code for '{source_filename}' AND write complete, idiomatic unit test cases "
             f"in '{test_filename}' pulling famous test libraries (e.g., testify/assert for Go, unittest/pytest for Python, jest for Node)."
         )
@@ -218,28 +248,38 @@ class GoCoderAgent(BaseAgent):
             "Diagnose the root cause of the error. Fix the syntax, logic bugs, or failing unit test assertions. "
             "Ensure unit tests remain thorough and properly assert all cases. "
             "Output JSON mapping repository-relative allowed file paths to complete corrected source strings:\n"
-            '{"path/to/file.go": "<complete corrected code>"}'
+            '{"path/to/file": "<complete corrected code>"}'
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
 
 
-# Alias for polyglot clarity
-CoderAgent = GoCoderAgent
+# Aliases for polyglot clarity and backward compatibility
+GoCoderAgent = PolyglotCoderAgent
+CoderAgent = PolyglotCoderAgent
 
 
 
 class SecurityAuditorAgent(BaseAgent):
     def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
-            "You are an Application Security Auditor for Go. Inspect code for overflow, DoS, zero division, or resource leaks. "
+            "You are an Application Security Auditor. Inspect code for overflow, DoS, zero division, PII leaks, or resource leaks. "
             'Output JSON: {"passed": bool, "issues": [str]}.',
             provider=provider,
             tier="fast",
         )
 
     def run(self, files: Dict[str, str]) -> Dict[str, Any]:
-        prompt = f"Inspect these generated Go files for security vulnerabilities:\n{json.dumps(files, indent=2)}"
+        from orchestrator.domain import DomainAdapter
+        code_sample = "\n".join(files.values())[:3000]
+        domain = DomainAdapter.detect_domain(code_sample)
+        lang = DomainAdapter.detect_language(code_sample, domain)
+        role_prompt = DomainAdapter.get_agent_domain_prompt("security", domain, lang)
+        prompt = (
+            f"{role_prompt}\n"
+            f"Inspect these generated {lang.upper()} files for {domain.display_name} security vulnerabilities, "
+            f"privilege/data leaks, memory issues, injection, and regulatory compliance:\n{json.dumps(files, indent=2)}"
+        )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
 
@@ -252,16 +292,9 @@ Analyze the technical product requirements and system capabilities to formulate 
 
 DOMAIN EXPERTISE & GTM ANALYSIS:
 1. Domain Detection:
-   - Automatically detect the product domain (e.g. Crypto/Web3 Payments, AI DevTools, B2B Fintech SaaS).
+   - Automatically detect the product domain (e.g. Crypto/Web3 Payments, AI DevTools, LegalTech SaaS, CAD/CAM).
 2. Vertical Market Economics:
-   - For Crypto/Web3 Payments:
-     * Fee Disruption: Contrast 0.5%–1% crypto processing fees against traditional 2.5%–3.5% credit card interchange + 1% cross-border FX spread.
-     * Chargeback Elimination: Explain how irreversible blockchain settlement eliminates friendly fraud and merchant chargeback reserves.
-     * Competitor Battlecard: Benchmark directly against BitPay, Coinbase Commerce, Stripe Crypto, Helio, and Solana Pay. Emphasize ASCM's competitive moat: non-custodial merchant self-sovereignty, direct bank off-ramp integrations, zero vendor lock-in, and autonomous multi-repo code generation.
-     * Regional & Regulatory Realities: Differentiate cross-border export payments (instant global settlement, no 3-day SWIFT wire lag) vs domestic Indian corridors (FIU-IND compliance, 1% TDS on VDA).
-     * High-Value User Cohorts: Cross-border digital exporters, Web3 dApps/gaming, international freelancers, high-risk digital goods merchants.
-   - For AI / Developer Tools / Cloud:
-     * Model cascading unit economics, developer time-to-first-commit, enterprise SOC2/on-premise deployment.
+   - Model pricing, customer pain points, competitor battlecards, and ROI drivers tailored to the industry vertical.
 
 Output JSON with this exact schema:
 {
@@ -282,11 +315,15 @@ Output JSON with this exact schema:
         )
 
     def run(self, user_goal: str, clarified_prd: str, contracts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        from orchestrator.domain import DomainAdapter
+        domain = DomainAdapter.detect_domain(f"{user_goal} {clarified_prd}")
+        role_prompt = DomainAdapter.get_agent_domain_prompt("business", domain)
         prompt = (
+            f"{role_prompt}\n"
             f"Feature Goal:\n{user_goal}\n\n"
             f"Clarified PRD:\n{clarified_prd}\n\n"
             f"Repository Context:\n{json.dumps(contracts or {}, indent=2)}\n\n"
-            "Formulate comprehensive Market Strategy, User Cohorts, Competitor Analysis, Value Proposition, and GTM channels."
+            f"Formulate comprehensive Market Strategy, User Cohorts, Competitor Analysis for {domain.display_name}, Value Proposition, and GTM channels."
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
@@ -367,16 +404,21 @@ class ArchitectureReviewAgent(BaseAgent):
         )
 
     def run(self, hld: str = "", lld: str = "", contracts: Optional[Dict[str, Any]] = None, user_goal: str = "", **kwargs) -> Dict[str, Any]:
+        from orchestrator.domain import DomainAdapter
+        domain = DomainAdapter.detect_domain(f"{user_goal} {hld}")
+        lang = DomainAdapter.detect_language(f"{user_goal} {hld}", domain)
+        role_prompt = DomainAdapter.get_agent_domain_prompt("thinking", domain, lang)
         hld_val = hld or kwargs.get("hld_spec", "")
         lld_val = lld or kwargs.get("lld_tasks", "")
         if isinstance(lld_val, list):
             lld_val = json.dumps(lld_val, indent=2)
         prompt = (
+            f"{role_prompt}\n"
             f"User Goal: {user_goal}\n\n"
             f"Repository Contracts:\n{json.dumps(contracts or {}, indent=2)}\n\n"
             f"High-Level Design (HLD):\n{hld_val}\n\n"
             f"Low-Level Design (LLD):\n{lld_val}\n\n"
-            "Conduct an adversarial architecture critique. Identify gaps, SPOF risks, validate NFRs (0-100), "
+            f"Conduct an adversarial architecture critique for {domain.display_name}. Identify domain-specific gaps, SPOF risks, validate NFRs (0-100), "
             "and decide verdict (APPROVE, APPROVE_WITH_REMARKS, REWORK_REQUIRED)."
         )
         raw = self.call(prompt, json_mode=True)
@@ -411,6 +453,7 @@ class CodeReviewAgent(BaseAgent):
         )
 
     def run(self, files: Optional[Dict[str, str]] = None, hld: str = "", lld: str = "", contracts: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        from orchestrator.domain import DomainAdapter
         file_map = files or {}
         if not file_map and "generated_diff" in kwargs:
             target_files = kwargs.get("target_files", ["solution_diff.patch"])
@@ -421,11 +464,16 @@ class CodeReviewAgent(BaseAgent):
             if test_content:
                 file_map["tests/test_solution.py"] = test_content
         hld_val = hld or kwargs.get("hld_spec", "")
+        code_sample = "\n".join(file_map.values())[:3000]
+        domain = DomainAdapter.detect_domain(f"{hld_val} {code_sample}")
+        lang = DomainAdapter.detect_language(f"{hld_val} {code_sample}", domain)
+        role_prompt = DomainAdapter.get_agent_domain_prompt("code_review", domain, lang)
         prompt = (
+            f"{role_prompt}\n"
             f"HLD Context:\n{hld_val[:1500]}\n\n"
             f"LLD Context:\n{lld[:1500]}\n\n"
             f"Generated Files & Unit Tests:\n{json.dumps(file_map, indent=2)}\n\n"
-            "Perform an adversarial, unbiased code review. Check syntax, error handling, security, performance, and unit test assertions. "
+            f"Perform an adversarial, unbiased code review for {domain.display_name} in {lang.upper()}. Check syntax, error handling, security, performance, and unit test assertions. "
             "Compute overall_score (0-100), security_grade, test_coverage_assessment, findings, and decide if approved."
         )
         raw = self.call(prompt, json_mode=True)

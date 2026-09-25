@@ -18,6 +18,7 @@ class DomainProfile(BaseModel):
     domain_id: str
     display_name: str
     category_summary: str
+    primary_language: str = "python"
     core_primitives: List[str] = Field(default_factory=list)
     grilling_dimensions: List[str] = Field(default_factory=list)
     architectural_patterns: List[str] = Field(default_factory=list)
@@ -26,14 +27,76 @@ class DomainProfile(BaseModel):
     competitor_archetypes: List[Dict[str, str]] = Field(default_factory=list)
     preferred_models: Dict[str, str] = Field(default_factory=dict)
     unit_test_frameworks: Dict[str, str] = Field(default_factory=dict)
+    role_titles: Dict[str, str] = Field(default_factory=dict)
 
 
 # Catalog of pre-configured vertical domains
 VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
+    "LEGALTECH_COMPLIANCE": DomainProfile(
+        domain_id="LEGALTECH_COMPLIANCE",
+        display_name="LegalTech, Regulatory Engineering & Compliance Automation",
+        category_summary="Contract lifecycle automation, clause extraction, redlining, regulatory compliance (GDPR/HIPAA/SEC), attorney-client privilege protection, and immutable audit trails.",
+        primary_language="python",
+        core_primitives=[
+            "Contract AST & Clause Extraction", "Statutory Jurisdictions & Rule Parsing",
+            "Redlining & Semantic Diffing", "Data Residency & Attorney-Client Privilege",
+            "Audit Trails & Immutable Chain-of-Custody", "Dual-Key Authorization & Signoff Workflow",
+            "Privilege Tagging & Redaction", "Regulatory Citation Indexing"
+        ],
+        grilling_dimensions=[
+            "1. Jurisdiction & Statutory Scope: US Federal/State, EU GDPR / EU AI Act, Indian BNS/IT Act, or cross-border multi-jurisdiction?",
+            "2. Contract Ingestion & Parsing: Unstructured PDF/Word (DocX) with OCR vs structured JSON schema vs smart legal contract markup?",
+            "3. Confidentiality & Privilege: Strict zero-retention API policies, field-level encryption at rest, data sovereignty, and attorney-client privilege safeguards?",
+            "4. Legal Reasoning & Clause Verification: Deterministic rule engines vs LLM clause classification with human-in-the-loop counsel sign-off?",
+            "5. Liability & UPL Disclaimers: Enforcing Unauthorized Practice of Law (UPL) guardrails, liability caps, and jurisdiction-specific audit logs?"
+        ],
+        architectural_patterns=[
+            "Clause-Level AST Transformer & Classifier",
+            "Zero-Retention Cryptographic Vault",
+            "Immutable Append-Only Audit Ledger",
+            "Dual-Key Authorization & Signoff Workflow"
+        ],
+        standard_libraries={
+            "python": ["spacy", "pydantic", "python-docx", "pypdf", "cryptography", "fastapi"],
+            "node": ["pdf-parse", "mammoth", "crypto", "@types/node"],
+            "go": ["github.com/ledongthuc/pdf", "crypto/aes", "crypto/sha256"]
+        },
+        safety_and_nfr_focus=[
+            "Zero retention of privileged legal documents in public model logs",
+            "Field-level AES-256-GCM encryption for client confidential clauses",
+            "Audit logging of all contract modifications with cryptographic hash signatures",
+            "Deterministic clause validation to prevent hallucinated citations"
+        ],
+        competitor_archetypes=[
+            {"competitor": "Harvey AI", "limitations": "Closed invite-only enterprise pricing, opaque proprietary models, high lock-in.", "ascm_advantage": "Self-hosted, transparent Git-native pipelines with inspectable open-source code and BYOK privacy."},
+            {"competitor": "Ironclad / Robin AI", "limitations": "Rigid CLM workflow walls, difficult to customize with custom code or internal microservices.", "ascm_advantage": "Autonomous generation of dedicated, deployable legal microservices directly into engineering repos."}
+        ],
+        preferred_models={
+            "coder": "gpt-4o",
+            "reviewer": "claude-3-5-sonnet",
+            "architect": "gemini-2.5-pro",
+            "product": "gemini-2.5-flash",
+            "business": "gemini-2.5-flash"
+        },
+        unit_test_frameworks={"python": "unittest", "node": "jest", "go": "testing"},
+        role_titles={
+            "product": "Specialized LegalTech & Regulatory Compliance Expert",
+            "architect": "Lead Legal Systems Architect & Regulatory Framework Lead",
+            "thinking": "Senior Legal Systems Architecture Critic & Compliance Invariant Auditor",
+            "code_review": "Adversarial Senior LegalTech Code Reviewer & Privilege Security Specialist",
+            "orchestrator": "Lead Legal & Technical Workflow Orchestrator",
+            "planner": "LegalTech Execution Planner & Task Coordinator",
+            "coder": "Principal LegalTech Software Engineer & TDD Specialist",
+            "business": "Chief Commercial Officer & LegalTech GTM Strategist",
+            "security": "LegalTech Data Privacy & Regulatory Security Auditor"
+        }
+    ),
+
     "CAD_CAM": DomainProfile(
         domain_id="CAD_CAM",
         display_name="Computer-Aided Design (CAD) & Manufacturing (CAM)",
         category_summary="Parametric 3D modeling, geometric kernels, CNC toolpath generation, G-code synthesis, and physical tolerance engineering.",
+        primary_language="python",
         core_primitives=[
             "Boundary Representation (B-Rep)", "NURBS curves & surfaces", "Polygon Meshes (STL/OBJ)",
             "STEP/IGES exchange formats", "G-code post-processing", "3-axis/5-axis toolpaths",
@@ -74,13 +137,25 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
             "architect": "gemini-2.5-pro",     # Deep context reasoning over 3D topology
             "product": "gemini-2.5-flash",     # Low-latency interactive stakeholder grilling
         },
-        unit_test_frameworks={"python": "unittest", "go": "testing", "node": "jest"}
+        unit_test_frameworks={"python": "unittest", "go": "testing", "node": "jest"},
+        role_titles={
+            "product": "Specialized CAD/CAM & Geometric Manufacturing Expert",
+            "architect": "Lead CAD/CAM Geometry Systems Architect",
+            "thinking": "Senior CAD/CAM Architecture Critic & Physical Kinematics Auditor",
+            "code_review": "Adversarial Senior CNC & Toolpath Code Reviewer",
+            "orchestrator": "Lead CAD/CAM Manufacturing Orchestrator",
+            "planner": "CNC Toolpath Planning & Task Coordinator",
+            "coder": "Principal CAD/CAM Algorithms Engineer & Geometric TDD Specialist",
+            "business": "Chief Commercial Officer & Industrial CAD/CAM GTM Strategist",
+            "security": "Machining Safety & CNC Collision Auditor"
+        }
     ),
 
     "FINTECH_CRYPTO": DomainProfile(
         domain_id="FINTECH_CRYPTO",
         display_name="Crypto & Web3 Payment Infrastructure",
         category_summary="Non-custodial cryptocurrency checkout, blockchain settlement, double-spend prevention, and timing-safe signature verification.",
+        primary_language="python",
         core_primitives=[
             "EVM & Solana address validation", "HMAC-SHA256 signature verification", "Replay protection",
             "Mempool watcher & block finality", "Crypto-to-fiat conversion rate locks", "Non-custodial treasuries"
@@ -118,6 +193,18 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
             "reviewer": "claude-3-5-sonnet",
             "architect": "gemini-2.5-pro",
             "product": "gemini-2.5-flash",
+        },
+        unit_test_frameworks={"python": "unittest", "go": "testing", "node": "jest"},
+        role_titles={
+            "product": "Specialized Crypto, Web3 & FinTech Payments Expert",
+            "architect": "Lead Crypto Protocol & Settlement Systems Architect",
+            "thinking": "Senior Web3 Architecture Critic & Smart Contract Auditor",
+            "code_review": "Adversarial Senior Blockchain & Cryptographic Code Reviewer",
+            "orchestrator": "Lead Web3 Financial Orchestrator",
+            "planner": "Crypto Gateway Execution Planner",
+            "coder": "Principal Blockchain & FinTech Software Engineer & TDD Specialist",
+            "business": "Chief Commercial Officer & Web3 Payments GTM Strategist",
+            "security": "Cryptographic Protocol & Smart Contract Security Auditor"
         }
     ),
 
@@ -125,6 +212,7 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
         domain_id="HEALTHCARE_MEDTECH",
         display_name="Healthcare & MedTech Systems",
         category_summary="Clinical data interoperability, HL7/FHIR protocols, DICOM medical imaging, HIPAA privacy, and SaMD validation.",
+        primary_language="python",
         core_primitives=[
             "HL7 v2 & FHIR R4 resources", "DICOM medical image parsing", "HIPAA/HITECH audit logging",
             "EHR integration (Epic/Cerner)", "De-identification / PHI redaction", "FDA 510(k) SaMD design controls"
@@ -160,6 +248,18 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
             "reviewer": "claude-3-5-sonnet",
             "architect": "gemini-2.5-pro",
             "product": "gemini-2.5-flash",
+        },
+        unit_test_frameworks={"python": "unittest", "go": "testing", "node": "jest"},
+        role_titles={
+            "product": "Specialized Healthcare & MedTech Interoperability Expert",
+            "architect": "Lead Health Informatics Architect & HIPAA Compliance Lead",
+            "thinking": "Senior Clinical Systems Architecture Critic & SaMD Auditor",
+            "code_review": "Adversarial Senior Clinical Software Reviewer & PHI Security Auditor",
+            "orchestrator": "Lead Healthcare & Clinical Workflow Orchestrator",
+            "planner": "Clinical Integration Planner & Task Coordinator",
+            "coder": "Principal Health Informatics Software Engineer & TDD Specialist",
+            "business": "Chief Commercial Officer & MedTech GTM Strategist",
+            "security": "HIPAA & Patient Health Information (PHI) Security Auditor"
         }
     ),
 
@@ -167,6 +267,7 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
         domain_id="ROBOTICS_EMBEDDED",
         display_name="Robotics, IoT & Embedded Systems",
         category_summary="Real-time control loops, sensor fusion, microcontrollers, ROS2 nodes, CAN/UART bus protocols, and actuator telemetry.",
+        primary_language="python",
         core_primitives=[
             "Real-Time Operating System (RTOS)", "ROS2 (Robot Operating System)", "CAN / UART / I2C / SPI buses",
             "Sensor Fusion (IMU, LiDAR, Encoders)", "PID / State-space control loops", "Low-power sleep states"
@@ -202,6 +303,18 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
             "reviewer": "claude-3-5-sonnet",
             "architect": "gpt-4o",
             "product": "gemini-2.5-flash",
+        },
+        unit_test_frameworks={"python": "unittest", "go": "testing", "node": "jest"},
+        role_titles={
+            "product": "Specialized Robotics, IoT & Embedded Systems Expert",
+            "architect": "Lead Robotics Systems & Real-Time Control Architect",
+            "thinking": "Senior Real-Time Architecture Critic & Hardware Safety Auditor",
+            "code_review": "Adversarial Senior Embedded Systems & Firmware Reviewer",
+            "orchestrator": "Lead Robotics & Embedded Systems Orchestrator",
+            "planner": "Robotics Control Loop Planner & Task Coordinator",
+            "coder": "Principal Embedded Systems Engineer & Low-Level TDD Specialist",
+            "business": "Chief Commercial Officer & Industrial Automation GTM Strategist",
+            "security": "Hardware Interlock & Embedded Firmware Security Auditor"
         }
     ),
 
@@ -209,6 +322,7 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
         domain_id="DEVTOOLS_COMPILER",
         display_name="Developer Tools, Compilers & Systems Infrastructure",
         category_summary="Abstract Syntax Tree (AST) parsing, intermediate representations, type checkers, CLI tools, and high-throughput runtimes.",
+        primary_language="python",
         core_primitives=[
             "Lexer & Parser (CFG / PEG)", "AST / Concrete Syntax Tree", "Intermediate Representation (IR)",
             "Static Analysis & Linting", "CLI Argument & Subcommand routing", "Hot reloading & file watchers"
@@ -243,6 +357,18 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
             "reviewer": "claude-3-5-sonnet",
             "architect": "gpt-4o",
             "product": "gemini-2.5-flash",
+        },
+        unit_test_frameworks={"python": "unittest", "go": "testing", "node": "jest"},
+        role_titles={
+            "product": "Specialized Developer Tools, Compilers & Systems Infrastructure Expert",
+            "architect": "Lead Language Runtimes & Compiler Architect",
+            "thinking": "Senior Compilers & AST Architecture Critic",
+            "code_review": "Adversarial Senior Compiler & Systems Code Reviewer",
+            "orchestrator": "Lead Developer Tooling Orchestrator",
+            "planner": "Compiler Pipeline Planner & Pass Coordinator",
+            "coder": "Principal Compilers & Developer Tools Software Engineer & TDD Specialist",
+            "business": "Chief Commercial Officer & DevTools GTM Strategist",
+            "security": "AST Sanitization & Memory Safety Auditor"
         }
     ),
 
@@ -250,6 +376,7 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
         domain_id="AI_ML_SYSTEMS",
         display_name="AI, Machine Learning & Agentic Infrastructure",
         category_summary="Autonomous agent orchestration, prompt caching, RAG retrieval, vector embeddings, streaming inference, and token budgeting.",
+        primary_language="python",
         core_primitives=[
             "Model cascading & fallbacks", "RAG vector retrieval", "Prompt caching & token accounting",
             "Streaming Server-Sent Events (SSE)", "Tool calling / Function calling", "Evaluation benchmarks"
@@ -284,6 +411,18 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
             "reviewer": "claude-3-5-sonnet",
             "architect": "gemini-2.5-pro",
             "product": "gemini-2.5-flash",
+        },
+        unit_test_frameworks={"python": "unittest", "go": "testing", "node": "jest"},
+        role_titles={
+            "product": "Specialized AI, Machine Learning & Agentic Systems Expert",
+            "architect": "Lead AI Systems Architect & Multi-Agent Designer",
+            "thinking": "Senior AI Systems Architecture Critic & Guardrails Auditor",
+            "code_review": "Adversarial Senior AI Code Reviewer & Model Safety Specialist",
+            "orchestrator": "Lead Autonomous Agent Orchestrator",
+            "planner": "Agentic Execution Planner & Token Budget Coordinator",
+            "coder": "Principal AI Infrastructure Software Engineer & TDD Specialist",
+            "business": "Chief Commercial Officer & Enterprise AI GTM Strategist",
+            "security": "Prompt Injection & Model Privacy Security Auditor"
         }
     ),
 
@@ -291,6 +430,7 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
         domain_id="GENERIC_MICROSERVICE",
         display_name="Enterprise Web Application & Microservice",
         category_summary="REST/GraphQL APIs, multi-tenant databases, authentication, background workers, and horizontal scalability.",
+        primary_language="go",
         core_primitives=[
             "REST / gRPC / GraphQL endpoints", "Relational & NoSQL persistence", "JWT / OAuth2 authentication",
             "Background job queues", "Health checks & metrics (/healthz, /metrics)", "Horizontal auto-scaling"
@@ -325,6 +465,18 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
             "reviewer": "claude-3-5-sonnet",
             "architect": "gemini-2.5-pro",
             "product": "gemini-2.5-flash",
+        },
+        unit_test_frameworks={"python": "unittest", "go": "testing", "node": "jest"},
+        role_titles={
+            "product": "Specialized Enterprise Software & Systems Product Expert",
+            "architect": "Lead Cloud Systems Architect & Distributed Systems Principal",
+            "thinking": "Senior Architecture Critic & NFR Systems Auditor",
+            "code_review": "Adversarial Senior Principal Code Reviewer",
+            "orchestrator": "Lead Enterprise Software Orchestrator",
+            "planner": "Microservices Execution Planner & Task Coordinator",
+            "coder": "Principal Software Engineer & TDD Specialist",
+            "business": "Chief Commercial Officer & Enterprise SaaS GTM Strategist",
+            "security": "Application Security & OWASP Top 10 Auditor"
         }
     )
 }
@@ -333,12 +485,22 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
 class DomainAdapter:
     """
     Intelligent engine that detects the domain of any user request and injects
-    domain-expert intelligence and optimal model routing across the squad.
+    domain-expert intelligence, dynamic role titles, coding languages, and optimal model routing across the squad.
     """
 
     @classmethod
     def detect_domain(cls, user_goal: str, context: Optional[str] = None) -> DomainProfile:
         combined = f"{user_goal} {context or ''}".lower()
+
+        # LegalTech / Regulatory Compliance / Contracts / Law
+        legal_keywords = [
+            "legal", "law", "laws", "lawyer", "lawyers", "attorney", "attorneys", "contract", "contracts",
+            "clause", "clauses", "nda", "ndas", "gdpr", "regulatory", "compliance", "ediscovery",
+            "litigation", "redline", "redlining", "terms of service", "tos", "privacy policy",
+            "court", "statute", "statutes", "statutory", "trademark", "patent", "bar association", "paralegal"
+        ]
+        if any(re.search(rf"\b{re.escape(k)}\b", combined) for k in legal_keywords):
+            return VERTICAL_DOMAINS["LEGALTECH_COMPLIANCE"]
 
         # CAD / CAM / 3D Graphics / CNC
         if any(k in combined for k in [
@@ -387,20 +549,43 @@ class DomainAdapter:
         return VERTICAL_DOMAINS["GENERIC_MICROSERVICE"]
 
     @classmethod
-    def get_agent_domain_prompt(cls, agent_role: str, profile: DomainProfile) -> str:
+    def detect_language(cls, user_goal: str, profile: DomainProfile) -> str:
         """
-        Dynamically formats a specialized system prompt preamble for any agent in any domain.
+        Detects requested programming language from user input, or falls back to profile's primary language.
         """
+        goal_lower = user_goal.lower()
+        if any(k in goal_lower for k in ["in python", "using python", "python3", "python code", "lang:python"]):
+            return "python"
+        if any(k in goal_lower for k in ["in go", "using go", "golang", "in golang", "lang:go"]):
+            return "go"
+        if any(k in goal_lower for k in ["in typescript", "using typescript", "in ts", "in javascript", "in js", "in node"]):
+            return "typescript"
+        if any(k in goal_lower for k in ["in rust", "using rust", "rustlang"]):
+            return "rust"
+        if any(k in goal_lower for k in ["in c++", "using c++", "cpp", "in c "]):
+            return "cpp"
+        return profile.primary_language
+
+    @classmethod
+    def get_agent_domain_prompt(cls, agent_role: str, profile: DomainProfile, language: Optional[str] = None) -> str:
+        """
+        Dynamically formats a specialized system prompt preamble for any agent in any domain,
+        explicitly injecting the domain expert persona (e.g. Legal Expert, CAD Expert, etc.)
+        and configuring the target programming language.
+        """
+        lang = language or profile.primary_language
+        role_key = agent_role.lower().replace("agent", "").strip()
+        role_title = profile.role_titles.get(role_key) or profile.role_titles.get(agent_role.lower()) or f"Specialized {profile.display_name} Principal"
         primitives_str = ", ".join(profile.core_primitives)
         grilling_str = "\n".join(f"  * {q}" for q in profile.grilling_dimensions)
         nfr_str = ", ".join(profile.safety_and_nfr_focus)
 
         return (
-            f"You are operating as a Specialized World-Class Principal in the domain of:\n"
-            f"[{profile.display_name.upper()}]\n"
-            f"Domain Summary: {profile.category_summary}\n\n"
+            f"You are operating as the [{role_title.upper()}] in the domain of [{profile.display_name.upper()}].\n"
+            f"Domain Focus: {profile.category_summary}\n"
+            f"Target Implementation Language: {lang.upper()}\n\n"
             f"CORE DOMAIN PRIMITIVES & CONCEPTS:\n{primitives_str}\n\n"
-            f"CRITICAL GRILLING & ARCHITECTURAL DIMENSIONS:\n{grilling_str}\n\n"
+            f"CRITICAL DOMAIN GRILLING & ARCHITECTURAL DIMENSIONS:\n{grilling_str}\n\n"
             f"NON-NEGOTIABLE SAFETY & NFR STANDARDS:\n{nfr_str}\n"
         )
 
@@ -411,3 +596,4 @@ class DomainAdapter:
         """
         # Default recommendations
         return profile.preferred_models.copy()
+
