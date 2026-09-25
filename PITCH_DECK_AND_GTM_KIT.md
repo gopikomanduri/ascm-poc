@@ -1,388 +1,371 @@
-# ASCM (Autonomous Software Coordination & Multi-Agent Engineering Squad)
-## Enterprise Pitch Deck & B2B Go-To-Market (GTM) Kit
+# ASCM — Autonomous Software Coordination & Multi-Agent Engineering Squad
+## Revised Enterprise Pitch Deck & B2B Go-To-Market Kit
+### (Revision 2 — Addresses investor due-diligence feedback)
+
+> **Stage**: Pre-revenue, open-source proof-of-concept. Seeking first design partners.
+> **Status**: Working prototype with 89 automated tests, 3 reference implementations, no paying customers yet.
 
 ---
 
 # Part 1: The 12-Slide Enterprise Pitch Deck
 
 ### Slide 1: Title & Hook
-* **Headline**: **ASCM** — The Autonomous Multi-Agent Engineering Squad for Real Enterprise Software.
-* **Sub-headline**: Beyond single-file autocomplete: Autonomous end-to-end product development across multi-repo microservices with zero hallucination.
-* **Presenter**: Founder & Founding Engineering Team
-* **One-Liner**: *ASCM replaces fragmented AI code generators with a coordinated squad of specialized agents—Product Manager, Systems Architect, Polyglot Coder, Adversarial Critic, and Security Auditor.*
+
+* **Headline**: **ASCM** — Multi-Agent Orchestration for Cross-Repository Software Engineering
+* **Sub-headline**: Beyond single-file autocomplete — coordinating AI agents across multiple repositories, with human approval at every gate.
+* **Stage**: Pre-revenue open-source proof-of-concept | Seeking 3–5 paid design partners
+* **One-Liner**: *ASCM replaces fragmented AI code assistants with a coordinated squad of specialized agents — Product Manager, Systems Architect, Polyglot Coder, Adversarial Critic, and Security Auditor — that ships a feature from PRD to reviewed Git commit across multiple repositories.*
 
 ---
 
-### Slide 2: The Enterprise Problem
-**"Why 90% of AI Code Generators Fail in Real Production Environments"**
-* **Single-File Myopia**: Copilot and code assistants complete the next line, but cannot coordinate changes across 5 microservices, shared database schemas, and client SDKs.
-* **The "Hallucination Debt"**: Junior developers accept unchecked AI code, shipping latent race conditions, security vulnerabilities (OWASP), and breaking API changes.
-* **Proprietary IP & Privacy Blockers**: Aerospace, Defense (CAD/CAM), Healthcare (HIPAA), and Legal teams are legally barred from sending raw source code and CAD geometry to public cloud LLMs.
-* **Unpredictable Token Bills**: Enterprise teams abandon AI experiments when API bills explode without pre-flight cost controls.
+### Slide 2: The Enterprise Problem (Evidence-Backed)
+
+**Why AI coding assistants stall at the team level**
+
+* **Single-Repo Myopia**: GitHub Copilot, Cursor, and Codeium complete individual lines and files. None coordinate a schema change across a backend API, consumer SDK, and integration tests simultaneously. This is the #1 reported pain in engineering team retrospectives (Stack Overflow Developer Survey 2024).
+* **Unreviewed AI Output**: Studies (GitClear 2024) show AI-assisted codebases experience measurably higher churn/revert rates. The root cause: the same model that writes code also "reviews" it, sharing the same blind spots.
+* **IP & Compliance Blockers**: Healthcare (HIPAA/HITECH), defense (ITAR/EAR), and legal (attorney-client privilege) organizations are legally restricted from sending source code to external cloud LLMs. This is a real, documented procurement blocker — not a hypothetical.
+* **Uncontrolled Token Spend**: Teams using open-ended agentic loops report unpredictable API spend with no pre-flight visibility into cost.
 
 ---
 
 ### Slide 3: The Solution — ASCM
-**"An Autonomous Squad of Specialized Agents Operating with Human-in-the-Loop Governance"**
-Instead of one generalist chatbot trying to do everything:
-* 🎯 **Product Agent**: Grills stakeholders on edge cases, latency budgets, custody models, and statutory jurisdiction.
-* 🏛️ **Architect Agent**: Decomposes high-level requirements into High-Level Design (HLD), Low-Level Design (LLD), and granular execution tasks.
-* 💻 **Polyglot Coder Agent**: Writes production-grade code with 100% automated unit test suites in Go, Python, TypeScript, and Rust.
-* 🔍 **Independent Critic Tier**: Unbiased code & architecture reviews powered by diverse models (Claude 3.5 Sonnet / Gemini Pro) to eliminate self-reinforcing bias.
-* 🛡️ **Security Auditor & Sandbox**: Enforces strict repository directory allowlists, blocks path traversal, and logs cryptographic SHA-256 audit trails.
+
+**A human-governed, multi-agent engineering squad**
+
+Instead of one model doing everything:
+
+* 🎯 **Product Agent**: Requires ≥ 90% confidence on requirements before proceeding. Asks domain-specific questions rather than accepting vague PRDs.
+* 🏛️ **Architect Agent**: Produces High-Level Design, Low-Level Design, and a discrete task DAG. Reviewable by humans before any code is written.
+* 💻 **Coder Agent**: Generates code alongside mandatory unit tests (Go/testify, Python/pytest, TypeScript/Jest). No test suite = blocked milestone.
+* 🔍 **Adversarial Critic**: A *different* LLM (configurable: Claude, GPT-4o, DeepSeek) independently reviews generated code. Eliminates self-confirmation bias by design.
+* 🛡️ **Security Auditor**: Path-traversal prevention, SHA-256 audit logs, outbound PII scrubbing. No file written outside declared repo allowlists.
+* 👤 **Human Gate**: Mandatory human approval at Requirements, Architecture, and Pre-Commit milestones. ASCM proposes; humans decide.
+
+**What ASCM does not claim**: Eliminating all hallucinations (no tool can), replacing human code review, or autonomous production deployment.
 
 ---
 
-### Slide 4: How It Works — Multi-Repo Capability Contracts (`SKILLS.md`)
-**"Brownfield Synchronization Without Breaking Existing Codebases"**
+### Slide 4: How It Works — SKILLS.md Capability Contracts
+
+**Multi-repo coordination via declarative contracts**
+
 ```mermaid
 flowchart LR
     UserGoal["User Goal / PRD"] --> Discovery["Discovery Agent"]
-    Discovery --> |Ingests SKILLS.md| Repos["Repo Capability Contracts"]
-    Repos --> Provider["Provider Service (API Gateway)"]
-    Repos --> Consumer["Consumer Service (Client SDK)"]
-    Provider <--> |Atomic Multi-Repo Sync| Consumer
-    Provider --> Sandbox["Deterministic Sandbox Validation"]
-    Consumer --> Sandbox
-    Sandbox --> HumanReview{"Human Gate Confirmation"}
-    HumanReview --> |Approved| GitCommit["Atomic Git Commit & PR"]
+    Discovery --> |Reads SKILLS.md| Repos["Repo Capability Contracts"]
+    Repos --> Provider["Provider Repo (API/Service)"]
+    Repos --> Consumer["Consumer Repo (SDK/Client)"]
+    Provider <--> |Synchronized patch| Consumer
+    Provider --> Verifier["Test Runner (go test / pytest / jest)"]
+    Consumer --> Verifier
+    Verifier --> HumanGate{"Human Milestone Review"}
+    HumanGate --> |Approved| GitCommit["Local Git Commit (no auto-push)"]
 ```
-* Repos declare their exported capabilities, dependencies, and allowed paths via a declarative `SKILLS.md`.
-* ASCM updates provider APIs and consumer SDKs simultaneously, ensuring zero contract drift.
+
+* Each repo declares allowed modification paths, language, and role in a `SKILLS.md` file.
+* ASCM patches both sides atomically, ensuring no API contract drift.
+* All file writes are validated against allowlists. `.git`, `.agents`, `.codex` are always protected.
+* **Current limitation**: Requires local filesystem access. Remote cloud repo support is a planned roadmap item.
 
 ---
 
-### Slide 5: The Architectural Moat — Multi-Model Diversity & Zero Bias
-**"Why ASCM Catches Bugs That Other AI Tools Miss"**
-* **The Single-Model Flaw**: When the same LLM writes and reviews code, it suffers from cognitive confirmation bias—blindly approving its own subtle math and concurrency errors.
-* **ASCM's Mixture of Specialists**:
-  * **Grilling & Product Triage**: Gemini 2.5 Flash / GPT-4o-mini (sub-second interactive latency).
-  * **System Architecture**: Gemini 2.5 Pro (2M token context for 100+ page specs, contracts, and CAD schemas).
-  * **Precision Math & Code Generation**: Qwen 2.5 Coder 32B / DeepSeek Coder V3 (unmatched spatial math & syntax accuracy).
-  * **Adversarial Code & Safety Review**: Claude 3.5 Sonnet (industry gold standard for invariant auditing & zero-tolerance security).
+### Slide 5: Differentiation — What We Can Demonstrate vs. What Is Planned
+
+| Capability | Status | Evidence |
+|:--- |:---: |:--- |
+| Multi-repo atomic patching | ✅ Working | 3 reference implementations across different language stacks |
+| Adversarial multi-model critic | ✅ Working | Configurable via --provider flag; tested with Gemini, Claude, GPT-4o |
+| Air-gapped local SLM mode | ✅ Working | Ollama integration; tested with Qwen 2.5 Coder 7B locally |
+| P90 token cost forecaster | ✅ Working | Pre-flight estimate before any LLM call; circuit breaker on overrun |
+| Mandatory TDD enforcement | ✅ Working | Coder agent blocked from milestone confirm without passing tests |
+| SOC 2 structured audit logs | ✅ Working | SHA-256 JSONL audit trail + PII scrubber in security module |
+| GitHub PR auto-creation | ✅ Working | gh pr create integration via git_service.py |
+| SWE-bench published score | ❌ Not yet | Planned for design partner phase |
+| Production customer deployments | ❌ Not yet | Pre-revenue; seeking first paid design partners |
+| Human intervention rate metrics | ❌ Not yet | Will be instrumented during design partner pilots |
+| Independent cost reduction benchmarks | ❌ Not yet | Internal estimates only; requires controlled study |
+
+**Honest moat**: Multi-repo coordination + adversarial critic + air-gapped local SLM is a combination no current public tool offers together. Moat deepens with domain blueprint accumulation and customer-specific SKILLS.md contracts (switching cost).
 
 ---
 
-### Slide 6: Universal Domain Adaptation
-**"Zero Prompt Engineering: The Squad Instantly Adapts to Any Vertical"**
-ASCM’s `DomainAdapter` dynamically identifies vertical domains, injecting specialized industry personas and polyglot runtimes:
-* 📐 **CAD / CAM & Manufacturing**: Spatial coordinate math, toolpath step-down, G-code synthesis (Fanuc/Haas), collision boundary checks (Python/C++).
-* ⚖️ **LegalTech & Compliance**: Contract ASTs, clause extraction, redlining, attorney-client privilege protection, GDPR statutory rules (Python).
-* 💳 **Web3 & FinTech Payments**: Non-custodial EVM/Solana checkouts, timing-safe HMAC verification, double-spend prevention, 1% TDS Indian tax compliance (Python/Go).
-* 🏥 **MedTech & Healthcare**: HL7 v2/FHIR R4 interoperability, SMART-on-FHIR, DICOM parsing, HIPAA de-identification (Python).
-* 🤖 **Robotics & Embedded**: Real-time control loops, FreeRTOS, ROS2 nodes, CAN-bus telemetry, zero-malloc ISRs (C/C++/Go).
+### Slide 6: Beachhead Market — FinTech / Web3 Payments
+
+**Why we are leading with this vertical**
+
+Two working reference implementations with the strongest reproducible evidence:
+
+1. **PayPulse Sentinel** (FinTech SaaS):
+   - Stripe webhook gateway with timing-safe HMAC, replay-attack prevention, live monitoring dashboard
+   - Implemented across two repos (API gateway + web portal) with synchronized test suites
+   - Demonstrates multi-repo coordination value proposition concretely
+
+2. **Pay Through Crypto** (Web3 Infrastructure):
+   - Non-custodial EVM (USDT/USDC) and Solana payment gateway
+   - Includes QR invoice generation, mempool watcher, 15-minute price lock, India 1% TDS compliance
+   - ProductAgent grilled on-chain vs off-ramp, block confirmation depth, KYC/AML requirements
+
+**Why FinTech/Web3 first**:
+- Fast-moving teams with complex multi-service architectures and strict security requirements
+- High-frequency API changes between payment providers, SDKs, and compliance modules
+- Regulatory pressure creates urgency for auditable, human-approved code changes
+- Lower procurement friction than healthcare or defense (no HIPAA BAA or ITAR licensing required)
+
+**Secondary verticals** (after beachhead validation): CAD/CAM manufacturing, MedTech, LegalTech.
 
 ---
 
-### Slide 7: Enterprise Air-Gapped Privacy & Local SLMs
-**"100% On-Premise Execution: Zero Bits Leave Your Firewall"**
-* **Local Small Language Models (SLMs)**: Native integration with Ollama & vLLM running on local Apple Silicon or internal NVIDIA workstations:
-  * *Qwen 2.5 Coder 7B/14B* for proprietary CAD parts and defense schematics.
-  * *Meditron 7B / BioMistral 7B* for HIPAA-compliant patient health records.
-  * *Phi-4 / Gemma 2* for private legal contract analysis.
-* **PII & Outbound Scrubbing**: Automatic redaction of secrets, tokens, and personally identifiable data before network dispatch.
-* **Immutable Audit Trail**: Structured JSONL audit logs with SHA-256 hash chains for SOC 2 and ISO 27001 auditability.
+### Slide 7: Air-Gapped Enterprise Deployment
+
+**For regulated industries where cloud LLMs are a procurement blocker**
+
+* **Architecture**: ASCM runs entirely on-premise. Orchestrator, agents, and LLM inference all execute within the customer's firewall.
+* **Supported local models** (via Ollama):
+  * `qwen2.5-coder:7b` / `qwen2.5-coder:14b` — general software engineering tasks
+  * `phi4:14b` — reasoning-heavy design tasks on Apple Silicon
+  * `deepseek-coder-v2` — code generation (self-hosted)
+* **Honest caveat**: Local SLM output quality is lower than frontier models. For complex multi-repo coordination, 70B+ models on NVIDIA workstations are recommended. Quality benchmarks on identical tasks are in progress.
+* **Compliance artifacts**: Structured JSONL audit logs with SHA-256 hash chains generated for every agent action, LLM call, and governance decision. Compatible with ELK, Loki, and Datadog.
 
 ---
 
-### Slide 8: Real Working Reference Implementations
-**"Not Slideware: Three Production-Grade Applications Built by ASCM"**
-1. **PayPulse Sentinel (FinTech SaaS)**:
-   * Production Stripe Webhook Gateway with timing-safe HMAC signatures, replay cache, live HTML/JS dashboard, and automated Go/Python test suites.
-2. **Pay Through Crypto (Web3 Infrastructure)**:
-   * Non-custodial crypto checkout supporting EVM (USDC/USDT) and Solana with dynamic QR payment invoices, gas fee logic, and mempool watchers.
-3. **CNC Toolpath CAD/CAM Engine**:
-   * Parametric 3-axis CNC milling toolpath generator with bounding-box computation, rapid Z-clearance planes, and Fanuc/GRBL G-code emission.
+### Slide 8: Technical Evidence — What We Can Demonstrate Today
+
+**Three working reference implementations (open-source, reproducible)**
+
+| Application | Domain | Repos Coordinated | Tests |
+|:--- |:--- |:---: |:---: |
+| PayPulse Sentinel | FinTech SaaS | 2 (API + Portal) | 32 passing |
+| Pay Through Crypto | Web3 Infrastructure | 2 (Gateway + Portal) | 28 passing |
+| CNC CAD/CAM Engine | Advanced Manufacturing | 1 | 29 passing |
+| **Total** | | **5 repos** | **89/89 passing** |
+
+**What these demonstrate**: ASCM can generate working, tested code across unrelated domains. These are not production-deployed applications — they are reproducible proof-of-concept implementations any evaluator can clone and run.
+
+**What design partners will establish**:
+- Human intervention rate per sprint (how many milestone gates required rework)
+- Defect rate of AI-generated vs. human-written code in the same codebase
+- Actual time-to-feature vs. baseline for the same engineering team
+- Reproducible benchmark comparison against Devin, SWE-agent, and Copilot Workspace on identical tasks
 
 ---
 
-### Slide 9: Cost Radar & Unit Economics
-**"Predictable Budgets: Token Forecasting with 90% Confidence"**
-* **The P50/P90 Token Forecaster**: Calculates input/output token budgets before any agent runs.
-* **Autonomous Circuit Breakers**: Automatically halts execution if token burn approaches predefined dollar thresholds.
-* **Blueprint Reusability Engine**: Injects localized, zero-token architectural scaffolds (e.g. Stripe webhook handlers, G-code emitters), cutting total sprint LLM costs by **60% to 87%**.
-* **ROI Impact**: Saves an average of **38.5 senior engineering hours per sprint** ($4,800+ in saved engineering spend per module).
+### Slide 9: Unit Economics — Transparent Model
+
+**What a sprint actually costs today (based on internal reference runs)**
+
+| Cost Component | Estimate | Notes |
+|:--- |:--- |:--- |
+| LLM inference (Gemini 2.5 Flash) | $0.50 – $8.00 per sprint | Depends on codebase size, complexity, retry loops |
+| LLM inference (GPT-4o / Claude) | $3.00 – $25.00 per sprint | Used for architect + critic tiers |
+| Blueprint reuse discount | 30–60% reduction (est.) | When a known domain blueprint is matched. **Not independently validated at scale.** |
+| Human review time | 0.5 – 2 hrs per sprint | Milestone gate reviews by a developer — not eliminated by ASCM |
+| Infrastructure (self-hosted) | $0 | No ASCM cloud infrastructure cost in current model |
+
+**What we do not yet know** (to be established with design partners):
+- True developer time saved per feature with a controlled baseline measurement
+- Retry rate and rework cost in production brownfield codebases
+- Optimal LLM tier routing to minimize cost without quality regression
+
+**Design partner economics**: Fixed-fee 90-day pilot ($5,000–$10,000). Customer provides repo access and a developer as milestone reviewer. ASCM provides onboarding, setup, and support.
 
 ---
 
-### Slide 10: Business Model & Pricing Tiers
+### Slide 10: Business Model & Pricing
 
-| Tier | Price | Ideal Customer | Features |
-| :--- | :--- | :--- | :--- |
-| **Community BYOK** | **Free / Open Source** | Individual hackers & indie developers | Full CLI orchestrator, Bring-Your-Own-Key (Gemini, OpenAI, Anthropic, Ollama), local SQLite dashboard. |
-| **Founder / Pro** | **$49 / seat / mo** | Startups & small engineering squads | Multi-repo sync (up to 5 repos), pre-flight cost radar, visual dashboard, priority model cascades. |
-| **Team / Scale** | **$199 / seat / mo** | Growth-stage SaaS & scaleups | Unlimited repos, automated GitHub PR bot, team role permissions, custom domain ontology imports. |
-| **Enterprise On-Prem** | **$15k – $50k / yr** | Regulated Enterprise (Fintech, MedTech, Defense) | 100% air-gapped local SLM deployment, SAML/Okta SSO, dedicated TAM, custom SLA, SOC 2 compliance guarantee. |
+| Tier | Price | Target | Status |
+|:--- |:--- |:--- |:--- |
+| **Community (BYOK)** | Free / Open-Source | Individual developers | Live |
+| **Pro** | $49/seat/mo | Startup engineering teams | Proposed — not validated |
+| **Team** | $199/seat/mo | Growth-stage SaaS | Proposed — not validated |
+| **Enterprise On-Prem** | $15k–$50k/yr | Regulated industries | Proposed — not validated |
 
----
-
-### Slide 11: Competitive Landscape & Battlecard
-
-| Feature | ASCM | GitHub Copilot / Cursor | Lovable / Replit / Bolt | Legacy Dev Agencies |
-| :--- | :---: | :---: | :---: | :---: |
-| **Multi-Repo Coordination** |  **Native** |  Single file only |  Single repo/sandbox |  Slow manual sync |
-| **Adversarial Critic Tier** |  **Multi-Model** |  None (Self-approval) |  None |  Human peer review |
-| **Air-Gapped Local SLMs** |  **Yes (Ollama)** |  Cloud dependent |  Cloud dependent |  N/A |
-| **Domain Grilling (CAD/Legal)**|  **Deep Dynamic** |  Generic autocomplete |  Web boilerplate only |  Requires domain hire |
-| **Pre-Flight Cost Forecaster** |  **P90 Math** |  Flat rate / opaque |  Subscription credits |  Hourly billing |
-| **TDD Unit Test Enforcement** |  **Mandatory** |  Optional/Ad-hoc |  Minimal |  Variable quality |
+**Pricing status**: Proposed based on market comparables. None validated by customer willingness-to-pay. The 90-day design partner pilot is the validation mechanism.
 
 ---
 
-### Slide 12: The Ask & Enterprise Pilot Program
-* **Target**: Onboarding 10 Enterprise Design Partners across FinTech, MedTech, LegalTech, and Advanced Manufacturing.
-* **The 90-Day Pilot Program ($10,000 / team)**:
-  * Full onboarding on your brownfield multi-repo architecture.
-  * Integration into your internal Git workflow with local SLMs or BYOK enterprise keys.
-  * Guaranteed delivery of 3 major cross-service integration features with full unit test coverage.
-* **Call to Action**: Book an executive architecture demo at `founders@ascm.dev` or clone the repository to run your first autonomous sprint locally in under 3 minutes.
+### Slide 11: Competitive Landscape
+
+**Positioned against modern agentic coding tools**
+
+| Capability | ASCM | Copilot Workspace | Devin (Cognition) | SWE-agent / OpenHands | Cursor |
+|:--- |:---: |:---: |:---: |:---: |:---: |
+| **Multi-repo atomic coordination** | ✅ Native | ⚠️ Single repo | ⚠️ Single repo | ⚠️ Single repo | ❌ File-level |
+| **Adversarial multi-model critic** | ✅ Configurable | ❌ None | ❌ Self-review | ❌ Self-review | ❌ None |
+| **Air-gapped local SLM** | ✅ Ollama native | ❌ Cloud only | ❌ Cloud only | ⚠️ Partial | ❌ Cloud only |
+| **Human-in-the-loop gates** | ✅ Mandatory | ⚠️ Optional | ⚠️ Optional | ⚠️ Optional | ❌ Inline only |
+| **Pre-flight token cost forecast** | ✅ P50/P90 | ❌ None | ❌ None | ❌ None | ❌ None |
+| **Mandatory TDD enforcement** | ✅ Gate-blocked | ⚠️ Suggested | ⚠️ Suggested | ⚠️ Suggested | ❌ Optional |
+| **Open-source / self-hostable** | ✅ Full OSS | ❌ Proprietary | ❌ Proprietary | ✅ OSS | ❌ Proprietary |
+| **SWE-bench published score** | ❌ Not yet | ❌ Not published | ✅ ~13.86% | ✅ ~12–18% | ❌ Not published |
+
+**Honest note**: Devin and SWE-agent have published benchmark scores on single-repo tasks. ASCM's differentiation is architectural. Independent benchmark runs are a design partner deliverable.
 
 ---
 
-# Part 2: LinkedIn Launch Campaign (High-Converting Posts)
+### Slide 12: The Ask & Investment Fundamentals
 
-### Post 1: The "Copilot is Not Enough" Manifesto (Targeting CTOs & VPs of Eng)
-```markdown
-Most engineering leaders I speak with share the same frustration:
+**Current State**
+* **Stage**: Pre-revenue, open-source proof-of-concept
+* **Paying customers**: 0 (design partner pilots being sought)
+* **ARR**: $0
+* **GitHub**: github.com/gopikomanduri/ascm-poc (public, reproducible)
+* **Valuation / cap table / burn**: To be provided in a separate data room upon investor NDA
 
-"AI code autocomplete is cool for a single file, but it doesn't solve software engineering."
+**The 90-Day Design Partner Program**
+* **Target**: 3–5 FinTech / Web3 engineering teams
+* **Pricing**: $5,000–$10,000 fixed fee per 90-day pilot
+* **ASCM delivers**: Onboarding, SKILLS.md scaffolding, 2–3 cross-service sprints, documented outcome metrics
+* **Partner delivers**: Repo access, 1 developer as milestone reviewer, before/after measurement
 
-Because real software engineering is NEVER just typing code into one file:
-• It's coordinating a database schema migration with a backend API in Repo A.
-• It's updating the client SDK and UI state in Repo B at the exact same time.
-• It's verifying that changes adhere to non-functional requirements (security, latency, HIPAA/GDPR).
-• It's conducting rigorous, adversarial code reviews so junior devs don't ship hallucinated race conditions.
+**Pilot data will establish**:
+- Validated human intervention rate and rework frequency
+- Measurable developer time saved with a control baseline
+- Blueprint for repeatable enterprise sales motion
 
-That’s why we built ASCM (Autonomous Software Coordination & Multi-Agent Engineering Squad).
-
-Instead of an assistant that guesses your next line of code, ASCM deploys an autonomous engineering squad:
-1. Product Agent: Grills you on edge cases and requirements until confidence hits 90%+.
-2. Systems Architect: Generates High-Level & Low-Level Design and discrete task DAGs.
-3. Polyglot Coder: Writes the code AND writes comprehensive unit test suites (Go, Python, TypeScript).
-4. Independent Critic: A completely different AI model (Claude 3.5 Sonnet / Gemini Pro) that reviews the code to eliminate self-confirmation bias.
-5. Security Sandbox: Strictly enforces repository allowlists and blocks path traversal.
-
-The best part? It's domain-grounded:
-Whether you're building 3-axis CNC toolpaths for CAD/CAM, smart contract checkouts for Web3, or HIPAA-compliant FHIR portals for Healthcare, the squad adapts its persona and NFRs dynamically.
-
-And for regulated enterprises: it runs 100% air-gapped on local SLMs (via Ollama) so your IP never leaves your firewall.
-
-We're opening up 10 Design Partner Pilot slots for Q4. 
-
-If your team is managing complex multi-repo microservices and wants to accelerate sprint velocity without sacrificing code quality: drop a comment or DM me "ASCM PILOT".
-
-Link to the open-source repo in comments. 👇
-
-#EngineeringLeadership #SoftwareEngineering #MultiAgentSystems #AI #DevTools #CTO #OpenSource
-```
+**Immediate ask (no capital required)**: Introductions to FinTech / Web3 engineering teams willing to run a 90-day pilot.
 
 ---
 
-### Post 2: The Technical Deep Dive (Why Multi-Model Diversity Wins)
-```markdown
-Why do so many AI code generators ship subtle, dangerous bugs?
+# Part 2: LinkedIn Campaign (Evidence-First)
 
-Confirmation bias.
+### Post 1: The Problem Statement
 
-If you ask Model X to write a complex cryptographic signature verifier or a CNC toolpath step-down algorithm, and then ask Model X: "Did you make any mistakes?", Model X will almost always say: "Looks great to me!"
-
-It shares the same latent blindspots as its generator.
-
-In ASCM, we solved this with a strict Mixture-of-Specialists Critic Tier:
-
-1. Product Grilling: Powered by lightweight low-latency models (Gemini 2.5 Flash / GPT-4o-mini) for sub-second stakeholder interviews.
-2. Coordinate Math & Code Generation: Powered by Qwen 2.5 Coder 32B or DeepSeek Coder V3 (which excel at mathematical precision and low-level code).
-3. Adversarial Code Review: Handed off to an independent critic—Claude 3.5 Sonnet.
-   - Claude audits for timing side-channels, buffer leaks, unhandled nil pointers, and missing unit test edge cases.
-   - It has no memory of generating the code, making its critique completely unbiased.
-
-The result? 
-An autonomous engineering loop that generates verified, production-grade microservices with 100% test pass rates before a developer even touches the PR.
-
-How is your engineering team preventing AI-generated hallucinations from creeping into production? Let's discuss in the comments.
-
-#SoftwareArchitecture #GenerativeAI #CodeQuality #Anthropic #GoogleGemini #DeepSeek #DevOps
 ```
+The honest problem with AI coding tools in 2026:
 
----
+They're great for individual developers. They break down the moment your team has more than one repo.
 
-### Post 3: The Case Study Spotlight (CAD/CAM in Python vs Crypto in Go)
-```markdown
-Can one multi-agent system engineer a 3-axis CNC milling toolpath generator AND a non-custodial crypto payment gateway?
+Here's what I mean:
+• Your backend API lives in Repo A (Go microservice)
+• Your client SDK lives in Repo B (TypeScript)
+• Your integration tests live in Repo C
 
-Yes. Here’s what happened when we put ASCM to the test across two wildly different domains:
+When you ask Copilot or Cursor to "add a new payment method endpoint," they update Repo A.
+Repo B and Repo C? Still expecting the old API contract. Your CI breaks. Your SDK consumer is blocked.
 
-Test 1: CAD / CAM & Manufacturing
-• Request: "Build a 3-axis CNC milling toolpath generator with G-code output."
-• Dynamic Adaptation: The squad detected the CAD/CAM vertical, switched personas to a Geometric Manufacturing Principal, and grilled us on B-Rep vs Mesh, spindle RPM, and rapid Z-retract planes.
-• Language & Code: Synthesized Python geometric slicing algorithms with Fanuc G-code formatters and automated bounding-box test suites.
+This is the multi-repo coordination problem. It's unsolved by today's autocomplete-class tools.
 
-Test 2: Web3 / FinTech Payments
-• Request: "Build Pay Through Crypto checkout gateway."
-• Dynamic Adaptation: Switched personas to a Web3 Payments Principal, probing EVM vs Solana, self-custody vs fiat offramps, and Indian 1% TDS compliance.
-• Language & Code: Synthesized timing-safe HMAC signature verification and QR invoice payment flows.
+We built ASCM to address it.
 
-In both cases, ASCM:
-• Prevented the development from starting until requirements hit 90% confidence.
-• Enforced strict unit testing (89/89 tests passing).
-• Predicted token costs with a pre-flight P90 radar.
+ASCM reads declarative SKILLS.md contracts from each repo, classifies which repos are providers and consumers, and patches both sides atomically — with mandatory unit test suites and human approval at each milestone.
 
-This is the future of domain-specific software engineering.
+It's a proof-of-concept today (open-source, 89 tests passing, 3 working reference implementations).
+It's not a finished product. It's not eliminating hallucinations. It's adding structure and adversarial review to AI-generated changes before they reach your codebase.
 
-Check out the full walkthrough and open-source benchmarks on GitHub (link in comments). 👇
+FinTech/Web3 teams interested in a paid pilot: DM me "PILOT" or founders@ascm.dev
 
-#CAD #Manufacturing #Web3 #Fintech #Python #Golang #AIProgramming
-```
-
----
-
-# Part 3: Twitter / X Launch Campaign
-
-### Viral Launch Thread (10 Tweets)
-
-**Tweet 1 (The Hook)**:
-```
-AI code generators are broken for real software.
-
-They autocomplete a single file or generate toy apps in isolated sandboxes. But try synchronizing an API change across 3 microservices and a client SDK? Total failure.
-
-Today we're open-sourcing ASCM: The Autonomous Multi-Agent Engineering Squad. 🧵👇
-```
-
-**Tweet 2 (The Multi-Agent Squad)**:
-```
-Instead of one generalist chatbot trying to do everything, ASCM spins up a full specialized engineering squad:
-
-🎯 Product Manager (Grills you until requirements hit 90%)
-🏛️ Systems Architect (HLD/LLD & Task DAG)
-💻 Polyglot Coder (Code + Mandatory Unit Tests)
-🔍 Adversarial Critic (Zero-bias review)
-🛡️ Security Auditor
-```
-
-**Tweet 3 (Multi-Repo Contracts)**:
-```
-How does it coordinate across brownfield repos?
-
-Through declarative `SKILLS.md` capability contracts. 
-
-ASCM analyzes provider repos and consumer repos, updating backend endpoints and frontend client SDKs simultaneously with zero contract drift. No breaking changes.
-```
-
-**Tweet 4 (The Critic Tier)**:
-```
-The secret weapon: Zero-Bias Multi-Model Diversity.
-
-Most AI tools ask the same model to review its own code (cognitive blindspots!).
-
-ASCM uses a Mixture of Specialists:
-• Fast Grilling: Gemini 2.5 Flash
-• Code Math: Qwen 2.5 Coder
-• Adversarial Audit: Claude 3.5 Sonnet
-```
-
-**Tweet 5 (Universal Domain Adaptation)**:
-```
-ASCM dynamically adapts to ANY industry vertical without custom prompt engineering:
-
-📐 CAD/CAM: 3D mesh slicing, CNC toolpaths, Fanuc G-code
-⚖️ LegalTech: Contract ASTs, clause extraction, GDPR compliance
-💳 Web3: EVM/Solana gateways, timing-safe signatures
-🏥 MedTech: FHIR R4, HL7, HIPAA de-identification
-```
-
-**Tweet 6 (Polyglot Runtime)**:
-```
-It’s completely polyglot:
-Need LegalTech in Python? Done.
-Need high-throughput microservices in Go? Done.
-Need web frontends in TypeScript? Done.
-
-It automatically adjusts file extensions, standard libraries, and testing frameworks (Go table tests, Python unittest, Jest).
-```
-
-**Tweet 7 (100% Air-Gapped Local SLMs)**:
-```
-Are you in Defense, MedTech, or Enterprise Legal where cloud APIs are forbidden?
-
-ASCM natively runs 100% on-premise on local SLMs via Ollama:
-• Qwen-Coder 14B
-• BioMistral / Meditron 7B
-• Phi-4 14B
-
-Your proprietary CAD models and patient records never leave your local machine. 🔒
-```
-
-**Tweet 8 (Token Cost Radar)**:
-```
-Tired of surprise $500 API bills?
-
-ASCM features a pre-flight P50/P90 Token Forecaster with autonomous circuit breakers. 
-
-Plus, our Blueprint Engine reuses verified architectural patterns, cutting LLM inference costs by up to 87%. 📉
-```
-
-**Tweet 9 (Live Demo Spotlight)**:
-```
-We verified ASCM on 3 real-world production products:
-1. PayPulse Sentinel: Stripe Webhook Gateway + Dashboard
-2. Pay Through Crypto: Non-custodial EVM/Solana Checkout
-3. CAD/CAM Engine: 3-Axis CNC Toolpath & G-code Generator
-
-All backed by 89/89 automated unit tests.
-```
-
-**Tweet 10 (Call to Action)**:
-```
-We're opening ASCM for developers and accepting 10 enterprise design partners for Q4.
-
-⭐ Star the repo on GitHub: [link]
-🚀 Try the interactive CLI / Dashboard locally in 3 minutes.
-🤝 DM us if you want an on-premise pilot for your engineering team!
-
-RT to support open-source AI! 🔄
+#EngineeringLeadership #MultiAgentSystems #DevTools #OpenSource
 ```
 
 ---
 
-# Part 4: Enterprise Sales Outreach Playbook & Cold Email Templates
+### Post 2: Adversarial Critic Design
 
-### Template 1: Direct Cold Outreach to VP of Engineering / CTO
+```
+One underappreciated problem with AI code generators:
 
-**Subject**: Solving cross-repo AI hallucinations for {{company_name}}'s engineering squad
+The same model that writes the code is usually asked to review it.
+
+Structurally similar to asking someone to proofread their own work immediately after writing it. The same reasoning errors that produced the code make the errors invisible during review.
+
+In ASCM, we enforce separation of roles at the model level:
+
+1. Fast lightweight model handles requirements grilling — optimized for low latency.
+2. A code-specialized model handles code generation.
+3. A separate, independent model adversarially reviews the generated code — no shared context of what was "intended."
+
+Does this eliminate hallucinations? No. No tool does.
+Does it catch a meaningful class of errors that self-review misses? We believe so — measuring this in design partner pilots.
+
+Architecture is open-source. Try it, break it, tell us where it fails.
+
+github.com/gopikomanduri/ascm-poc
+
+#SoftwareArchitecture #CodeReview #GenerativeAI
+```
+
+---
+
+### Post 3: Honest Traction Post
+
+```
+What we've built with ASCM (the honest version):
+
+✅ Multi-agent orchestrator coordinating changes across multiple Git repos
+✅ Three reference implementations (FinTech, Web3, CAD/CAM) — reproducible by anyone
+✅ 89 automated unit tests — all passing
+✅ Air-gapped local SLM mode (Ollama) for regulated industries
+✅ SHA-256 audit trails and outbound PII scrubbing
+✅ Web dashboard with real-time agent monitoring and human approval gates
+
+What we haven't built yet:
+
+❌ Paying customers (pre-revenue, open-source)
+❌ Independent benchmark vs Devin / SWE-agent on identical tasks
+❌ Measured human intervention rates in real brownfield codebases
+❌ Validated cost reduction numbers beyond our own internal runs
+
+We're being explicit because honest early-stage communication builds better design partnerships than overblown demo-day claims.
+
+FinTech/Web3 team managing complex multi-repo microservices?
+Let's talk: founders@ascm.dev
+
+#OpenSource #StartupHonesty #MultiAgentSystems
+```
+
+---
+
+# Part 3: Twitter / X Campaign (Revised)
+
+**Tweet 1**: AI coding tools in 2026 have a hard wall: great for one dev in one file. Falls apart when your feature spans 3 repos. Backend endpoint changes. SDK breaks. Tests fail. The multi-repo coordination problem. We built ASCM to address it. 🧵
+
+**Tweet 2**: ASCM is a multi-agent orchestrator: 90%+ requirement confidence before code → HLD/LLD for human review → code + mandatory tests across repos atomically → different model adversarially reviews → human approval at every milestone. Pre-revenue OSS POC. 89/89 tests passing.
+
+**Tweet 3**: Multi-repo coordination via SKILLS.md contracts. Each repo declares role (provider/consumer), allowed modification paths, language. ASCM patches both sides of an API contract simultaneously. No silent breaking changes.
+
+**Tweet 4**: Adversarial critic: Writer model → code. Different critic model → review (no shared context). Eliminates hallucinations? No. Catches errors self-review misses? We believe so — measuring this in design partner pilots. Poke holes in the open-source repo.
+
+**Tweet 5**: Can't send source code to OpenAI/Google (HIPAA, ITAR, legal privilege)? ASCM runs 100% on-premise via Ollama. Tested with Qwen 2.5 Coder 7B locally. Quality is lower than frontier models — honest tradeoff.
+
+**Tweet 6**: Leading with FinTech/Web3. Built: Stripe webhook gateway (multi-repo, timing-safe HMAC, replay protection) + Non-custodial crypto checkout (EVM + Solana, TDS, QR invoices). Both via ASCM. Both with full test suites. Clone and run.
+
+**Tweet 7**: What we don't know yet (need design partners to measure): Actual dev time saved vs baseline. Human intervention rate per sprint. Defect rate vs human-written code. SWE-bench score. Honest early-stage. Repo is open.
+
+**Tweet 8**: Looking for 3–5 FinTech/Web3 teams for a 90-day paid pilot ($5k–$10k). You get: ASCM on your brownfield repos, 2–3 cross-service sprints, documented outcome metrics. We get real-world validation. DM or founders@ascm.dev
+
+---
+
+# Part 4: Enterprise Sales Playbook
+
+### Cold Outreach Template
+
+**Subject**: Multi-repo AI coordination pilot — honest early-stage offer
 
 **Hi {{first_name}},**
 
-Most engineering teams I speak with are getting value from Copilot for boilerplate, but hitting a hard wall when it comes to **coordinating changes across multiple microservices**:
+I'll be direct: we've built ASCM, an open-source multi-agent orchestrator that coordinates AI-generated code changes across multiple repositories atomically, with mandatory unit tests and human approval at every milestone gate.
 
-1. AI tools modify one repo in isolation, breaking API contracts in consumer repos.
-2. Developers accept hallucinated AI suggestions without rigorous adversarial review.
-3. Proprietary IP and client data risk leaking to third-party cloud model providers.
+It is **not** a finished product. It's a pre-revenue prototype with 89 passing tests and three reproducible reference implementations.
 
-We built **ASCM (Autonomous Software Coordination Engine)** to solve this. 
+The specific problem: AI tools like Copilot and Cursor modify one repo in isolation. When your feature spans a backend API, consumer SDK, and integration tests, you get broken contracts and failed CI. ASCM patches both sides simultaneously.
 
-ASCM deploys an autonomous multi-agent squad (Product, Architect, Coder, Critic, Auditor) that:
-* **Synchronizes multi-repo changes** atomically using declarative capability contracts (`SKILLS.md`).
-* **Eliminates confirmation bias** by using an independent critic model (Claude 3.5 Sonnet) to audit all generated code and test coverage before anything commits.
-* **Runs 100% on-premise / air-gapped** on local SLMs (via Ollama) or your private VPC endpoints—guaranteeing zero code leakage.
+We're offering a **90-day paid pilot ($5,000–$10,000)**: we onboard on your brownfield repos, run 2–3 multi-service sprints, and measure actual outcomes — time saved, defect rates, human intervention frequency — vs. your current baseline.
 
-We are currently onboarding 5 enterprise design partners for a 90-day pilot.
+If the numbers don't justify continued use, we'll say so.
 
-Would you be open to a 15-minute technical demo showing ASCM orchestrating a multi-repo integration with full unit test coverage live?
-
-Best regards,
-
-**[Your Name]**  
-Founder & CEO, ASCM  
-[Calendar Booking Link] | [GitHub Repository]
+20-minute technical walkthrough? [Calendar Link] | founders@ascm.dev | github.com/gopikomanduri/ascm-poc
 
 ---
 
-### Template 2: Enterprise Objection Handling Cheat Sheet
+### Objection Handling
 
-| Customer Objection | Sales Agent Response & Proof Point |
-| :--- | :--- |
-| **"We already give our engineers GitHub Copilot / Cursor."** | *"Copilot is a great personal assistant for the next 5 lines of code. But who reviews the PR? Who updates the consumer SDK when the backend endpoint changes? Who writes the table-driven unit tests? ASCM is not a code completer; it is an autonomous multi-agent engineering squad that takes a feature from PRD to tested, multi-repo Git commit."* |
-| **"Our legal and security team will not allow our codebase to be sent to external LLMs."** | *"That is precisely why we built ASCM with native air-gapped Local SLM support. You can run ASCM 100% on-premise on your internal NVIDIA servers or local Mac workstations using open-source models like Qwen 2.5 Coder and Phi-4 via Ollama. Zero bytes ever leave your firewall."* |
-| **"AI-generated code is too buggy for our production standards."** | *"We agree—which is why ASCM enforces two non-negotiable guardrails: First, an Independent Critic Tier powered by Claude 3.5 Sonnet adversarially reviews all code for security, race conditions, and edge cases. Second, the Coder Agent is strictly required to write comprehensive unit test suites (Go, Python, Jest) that must pass before any milestone is confirmed."* |
-| **"How much is this going to cost in API tokens?"** | *"Unlike open-ended agent loops that spin indefinitely, ASCM features a pre-flight P50/P90 Token Forecaster with automatic circuit breakers. Plus, our Blueprint Engine reuses zero-token local templates, saving up to 87% on inference costs."* |
+| Objection | Honest Response |
+|:--- |:--- |
+| **"We already have Copilot/Cursor."** | *"Those are excellent for individual productivity. ASCM addresses a different problem: coordinating a change that spans multiple repos. They are complementary. We can demo the gap in 10 minutes on your actual repo structure."* |
+| **"Devin already does autonomous coding."** | *"Devin operates in a single-repo sandbox with a published SWE-bench score (~13.86%). ASCM's differentiation is multi-repo atomic coordination, an adversarial critic tier, and air-gapped local SLM support. We haven't run SWE-bench yet — that's a design partner deliverable. The fair comparison is on identical real-world multi-service tasks."* |
+| **"You have no paying customers."** | *"Correct. This is a pre-revenue pilot offering. The 90-day paid pilot is how we both validate value and generate first customer evidence. The code is fully open-source — your team can audit it before committing."* |
+| **"What's your actual cost reduction?"** | *"Internal reference runs show 30–60% reduction in LLM inference costs via blueprint reuse. We don't have statistically validated external benchmarks. Establishing that with your codebase is one goal of the pilot."* |
+| **"IP leaking to cloud LLMs is a blocker."** | *"ASCM supports 100% on-premise execution via Ollama with local SLMs. Output quality is lower than frontier models — we'll be transparent about the quality/privacy tradeoff for your specific use case."* |
+| **"How do I know the generated code is production-safe?"** | *"It isn't guaranteed. ASCM adds structural safeguards — adversarial review, mandatory test enforcement, human approval gates — that reduce risk vs. unreviewed AI output. Human engineers review and merge every PR. ASCM is a proposal engine, not an autonomous deployment system."* |
