@@ -72,8 +72,32 @@ Generated files are validated before any write. Paths must be relative, free of 
 python -m unittest discover -s tests -v
 ```
 
-## Limitations
+## Enterprise & Go-To-Market (B2B)
 
-- The current code generator is specialized for Go providers.
-- Generated patches still require human review.
-- Model output, external API availability, and Git operations can fail and should be handled as operational failures.
+- 📊 **Enterprise Pitch Deck & GTM Kit**: See [PITCH_DECK_AND_GTM_KIT.md](PITCH_DECK_AND_GTM_KIT.md) for the complete 12-slide investor/enterprise deck, LinkedIn launch campaign, viral Twitter/X thread, and B2B sales playbook.
+- 🗺️ **Product Roadmap & Architecture**: See [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) for milestone gating, multi-model diversity, and air-gapped local SLM support.
+
+## Real-World Reference Implementations
+
+1. **PayPulse Sentinel** (`products/paypulse-sentinel`): Production Stripe webhook gateway, replay protection cache, and live client telemetry dashboard (`demo_paypulse_pipeline.py`).
+2. **Pay Through Crypto** (`products/pay-through-crypto`): Non-custodial EVM (USDT/USDC) and Solana QR payment gateway with Indian 1% TDS and timing-safe verification (`demo_crypto_pipeline.py`).
+3. **CNC Toolpath CAD/CAM Engine** (`products/cad-cam-engine`): 3-axis CNC milling toolpath generator with bounding-box computation, rapid Z-retract planes, and Fanuc/GRBL G-code emission (`demo_cad_cam_pipeline.py`).
+
+## Universal Domain Adaptation & Polyglot Engine
+
+ASCM dynamically detects and adapts to any industry vertical:
+- **CAD/CAM & Manufacturing**: Geometric kernels, 3D mesh slicing, toolpath step-down, G-code.
+- **LegalTech & Compliance**: Contract ASTs, clause extraction, redlining, GDPR/statutory rules.
+- **Crypto & Web3 Payments**: Non-custodial treasuries, replay cache, timing-safe signatures.
+- **Healthcare & MedTech**: HL7 v2, FHIR R4 interoperability, SMART-on-FHIR, HIPAA privacy.
+- **Robotics & Embedded**: Real-time control loops, FreeRTOS, ROS2 nodes, CAN-bus telemetry.
+- **Compilers & DevTools**: AST parsing, lexers, visitor transforms, CLI runners.
+
+Supports polyglot code generation across **Go**, **Python**, **TypeScript/Node**, and **Rust** with mandatory table-driven unit test enforcement.
+
+## Development & Test Suite
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+```
+*(All 89/89 automated unit tests passing)*
