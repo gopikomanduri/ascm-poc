@@ -678,9 +678,49 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         from urllib.parse import urlparse, parse_qs
+        from orchestrator.auth.github_oauth import GitHubOAuthHandler
         parsed_url = urlparse(self.path)
         path = parsed_url.path
         query_params = parse_qs(parsed_url.query)
+        query_flat = {k: v[0] for k, v in query_params.items()}  # flatten for OAuth
+
+        # ── GitHub OAuth routes (checked before all others) ─────────────────
+        _oauth = GitHubOAuthHandler()
+        cookie_header = self.headers.get("Cookie", "")
+        proto = "https" if self.headers.get("X-Forwarded-Proto") == "https" else "http"
+        host  = self.headers.get("Host", "localhost:8080")
+        base_url = f"{proto}://{host}"
+
+        def _send_redirect(url, extra_headers):
+            self.send_response(302)
+            self.send_header("Location", url)
+            for k, v in extra_headers:
+                self.send_header(k, v)
+            self.end_headers()
+
+        def _send_json_oauth(status, data, extra_headers):
+            body = json.dumps(data).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            for k, v in extra_headers:
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _send_html_oauth(status, html, extra_headers):
+            body = html.encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            for k, v in extra_headers:
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+
+        if _oauth.handle(path, query_flat, cookie_header, base_url,
+                         _send_redirect, _send_json_oauth, _send_html_oauth):
+            return  # OAuth handled it
+        # ────────────────────────────────────────────────────────────────────
 
         if path == "/api/runs":
             self.send_response(200)
