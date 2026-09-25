@@ -715,6 +715,73 @@
     const emailParam = urlParams.get('email');
     if (emailParam) document.getElementById('input-identifier').value = emailParam;
 
+    // ── Trial mode banner ───────────────────────────────────────
+    (async () => {
+      try {
+        const tr = await fetch('/api/trial/status').then(r => r.json());
+        if (tr.trial) {
+          const banner = document.createElement('div');
+          banner.id = 'trial-banner';
+          banner.setAttribute('role', 'status');
+          banner.style.cssText = [
+            'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:9999',
+            'background:linear-gradient(90deg,#7c3aed,#2563eb)',
+            'color:#fff', 'text-align:center', 'font-size:13px',
+            'padding:8px 16px', 'font-weight:500', 'letter-spacing:0.01em'
+          ].join(';');
+          banner.innerHTML = `🎉 <strong>Free Trial</strong> — All features unlocked. No credit card required.`;
+          document.body.prepend(banner);
+          document.querySelector('.sidebar').style.marginTop = '36px';
+          document.querySelector('.main').style.marginTop = '36px';
+        }
+      } catch(e) {}
+    })();
+
+    // ── GitHub OAuth callback handling ─────────────────────────
+    const githubConnected = urlParams.get('github_connected');
+    const devMode = urlParams.get('dev_mode');
+
+    if (githubConnected === '1') {
+      // User just came back from GitHub OAuth — skip Step 1, auto-advance
+      (async () => {
+        try {
+          const res = await fetch('/auth/github/user');
+          if (res.ok) {
+            const ghUser = await res.json();
+            state.name = ghUser.name || ghUser.login;
+            state.identifier = ghUser.email || ghUser.login + '@github';
+            state.githubUser = ghUser;
+            state.githubRepos = ghUser.repos || [];
+
+            // Show success in Step 1 panel before advancing
+            const panel1 = document.getElementById('panel-1');
+            const authSection = document.getElementById('auth-form-section');
+            if (authSection) authSection.style.display = 'none';
+            const ghSection = document.getElementById('github-auth-section');
+            if (ghSection) ghSection.style.display = 'none';
+
+            const successDiv = document.createElement('div');
+            successDiv.style.cssText = 'background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:12px;padding:20px;text-align:center;margin-bottom:20px;';
+            successDiv.innerHTML = `
+              <div style="font-size:28px;margin-bottom:8px;">✅</div>
+              <div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:4px;">Connected as ${ghUser.name || ghUser.login}</div>
+              <div style="font-size:13px;color:var(--text-dim);">${ghUser.email || ''} · ${state.githubRepos.length} repos found</div>
+            `;
+            panel1.querySelector('.panel-sub').after(successDiv);
+
+            // Mark Step 1 complete and advance to Step 2
+            setTimeout(() => {
+              state.completedSteps.add(1);
+              document.getElementById('step-nav-2').classList.remove('disabled');
+              goToStep(2);
+            }, 1200);
+          }
+        } catch(e) {
+          console.warn('GitHub user fetch failed, continuing with manual auth', e);
+        }
+      })();
+    }
+
     // ── Step navigation ────────────────────────────────────────
     function goToStep(n) {
       if (n > state.currentStep && !state.completedSteps.has(state.currentStep)) return;
@@ -899,13 +966,56 @@
     async function scanRepos() {
       const list = document.getElementById('repo-list');
       const status = document.getElementById('repo-scan-status');
-      list.innerHTML = '<li style="color:var(--text-dim);font-size:14px;padding:12px 0;">Scanning...</li>';
+
+      // If GitHub OAuth connected, show their GitHub repos first
+      if (state.githubRepos && state.githubRepos.length > 0) {
+        status.textContent = `(${state.githubRepos.length} from GitHub)`;
+        const langEmoji = { Python:'🐍', JavaScript:'🟡', TypeScript:'🔷', Go:'🐹', Rust:'🦀', Java:'☕', 'C++':'⚙️' };
+        list.innerHTML = state.githubRepos.map(r => `
+          <li class="repo-item" onclick="toggleGithubRepo('${r.full_name}','${r.clone_url}')"
+              id="repo-gh-${r.full_name.replace(/\//g,'-')}">
+            <input type="checkbox" aria-label="Select ${r.name}" />
+            <span class="repo-icon">${langEmoji[r.language] || '📁'}</span>
+            <span class="repo-name">${r.name}
+              <br/><span style="font-size:11px;color:var(--text-dim);font-family:'Fira Code',monospace;">
+                github.com/${r.full_name} ${r.private ? '🔒' : '🌐'}
+              </span>
+            </span>
+            <span class="repo-badge ${r.language ? 'badge-contract' : 'badge-no-contract'}">
+              ${r.language || 'Unknown'}
+            </span>
+          </li>
+        `).join('');
+
+        // Also offer to scan local filesystem
+        const localBtn = document.createElement('li');
+        localBtn.style.cssText = 'list-style:none;margin-top:12px;';
+        localBtn.innerHTML = `<button class="btn btn-ghost" style="font-size:13px;width:100%;" onclick="scanLocalRepos()">
+          + Also scan local filesystem
+        </button>`;
+        list.appendChild(localBtn);
+        return;
+      }
+
+      // Fallback: local filesystem scan
+      await scanLocalRepos();
+    }
+
+    async function scanLocalRepos() {
+      const list = document.getElementById('repo-list');
+      const status = document.getElementById('repo-scan-status');
+      const existing = list.innerHTML;
+      list.innerHTML = existing + '<li style="color:var(--text-dim);font-size:14px;padding:12px 0;">Scanning local filesystem...</li>';
       try {
         const res = await fetch('/api/repos/detect');
         const data = await res.json();
+        // Remove the scanning indicator
+        const scanningEl = list.querySelector('li:last-child');
+        if (scanningEl && scanningEl.textContent.includes('Scanning')) scanningEl.remove();
+
         if (data.repos && data.repos.length > 0) {
-          status.textContent = `(${data.repos.length} found)`;
-          list.innerHTML = data.repos.map(r => `
+          status.textContent = `(${data.repos.length} found locally)`;
+          const localHtml = data.repos.map(r => `
             <li class="repo-item" onclick="toggleRepo('${r.path}')" id="repo-${btoa(r.path).slice(0,10)}">
               <input type="checkbox" id="chk-${btoa(r.path).slice(0,10)}" aria-label="Select ${r.name}" />
               <span class="repo-icon">📁</span>
@@ -913,13 +1023,32 @@
               <span class="repo-badge ${r.has_contract ? 'badge-contract' : 'badge-no-contract'}">${r.has_contract ? 'SKILLS.md ✓' : 'No contract'}</span>
             </li>
           `).join('');
+          list.innerHTML = (list.innerHTML || '') + localHtml;
         } else {
-          status.textContent = '(none found)';
-          list.innerHTML = '<li style="color:var(--text-dim);font-size:14px;padding:12px 0;">No repos detected. Add paths manually below.</li>';
+          const li = document.createElement('li');
+          li.style.cssText = 'color:var(--text-dim);font-size:14px;padding:12px 0;';
+          li.textContent = 'No local repos detected. Add paths manually below.';
+          list.appendChild(li);
         }
       } catch(e) {
         status.textContent = '(add manually)';
-        list.innerHTML = '<li style="color:var(--text-dim);font-size:14px;padding:12px 0;">Could not scan — add repo paths manually below.</li>';
+      }
+    }
+
+    function toggleGithubRepo(fullName, cloneUrl) {
+      const li = document.getElementById('repo-gh-' + fullName.replace(/\//g, '-'));
+      const chk = li ? li.querySelector('input[type="checkbox"]') : null;
+      if (!li) return;
+      const key = 'gh:' + fullName;
+      const idx = state.selectedRepos.indexOf(key);
+      if (idx === -1) {
+        state.selectedRepos.push(key);
+        li.classList.add('selected');
+        if (chk) chk.checked = true;
+      } else {
+        state.selectedRepos.splice(idx, 1);
+        li.classList.remove('selected');
+        if (chk) chk.checked = false;
       }
     }
 

@@ -722,6 +722,26 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             return  # OAuth handled it
         # ────────────────────────────────────────────────────────────────────
 
+        # Health check — used by Docker HEALTHCHECK and Railway probes
+        if path == "/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok","service":"ascm-dashboard"}')
+            return
+
+        # Trial mode status — tells UI whether billing is enforced
+        if path == "/api/trial/status":
+            import os as _os
+            self._send_json({
+                "trial": True,
+                "plan": "free_trial",
+                "label": "Free Trial",
+                "message": "No credit card required. All features unlocked during trial.",
+                "billing_enabled": False,
+            })
+            return
+
         if path == "/api/runs":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

@@ -702,15 +702,54 @@
   <!-- CTA -->
   <section class="cta-section" aria-labelledby="cta-title">
     <div class="cta-inner">
-      <h2 id="cta-title">Ready to Ship Your First Autonomous Sprint?</h2>
-      <p>Pre-revenue, open-source proof-of-concept. Join early design partners helping us validate cross-repo AI coordination in real production stacks.</p>
-      <div class="cta-email-row">
-        <input type="email" id="cta-email-input" class="cta-input" placeholder="your@company.com" aria-label="Work email address" />
-        <a href="/onboarding" class="btn btn-primary" id="cta-email-cta-btn">Get Early Access</a>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:999px;padding:6px 16px;margin-bottom:20px;font-size:13px;color:#a78bfa;font-weight:600;">
+        🎉 Free Trial — No credit card required
       </div>
-      <p class="cta-disclaimer">Free forever for open-source. No credit card required.</p>
+      <h2 id="cta-title">Start Your Free Trial Today</h2>
+      <p>Pre-revenue, open-source. Seeking 3–5 design partners in FinTech &amp; Web3.<br/>
+      All features unlocked during trial. Install on your own repos in minutes.</p>
+
+      <!-- Primary: GitHub OAuth -->
+      <div style="margin:24px auto;max-width:380px;">
+        <a href="/onboarding" class="btn btn-primary btn-lg" id="cta-start-trial-btn"
+           style="width:100%;justify-content:center;font-size:16px;padding:16px 24px;text-decoration:none;display:flex;align-items:center;gap:10px;">
+          🚀 Start Free Trial
+        </a>
+        <p style="font-size:12px;color:var(--text-dim);text-align:center;margin-top:10px;">
+          Connects with GitHub · Takes 2 minutes · No credit card
+        </p>
+      </div>
+
+      <!-- Secondary: Request a demo -->
+      <div style="display:flex;align-items:center;gap:12px;max-width:380px;margin:0 auto 20px;">
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
+        <span style="font-size:12px;color:var(--text-dim);">or</span>
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
+      </div>
+
+      <div class="cta-email-row" style="max-width:440px;margin:0 auto;">
+        <input type="email" id="cta-email-input" class="cta-input"
+               placeholder="your@company.com" aria-label="Work email address" />
+        <button class="btn btn-primary" id="cta-demo-btn" onclick="requestDemo()">Request Demo</button>
+      </div>
+      <p class="cta-disclaimer">For FinTech/Web3 teams with multi-repo complexity.<br/>
+        We'll set it up on your repos together — no engineer needed on your side.</p>
     </div>
   </section>
+
+  <script>
+    function requestDemo() {
+      const email = document.getElementById('cta-email-input').value.trim();
+      if (!email || !email.includes('@')) {
+        alert('Please enter a valid work email.');
+        return;
+      }
+      const subject = encodeURIComponent('ASCM Demo Request');
+      const body = encodeURIComponent(`Hi,\n\nI'd like to request a demo of ASCM.\n\nEmail: ${email}\n\nWe have a multi-repo codebase and are interested in the FinTech/Web3 pilot.\n\nBest`);
+      window.location.href = `mailto:founders@ascm.dev?subject=${subject}&body=${body}`;
+    }
+  </script>
+
 
   <!-- Footer -->
   <footer role="contentinfo">

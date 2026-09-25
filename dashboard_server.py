@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import sys
 import time
 from orchestrator.dashboard import DashboardServer
@@ -10,7 +11,9 @@ def main():
         description="ASCM Decoupled Standalone Dashboard Process"
     )
     parser.add_argument("--host", default="0.0.0.0", help="Host interface to bind (default: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=8080, help="Port for web dashboard (default: 8080)")
+    # Railway (and Render/Heroku) injects $PORT — respect it, fall back to --port arg
+    default_port = int(os.environ.get("PORT", 8080))
+    parser.add_argument("--port", type=int, default=default_port, help="Port for web dashboard (default: $PORT or 8080)")
     args = parser.parse_args()
 
     server = DashboardServer(host=args.host, port=args.port)
