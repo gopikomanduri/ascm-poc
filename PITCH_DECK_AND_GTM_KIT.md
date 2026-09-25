@@ -90,29 +90,33 @@ flowchart LR
 
 ---
 
-### Slide 6: Beachhead Market — FinTech / Web3 Payments
+### Slide 6: Go-To-Market Focus vs. Technical Versatility
 
-**Why we are leading with this vertical**
+**These are two separate things — both matter**
 
-Two working reference implementations with the strongest reproducible evidence:
+**Technical versatility (the moat)**: ASCM already generates working, tested code across three completely unrelated domains — financial infrastructure, blockchain payments, and CNC manufacturing. This is not a claim; it is a reproducible fact. Clone the repo and run the demos.
 
-1. **PayPulse Sentinel** (FinTech SaaS):
-   - Stripe webhook gateway with timing-safe HMAC, replay-attack prevention, live monitoring dashboard
-   - Implemented across two repos (API gateway + web portal) with synchronized test suites
-   - Demonstrates multi-repo coordination value proposition concretely
+This cross-domain capability is what makes ASCM's engine defensible. A competitor cannot replicate three working vertical implementations by changing a system prompt.
 
-2. **Pay Through Crypto** (Web3 Infrastructure):
-   - Non-custodial EVM (USDT/USDC) and Solana payment gateway
-   - Includes QR invoice generation, mempool watcher, 15-minute price lock, India 1% TDS compliance
-   - ProductAgent grilled on-chain vs off-ramp, block confirmation depth, KYC/AML requirements
+**GTM focus (discipline)**: We are leading our sales motion with FinTech / Web3 because that is where our evidence is deepest and procurement friction is lowest.
 
-**Why FinTech/Web3 first**:
+**Why FinTech/Web3 first (GTM)**:
+- Strongest existing proof: two working multi-repo implementations (PayPulse Sentinel + Pay-Through-Crypto)
 - Fast-moving teams with complex multi-service architectures and strict security requirements
-- High-frequency API changes between payment providers, SDKs, and compliance modules
 - Regulatory pressure creates urgency for auditable, human-approved code changes
 - Lower procurement friction than healthcare or defense (no HIPAA BAA or ITAR licensing required)
+- FinTech/Web3 buyers are more likely to pilot open-source tools before enterprise procurement
 
-**Secondary verticals** (after beachhead validation): CAD/CAM manufacturing, MedTech, LegalTech.
+**Expansion playbook (post-beachhead)**:
+
+| Vertical | Evidence | Entry Trigger |
+|:--- |:--- |:--- |
+| **CAD/CAM Manufacturing** | ✅ Working CNC toolpath generator (G-code, bounding box, 29 tests) | First manufacturing design partner signs |
+| **MedTech / Healthcare** | 🔧 Domain adapter defined; FHIR/HIPAA NFRs in product agent | HIPAA BAA template ready |
+| **LegalTech** | 🔧 Domain adapter defined; contract AST grilling in product agent | First legal firm design partner |
+| **Defense / Aerospace** | 🔧 Air-gapped SLM mode ready | ITAR-cleared customer engages |
+
+**The investor-relevant point**: We are not spreading sales resources across 6 verticals. We have one beachhead. The other verticals are expansion optionality backed by working technical proof — not wishful TAM expansion.
 
 ---
 
@@ -130,18 +134,24 @@ Two working reference implementations with the strongest reproducible evidence:
 
 ---
 
-### Slide 8: Technical Evidence — What We Can Demonstrate Today
+### Slide 8: Technical Evidence — Domain-Agnostic Engine, Focused GTM
 
-**Three working reference implementations (open-source, reproducible)**
+**Three working reference implementations spanning three unrelated domains (open-source, reproducible)**
 
-| Application | Domain | Repos Coordinated | Tests |
-|:--- |:--- |:---: |:---: |
-| PayPulse Sentinel | FinTech SaaS | 2 (API + Portal) | 32 passing |
-| Pay Through Crypto | Web3 Infrastructure | 2 (Gateway + Portal) | 28 passing |
-| CNC CAD/CAM Engine | Advanced Manufacturing | 1 | 29 passing |
-| **Total** | | **5 repos** | **89/89 passing** |
+| Application | Domain | Repos Coordinated | Tests | Status |
+|:--- |:--- |:---: |:---: |:---: |
+| PayPulse Sentinel | FinTech SaaS | 2 (API + Portal) | 32 passing | GTM beachhead |
+| Pay Through Crypto | Web3 Infrastructure | 2 (Gateway + Portal) | 28 passing | GTM beachhead |
+| CNC CAD/CAM Engine | Advanced Manufacturing | 1 | 29 passing | Expansion proof |
+| **Total** | | **5 repos** | **89/89 passing** | |
 
-**What these demonstrate**: ASCM can generate working, tested code across unrelated domains. These are not production-deployed applications — they are reproducible proof-of-concept implementations any evaluator can clone and run.
+**Why showing all three matters to investors**:
+
+The CNC CAD/CAM implementation is not a distraction — it is evidence that ASCM's domain adaptation engine is real. When the ProductAgent switches from asking about EVM block confirmation depth to asking about spindle RPM and B-Rep geometry, that is the same underlying architecture working across domains that share zero vocabulary.
+
+A competitor cannot replicate this by tweaking prompts. The DomainAdapter, blueprint engine, and SKILLS.md contract system have to work generically — and demonstrating that across maximally different domains (payments vs. precision machining) is a stronger proof than three similar FinTech demos.
+
+**Framing for the pitch**: "We have one focused sales motion (FinTech/Web3) and three reproducible domain proofs. The proofs exist to validate the engine, not to claim six simultaneous markets."
 
 **What design partners will establish**:
 - Human intervention rate per sprint (how many milestone gates required rework)
