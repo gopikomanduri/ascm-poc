@@ -317,6 +317,57 @@
     .pricing-features li::before { content: '✓'; color: var(--emerald); font-weight: 700; flex-shrink: 0; }
     .pricing-cta { margin-top: 28px; display: block; text-align: center; }
 
+    /* ── Install Section ── */
+    .install-section { padding: 90px 24px; }
+    .install-box {
+      max-width: 860px; margin: 0 auto;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+    }
+    .install-nav {
+      display: flex; border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .install-tab-btn {
+      flex: 1; padding: 16px 20px; font-size: 14px; font-weight: 600;
+      color: var(--text-muted); background: none; border: none;
+      border-bottom: 2px solid transparent; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all 0.2s;
+    }
+    .install-tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+    .install-tab-btn.active {
+      color: var(--cyan); border-bottom-color: var(--cyan);
+      background: rgba(0,212,255,0.05);
+    }
+    .install-body { padding: 32px; }
+    .install-pane { display: none; }
+    .install-pane.active { display: block; }
+    .code-block-wrap {
+      background: #0d1117; border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px 20px;
+      position: relative; font-family: 'Fira Code', monospace;
+      font-size: 13px; color: #a9b1d6; line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    .copy-btn {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(255,255,255,0.08); border: 1px solid var(--border);
+      color: var(--text-muted); border-radius: 6px; padding: 6px 12px;
+      font-size: 11px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover { color: #fff; background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); }
+    .install-note {
+      display: flex; align-items: flex-start; gap: 12px;
+      background: rgba(0,212,255,0.06); border: 1px solid rgba(0,212,255,0.18);
+      border-radius: 10px; padding: 14px 18px; font-size: 13px;
+      color: #90cdf4; line-height: 1.6;
+    }
+
     /* ── Testimonials / Social Proof ── */
     .proof-section { padding: 80px 24px; }
     .proof-banner {
@@ -447,14 +498,15 @@
       <span style="color:var(--text-muted); font-weight:400; font-size:14px;">Engineering Squad</span>
     </a>
     <div class="nav-links" role="menubar">
+      <a href="#install" role="menuitem">Install</a>
       <a href="#how-it-works" role="menuitem">How it Works</a>
       <a href="#features" role="menuitem">Features</a>
       <a href="#pricing" role="menuitem">Pricing</a>
       <a href="https://github.com/gopikomanduri/ascm-poc" target="_blank" rel="noopener" role="menuitem">GitHub</a>
     </div>
     <div class="nav-cta">
-      <a href="/" class="btn btn-ghost" id="nav-signin-btn">Sign in</a>
-      <a href="/onboarding" class="btn btn-primary" id="nav-getstarted-btn">Get Started Free</a>
+      <a href="/" class="btn btn-ghost" id="nav-dashboard-btn">Dashboard</a>
+      <a href="#install" class="btn btn-primary" id="nav-install-btn">Install Free →</a>
     </div>
   </nav>
 
@@ -462,20 +514,22 @@
   <section class="hero" aria-labelledby="hero-headline">
     <div class="hero-badge fade-up">
       <span class="hero-badge-dot"></span>
-      Open-Source · Pre-Revenue POC · BYOK · Seeking Design Partners
+      Open-Source · Local-First · BYOK · Your Code Never Leaves Your Machine
     </div>
     <h1 id="hero-headline" class="fade-up delay-1">
-      Your AI<br/><span class="grad-text">Engineering Squad</span><br/>Ships Features, Not Typos
+      Your AI<br/><span class="grad-text">Engineering Squad</span><br/>Runs on Your Machine
     </h1>
     <p class="hero-sub fade-up delay-2">
-      ASCM coordinates a squad of specialized AI agents — Product, Architect, Coder, Adversarial Critic, and Security Auditor — to autonomously deliver features across <strong style="color:#fff;">multiple repositories</strong>, with human approval at every gate.
+      ASCM runs <strong style="color:#fff;">locally</strong> — no cloud, no repo access, no data sent anywhere.
+      A squad of specialized AI agents coordinates changes across <strong style="color:#fff;">multiple repos simultaneously</strong>,
+      with a human approval gate before any code is committed.
     </p>
     <div class="hero-actions fade-up delay-3">
-      <a href="/onboarding" class="btn btn-primary btn-lg" id="hero-cta-primary">
-        🚀 Start Free Sprint
+      <a href="#install" class="btn btn-primary btn-lg" id="hero-cta-primary">
+        ⬇️ Install in 2 Minutes
       </a>
       <a href="/" class="btn btn-outline btn-lg" id="hero-cta-dashboard">
-        View Live Dashboard
+        View Dashboard Demo
       </a>
     </div>
 
@@ -487,10 +541,11 @@
         <div class="t-dot t-green"></div>
         <span style="font-size:12px; color:var(--text-dim); margin-left:8px;">ascm — zsh</span>
       </div>
-      <div class="t-line"><span class="t-comment"># Start a sprint in 3 lines</span></div>
-      <div class="t-line"><span class="t-cmd">$</span> git clone https://github.com/gopikomanduri/ascm-poc</div>
-      <div class="t-line"><span class="t-cmd">$</span> pip install -r requirements.txt &amp;&amp; cp .env.example .env</div>
-      <div class="t-line"><span class="t-cmd">$</span> python main.py --repos ../api ../sdk --goal <span style="color:#f59e0b;">"Add crypto checkout with Solana"</span></div>
+      <div class="t-line"><span class="t-comment"># One-line install</span></div>
+      <div class="t-line"><span class="t-cmd">$</span> curl -fsSL https://raw.githubusercontent.com/gopikomanduri/ascm-poc/main/install.sh | bash</div>
+      <div class="t-line" style="margin-top:6px;"><span class="t-comment"># Add your LLM key, then run</span></div>
+      <div class="t-line"><span class="t-cmd">$</span> echo 'GEMINI_API_KEY=<span style="color:#f59e0b;">your-key</span>' &gt;&gt; ~/ascm/.env</div>
+      <div class="t-line"><span class="t-cmd">$</span> ascm  <span class="t-comment" style="margin-left:8px;"># opens http://localhost:8080</span></div>
       <div class="t-line" style="margin-top:8px;"><span class="t-ok">✓</span> ProductAgent  <span class="t-out">→ Grilling requirements (confidence: 94%)</span></div>
       <div class="t-line"><span class="t-ok">✓</span> ArchitectAgent <span class="t-out">→ HLD/LLD generated — 4 tasks planned</span></div>
       <div class="t-line"><span class="t-ok">✓</span> CoderAgent    <span class="t-out">→ Code + 23 unit tests written (Go + Python)</span></div>
@@ -500,20 +555,20 @@
 
     <div class="hero-stats fade-up delay-5">
       <div class="stat-item">
-        <div class="stat-num"><span class="stat-accent">89</span>/89</div>
-        <div class="stat-label">Unit tests passing</div>
+        <div class="stat-num"><span class="stat-accent">98</span>/98</div>
+        <div class="stat-label">Tests passing</div>
       </div>
       <div class="stat-item">
-        <div class="stat-num"><span class="stat-accent">3</span></div>
-        <div class="stat-label">Reference implementations</div>
+        <div class="stat-num"><span class="stat-accent">100%</span></div>
+        <div class="stat-label">Local — your data, your machine</div>
       </div>
       <div class="stat-item">
-        <div class="stat-num"><span class="stat-accent">5</span></div>
-        <div class="stat-label">Repos coordinated</div>
+        <div class="stat-num"><span class="stat-accent">5+</span></div>
+        <div class="stat-label">LLM providers (BYOK)</div>
       </div>
       <div class="stat-item">
-        <div class="stat-num"><span class="stat-accent">0</span></div>
-        <div class="stat-label">Paying customers (pre-revenue)</div>
+        <div class="stat-num"><span class="stat-accent">Free</span></div>
+        <div class="stat-label">Open-source forever</div>
       </div>
     </div>
   </section>
@@ -553,6 +608,95 @@
         <div class="agent-icon">👤</div>
         <div class="agent-name">Human Gate</div>
         <div class="agent-desc">You approve every milestone before commit</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Install Section -->
+  <section class="install-section" id="install" aria-labelledby="install-title">
+    <p class="section-label">Quick Setup</p>
+    <h2 id="install-title" class="section-title">Install Locally in Under 2 Minutes</h2>
+    <p class="section-sub">Zero remote servers. Your proprietary source code never leaves your filesystem.</p>
+
+    <div class="install-box">
+      <div class="install-nav" role="tablist" aria-label="Installation methods">
+        <button class="install-tab-btn active" role="tab" aria-selected="true" onclick="switchInstallTab('one-liner')" id="tab-btn-one-liner">
+          ⚡ One-Line Install <span style="font-size:11px;background:rgba(0,212,255,0.2);color:var(--cyan);padding:2px 6px;border-radius:4px;">Recommended</span>
+        </button>
+        <button class="install-tab-btn" role="tab" aria-selected="false" onclick="switchInstallTab('manual')" id="tab-btn-manual">
+          📦 Manual Git Clone
+        </button>
+        <button class="install-tab-btn" role="tab" aria-selected="false" onclick="switchInstallTab('docker')" id="tab-btn-docker">
+          🐳 Docker
+        </button>
+      </div>
+
+      <div class="install-body">
+        <!-- Tab 1: One-liner -->
+        <div class="install-pane active" id="pane-one-liner" role="tabpanel">
+          <p style="font-size:14px; color:var(--text-muted); margin-bottom:12px;">Run this in your terminal (macOS / Linux):</p>
+          <div class="code-block-wrap">
+            <button class="copy-btn" onclick="copySnippet('cmd-install-one-liner')">Copy</button>
+            <span style="color:#00d4ff;">$</span> <span id="cmd-install-one-liner">curl -fsSL https://raw.githubusercontent.com/gopikomanduri/ascm-poc/main/install.sh | bash</span>
+          </div>
+
+          <p style="font-size:14px; color:var(--text-muted); margin:20px 0 12px;">Then configure your API key &amp; launch:</p>
+          <div class="code-block-wrap">
+            <button class="copy-btn" onclick="copySnippet('cmd-run-steps')">Copy</button>
+            <div id="cmd-run-steps">
+<span style="color:#4a5568;"># Add your Google Gemini or OpenAI API key</span>
+<span style="color:#00d4ff;">$</span> echo 'GEMINI_API_KEY=your_key_here' &gt;&gt; ~/ascm/.env
+
+<span style="color:#4a5568;"># Launch the local dashboard</span>
+<span style="color:#00d4ff;">$</span> ascm   <span style="color:#4a5568;"># opens http://localhost:8080</span>
+            </div>
+          </div>
+
+          <div class="install-note">
+            <span style="font-size:18px;">💡</span>
+            <div>
+              <strong>No API key?</strong> Get a free Gemini API key with generous free tier at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:#00d4ff;text-decoration:underline;">Google AI Studio</a>, or run 100% offline with <a href="https://ollama.com" target="_blank" rel="noopener" style="color:#00d4ff;text-decoration:underline;">Ollama</a> (zero keys needed).
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Manual Clone -->
+        <div class="install-pane" id="pane-manual" role="tabpanel">
+          <p style="font-size:14px; color:var(--text-muted); margin-bottom:12px;">Clone the repository and set up a virtual environment:</p>
+          <div class="code-block-wrap">
+            <button class="copy-btn" onclick="copySnippet('cmd-install-manual')">Copy</button>
+            <div id="cmd-install-manual">
+<span style="color:#00d4ff;">$</span> git clone https://github.com/gopikomanduri/ascm-poc.git ~/ascm
+<span style="color:#00d4ff;">$</span> cd ~/ascm
+<span style="color:#00d4ff;">$</span> python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+<span style="color:#00d4ff;">$</span> pip install -r requirements.txt
+<span style="color:#00d4ff;">$</span> cp .env.example .env
+<span style="color:#4a5568;"># Edit .env with your keys, then start:</span>
+<span style="color:#00d4ff;">$</span> python dashboard_server.py --port 8080
+            </div>
+          </div>
+          <div class="install-note">
+            <span style="font-size:18px;">🧪</span>
+            <div>
+              Verify all mathematical proofs and tests anytime by running <code style="color:var(--cyan);font-family:'Fira Code',monospace;">python ascm_math_proofs.py</code>.
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Docker -->
+        <div class="install-pane" id="pane-docker" role="tabpanel">
+          <p style="font-size:14px; color:var(--text-muted); margin-bottom:12px;">Run ASCM in an isolated container with your local projects mounted:</p>
+          <div class="code-block-wrap">
+            <button class="copy-btn" onclick="copySnippet('cmd-install-docker')">Copy</button>
+            <div id="cmd-install-docker">
+<span style="color:#00d4ff;">$</span> docker build -t ascm .
+<span style="color:#00d4ff;">$</span> docker run -it -p 8080:8080 \
+    -v $(pwd):/workspace \
+    -e GEMINI_API_KEY="your_api_key_here" \
+    ascm
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -631,7 +775,7 @@
       </div>
       <div class="proof-stat-row">
         <div class="proof-stat">
-          <div class="proof-stat-num">89/89</div>
+          <div class="proof-stat-num">98/98</div>
           <div class="proof-stat-label">Tests Passing</div>
         </div>
         <div class="proof-stat">
@@ -649,52 +793,54 @@
   <!-- Pricing -->
   <section class="pricing-section" id="pricing" aria-labelledby="pricing-title">
     <p class="section-label">Pricing</p>
-    <h2 id="pricing-title" class="section-title">Start Free. Scale When You Need It.</h2>
-    <p class="section-sub">Open-source core, enterprise-ready layers.</p>
+    <h2 id="pricing-title" class="section-title">Open-Source Core. Enterprise Support.</h2>
+    <p class="section-sub">100% free and open-source for developers. Bring your own keys. Paid options for teams and air-gapped pilots.</p>
 
     <div class="pricing-grid">
-      <div class="pricing-card">
-        <div class="pricing-tier">Community</div>
-        <div class="pricing-price">Free</div>
-        <div class="pricing-desc">Full CLI orchestrator for individual developers. Bring your own keys.</div>
-        <ul class="pricing-features">
-          <li>Full CLI orchestrator</li>
-          <li>BYOK (Gemini, OpenAI, Anthropic, Ollama)</li>
-          <li>Local SQLite dashboard</li>
-          <li>All 6 domain verticals</li>
-          <li>89 unit tests included</li>
-        </ul>
-        <a href="/onboarding" class="btn btn-outline pricing-cta" id="pricing-free-cta">Get Started Free</a>
-      </div>
-
       <div class="pricing-card featured">
-        <div class="pricing-tier">Pro</div>
-        <div class="pricing-price"><sup>$</sup>49<sub>/seat/mo</sub></div>
-        <div class="pricing-desc">For startup teams shipping fast with multi-repo sprints.</div>
+        <div class="pricing-tier">Open-Source</div>
+        <div class="pricing-price">Free<sub> forever</sub></div>
+        <div class="pricing-desc">Full autonomous orchestrator running on your hardware. Bring your own API keys.</div>
         <ul class="pricing-features">
-          <li>Multi-repo sync (up to 5 repos)</li>
-          <li>Pre-flight cost radar dashboard</li>
-          <li>Visual architecture flowchart</li>
-          <li>Priority model cascade routing</li>
-          <li>GitHub PR automation</li>
-          <li>Everything in Community</li>
+          <li>100% Local CLI &amp; Web Dashboard</li>
+          <li>BYOK (Gemini, Claude, GPT-4o, Ollama)</li>
+          <li>Multi-repo atomic synchronization</li>
+          <li>Adversarial Critic &amp; TDD verification</li>
+          <li>Human approval milestone gate</li>
+          <li>All 98 unit tests included</li>
+          <li>Self-hosted SQLite persistence</li>
         </ul>
-        <a href="/onboarding" class="btn btn-primary pricing-cta" id="pricing-pro-cta">Start Pro Trial</a>
+        <a href="#install" class="btn btn-primary pricing-cta" id="pricing-free-cta">⬇️ Install Free</a>
       </div>
 
       <div class="pricing-card">
-        <div class="pricing-tier">Enterprise</div>
-        <div class="pricing-price"><sup>$</sup>15k<sub>/yr</sub></div>
-        <div class="pricing-desc">Air-gapped deployment for regulated industries.</div>
+        <div class="pricing-tier">Team Support</div>
+        <div class="pricing-price"><sup>$</sup>49<sub>/seat/mo</sub></div>
+        <div class="pricing-desc">For fast-moving engineering teams wanting priority updates, custom adapters, and direct support.</div>
         <ul class="pricing-features">
-          <li>On-premise / air-gapped SLMs via Ollama</li>
-          <li>SAML / Okta SSO</li>
-          <li>SOC 2 audit trail &amp; PII scrubbing</li>
-          <li>Unlimited repos</li>
-          <li>Dedicated TAM + custom SLA</li>
-          <li>Docker hermetic sandbox</li>
+          <li>Everything in Open-Source</li>
+          <li>Custom domain SKILLS.md blueprint packs</li>
+          <li>Shared team blueprint memory sync</li>
+          <li>CI/CD pipeline automation recipes</li>
+          <li>Priority GitHub issue triage</li>
+          <li>Direct Slack/Discord channel with founders</li>
         </ul>
-        <a href="mailto:founders@ascm.dev" class="btn btn-outline pricing-cta" id="pricing-enterprise-cta">Contact Sales</a>
+        <a href="mailto:founders@ascm.dev?subject=ASCM%20Team%20Support%20Inquiry" class="btn btn-outline pricing-cta" id="pricing-pro-cta">Request Team Setup</a>
+      </div>
+
+      <div class="pricing-card">
+        <div class="pricing-tier">Enterprise Pilot</div>
+        <div class="pricing-price">Pilot<sub> 90 days</sub></div>
+        <div class="pricing-desc">Dedicated on-premise installation for regulated industries (FinTech, Health, Defense).</div>
+        <ul class="pricing-features">
+          <li>100% Air-gapped deployment (zero internet)</li>
+          <li>Local SLM calibration (Qwen 2.5 Coder, Phi-4)</li>
+          <li>SOC 2 / HIPAA compliance audit trail logging</li>
+          <li>Hermetic Docker sandbox execution</li>
+          <li>Hands-on migration of your repos with maintainers</li>
+          <li>Custom SLA &amp; dedicated technical advisor</li>
+        </ul>
+        <a href="mailto:founders@ascm.dev?subject=ASCM%20Enterprise%20Pilot%20Inquiry" class="btn btn-outline pricing-cta" id="pricing-enterprise-cta">Book Pilot Call</a>
       </div>
     </div>
   </section>
@@ -703,52 +849,40 @@
   <section class="cta-section" aria-labelledby="cta-title">
     <div class="cta-inner">
       <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:999px;padding:6px 16px;margin-bottom:20px;font-size:13px;color:#a78bfa;font-weight:600;">
-        🎉 Free Trial — No credit card required
+        ⚡ 100% Local &amp; Private — Zero cloud lock-in
       </div>
-      <h2 id="cta-title">Start Your Free Trial Today</h2>
-      <p>Pre-revenue, open-source. Seeking 3–5 design partners in FinTech &amp; Web3.<br/>
-      All features unlocked during trial. Install on your own repos in minutes.</p>
+      <h2 id="cta-title">Ready to Launch Your Local Squad?</h2>
+      <p>Install in under 2 minutes. Your source code stays on your disk.<br/>
+      Coordinate multiple repositories simultaneously with guaranteed mathematical review.</p>
 
-      <!-- Primary: GitHub OAuth -->
-      <div style="margin:24px auto;max-width:380px;">
-        <a href="/onboarding" class="btn btn-primary btn-lg" id="cta-start-trial-btn"
+      <!-- Primary: Install command -->
+      <div style="margin:24px auto;max-width:480px;">
+        <div class="code-block-wrap" style="text-align:left;margin-bottom:12px;">
+          <button class="copy-btn" onclick="copySnippet('cmd-cta-curl')">Copy</button>
+          <span style="color:#00d4ff;">$</span> <span id="cmd-cta-curl">curl -fsSL https://raw.githubusercontent.com/gopikomanduri/ascm-poc/main/install.sh | bash</span>
+        </div>
+        <a href="#install" class="btn btn-primary btn-lg" id="cta-install-btn"
            style="width:100%;justify-content:center;font-size:16px;padding:16px 24px;text-decoration:none;display:flex;align-items:center;gap:10px;">
-          🚀 Start Free Trial
+          ⬇️ View Full Install Guide
         </a>
-        <p style="font-size:12px;color:var(--text-dim);text-align:center;margin-top:10px;">
-          Connects with GitHub · Takes 2 minutes · No credit card
-        </p>
       </div>
 
       <!-- Secondary: Request a demo -->
-      <div style="display:flex;align-items:center;gap:12px;max-width:380px;margin:0 auto 20px;">
+      <div style="display:flex;align-items:center;gap:12px;max-width:380px;margin:24px auto 20px;">
         <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
-        <span style="font-size:12px;color:var(--text-dim);">or</span>
+        <span style="font-size:12px;color:var(--text-dim);">or explore</span>
         <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
       </div>
 
-      <div class="cta-email-row" style="max-width:440px;margin:0 auto;">
-        <input type="email" id="cta-email-input" class="cta-input"
-               placeholder="your@company.com" aria-label="Work email address" />
-        <button class="btn btn-primary" id="cta-demo-btn" onclick="requestDemo()">Request Demo</button>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;max-width:460px;margin:0 auto 16px;">
+        <a href="/" class="btn btn-outline" id="cta-demo-dashboard-btn">Open Dashboard Demo</a>
+        <a href="https://github.com/gopikomanduri/ascm-poc" target="_blank" rel="noopener" class="btn btn-ghost" id="cta-github-btn">Star on GitHub ⭐</a>
       </div>
-      <p class="cta-disclaimer">For FinTech/Web3 teams with multi-repo complexity.<br/>
-        We'll set it up on your repos together — no engineer needed on your side.</p>
+
+      <p class="cta-disclaimer">Seeking 3–5 design partners in FinTech and Web3.<br/>
+        Need help setting up on your custom repos? Contact <a href="mailto:founders@ascm.dev" style="color:var(--cyan);text-decoration:underline;">founders@ascm.dev</a></p>
     </div>
   </section>
-
-  <script>
-    function requestDemo() {
-      const email = document.getElementById('cta-email-input').value.trim();
-      if (!email || !email.includes('@')) {
-        alert('Please enter a valid work email.');
-        return;
-      }
-      const subject = encodeURIComponent('ASCM Demo Request');
-      const body = encodeURIComponent(`Hi,\n\nI'd like to request a demo of ASCM.\n\nEmail: ${email}\n\nWe have a multi-repo codebase and are interested in the FinTech/Web3 pilot.\n\nBest`);
-      window.location.href = `mailto:founders@ascm.dev?subject=${subject}&body=${body}`;
-    }
-  </script>
 
 
   <!-- Footer -->
@@ -764,6 +898,46 @@
   </footer>
 
   <script>
+    // Tab switching for install section
+    function switchInstallTab(tabId) {
+      document.querySelectorAll('.install-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-selected', 'false');
+      });
+      document.querySelectorAll('.install-pane').forEach(pane => pane.classList.remove('active'));
+
+      const activeBtn = document.getElementById('tab-btn-' + tabId);
+      const activePane = document.getElementById('pane-' + tabId);
+      if (activeBtn) {
+        activeBtn.classList.add('active');
+        activeBtn.setAttribute('aria-selected', 'true');
+      }
+      if (activePane) {
+        activePane.classList.add('active');
+      }
+    }
+
+    // Copy to clipboard helper
+    function copySnippet(elementId) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      const text = el.innerText || el.textContent;
+      navigator.clipboard.writeText(text.trim()).then(() => {
+        const btn = event?.target;
+        if (btn && btn.classList.contains('copy-btn')) {
+          const original = btn.textContent;
+          btn.textContent = 'Copied!';
+          btn.style.color = '#10b981';
+          setTimeout(() => {
+            btn.textContent = original;
+            btn.style.color = '';
+          }, 2000);
+        }
+      }).catch(err => {
+        console.error('Copy failed:', err);
+      });
+    }
+
     // Intersection observer for scroll animations
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(el => {
@@ -774,20 +948,11 @@
       });
     }, { threshold: 0.1 });
 
-    document.querySelectorAll('.feature-card, .agent-card, .pricing-card, .domain-pill').forEach(el => {
+    document.querySelectorAll('.feature-card, .agent-card, .pricing-card, .domain-pill, .install-box').forEach(el => {
       el.style.opacity = '0';
       el.style.transform = 'translateY(20px)';
       el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
       observer.observe(el);
-    });
-
-    // CTA email → onboarding with pre-fill
-    document.getElementById('cta-email-cta-btn').addEventListener('click', function(e) {
-      const email = document.getElementById('cta-email-input').value.trim();
-      if (email) {
-        e.preventDefault();
-        window.location.href = '/onboarding?email=' + encodeURIComponent(email);
-      }
     });
   </script>
 </body>

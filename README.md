@@ -79,27 +79,43 @@ python mr_bench.py --run-all --publish   # Run the benchmark
 
 ## Quick Start
 
-### Option 1: Web Dashboard (Recommended)
+### Option 1: One-Line Install (Recommended for macOS / Linux)
+
 ```bash
-git clone https://github.com/gopikomanduri/ascm-poc
-cd ascm-poc
+curl -fsSL https://raw.githubusercontent.com/gopikomanduri/ascm-poc/main/install.sh | bash
+```
+Then add your API key:
+```bash
+echo 'GEMINI_API_KEY=your-key' >> ~/ascm/.env
+ascm    # launches dashboard at http://localhost:8080
+```
+
+### Option 2: Manual Clone
+
+```bash
+git clone https://github.com/gopikomanduri/ascm-poc ~/ascm
+cd ~/ascm
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # Add your Gemini/OpenAI/Anthropic key
-python dashboard_server.py
+python dashboard_server.py --port 8080
 # → Open http://localhost:8080/landing
 ```
 
-### Option 2: CLI
+### Option 3: CLI Mode
+
 ```bash
 python main.py \
   --repos ../my-api ../my-sdk \
   --goal "Add Stripe webhook with HMAC verification"
 ```
 
-### Option 3: Docker
+### Option 4: Docker
+
 ```bash
 docker build -t ascm .
 docker run -p 8080:8080 \
+  -v $(pwd):/workspace \
   -e GEMINI_API_KEY=your-key \
   ascm
 # → Open http://localhost:8080/landing
@@ -118,7 +134,9 @@ docker run -p 8080:8080 \
 
 ---
 
-## Deploy to Railway (2 minutes)
+## Deploy to Railway (Web Demo Only)
+
+> **Note:** ASCM writes code directly to your local filesystem. The Railway deployment serves as a live cloud preview and web demo of the dashboard UI. For real multi-repo development sprints, run ASCM locally.
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/gopikomanduri/ascm-poc)
 
@@ -137,13 +155,13 @@ ASCM_SECRET_KEY=any-random-32-char-string
 | Phase | Status |
 |---|---|
 | Core orchestrator + reference implementations | ✅ Done |
-| Web dashboard + SaaS onboarding | ✅ Done |
+| Local CLI & Web dashboard | ✅ Done |
 | Mathematical proofs + MR-Bench | ✅ Done |
-| GitHub OAuth login | ✅ Done |
-| Railway / Docker deployment | ✅ Done |
-| Stripe billing integration | 🔧 Next |
+| One-line installer (`curl \| bash`) | ✅ Done |
+| Docker container & Railway demo preview | ✅ Done |
+| CLI packaging (Homebrew / pip distribution) | 🔧 Next |
 | Live agent MR-Bench run | 🔧 Next |
-| Design partner pilots | 🎯 Seeking |
+| Design partner pilots (FinTech/Web3) | 🎯 Seeking |
 
 ---
 
