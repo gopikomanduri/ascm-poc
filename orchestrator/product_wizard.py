@@ -49,14 +49,17 @@ class RepoAnalyzer:
         if custom_skills_path:
             candidate_paths.append(repo_path / custom_skills_path.strip().lstrip("/"))
         
-        # Standard locations
+        # Standard locations (ASCM SKILLS.md and RepoSwarm .arch.md)
         candidate_paths.extend([
             repo_path / "SKILLS.md",
             repo_path / "SKILL.md",
             repo_path / ".agents" / "skills" / "SKILLS.md",
             repo_path / "skills" / "SKILLS.md",
             repo_path / "docs" / "SKILLS.md",
+            repo_path / f"{repo_path.name}.arch.md",
+            repo_path / ".arch.md",
         ])
+        candidate_paths.extend(list(repo_path.glob("*.arch.md")))
 
         for cand in candidate_paths:
             if cand.exists() and cand.is_file():

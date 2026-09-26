@@ -133,18 +133,20 @@ class ArchitectAgent(BaseAgent):
             tier="primary",
         )
 
-    def run(self, clarified_prd: str, hld: str, lld: str, contracts: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, clarified_prd: str, hld: str, lld: str, contracts: Dict[str, Any], kg_context: Optional[str] = None) -> Dict[str, Any]:
         from orchestrator.domain import DomainAdapter
         domain = DomainAdapter.detect_domain(clarified_prd)
         lang = DomainAdapter.detect_language(clarified_prd, domain)
         role_prompt = DomainAdapter.get_agent_domain_prompt("architect", domain, lang)
         ext = ".py" if lang == "python" else ".go" if lang == "go" else ".ts" if lang == "typescript" else ".rs" if lang == "rust" else ".go"
+        kg_block = f"\n\nCross-Repository Knowledge Graph:\n{kg_context}" if kg_context else ""
         prompt = (
             f"{role_prompt}\n"
             f"PRD:\n{clarified_prd}\n\n"
             f"HLD:\n{hld}\n\n"
             f"LLD:\n{lld}\n\n"
-            f"Repository Contracts:\n{json.dumps(contracts, indent=2)}\n\n"
+            f"Repository Contracts:\n{json.dumps(contracts, indent=2)}"
+            f"{kg_block}\n\n"
             f"Decompose this work into granular execution tasks assigned to specialized agents ('coder', 'database', 'security'). "
             f"Target file extensions should use '{ext}' matching target language {lang.upper()}."
         )

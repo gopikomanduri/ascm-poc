@@ -13,6 +13,14 @@ def parse_skill_contract(repo_path: str) -> RepoContract:
     if not skill_file.exists():
         skill_file = repo / "SKILLS.md"
     if not skill_file.exists():
+        # Check for RepoSwarm standardized .arch.md file
+        arch_candidates = list(repo.glob("*.arch.md")) + list(repo.glob(".arch.md"))
+        if not arch_candidates and (repo / "docs").exists():
+            arch_candidates = list((repo / "docs").glob("*.arch.md"))
+        if arch_candidates:
+            skill_file = arch_candidates[0]
+
+    if not skill_file.exists():
         return RepoContract(repo_path=str(repo), name=repo.name)
 
     raw = skill_file.read_text(encoding="utf-8")

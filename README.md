@@ -4,7 +4,7 @@
 
 ASCM coordinates a squad of AI agents — Product, Architect, Coder, Adversarial Critic, and Security Auditor — to deliver features across **multiple repositories simultaneously**, with a human approval gate before any code is committed.
 
-[![Tests](https://img.shields.io/badge/tests-98%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Open Source](https://img.shields.io/badge/open--source-BYOK-violet)](https://github.com/gopikomanduri/ascm-poc)
 
@@ -92,14 +92,16 @@ If you are an investor, founder, or engineering executive, here is the commercia
 - **Open-Core / Community (Free Forever)**: 100% local CLI and dashboard with Bring-Your-Own-Key (BYOK). Drives developer adoption from the ground up, following the playbook of Docker, Git, and Terraform.
 - **Team Tier ($49/seat/month)**: Shared blueprint memory across teams, custom domain adapter packs, and priority technical support.
 - **Enterprise Air-Gapped Pilot ($5,000 – $10,000 / 90-day pilot)**: Hands-on deployment on client infrastructure, custom SLM fine-tuning, SOC 2 audit trail compliance, and dedicated engineering support.
-- **Current Traction**: 98/98 unit tests passing, 3 production-grade reference implementations across FinTech, Web3, and CAD/CAM, zero debt, ready for developer adoption.
+- **Current Traction**: 103/103 unit tests passing, 3 production-grade reference implementations across FinTech, Web3, and CAD/CAM, zero debt, ready for developer adoption.
 
 ---
 
-## What's Built (98/98 Tests Passing)
+## What's Built (103/103 Tests Passing)
 
 ### Core Engine
 - Multi-agent orchestrator with 5 specialized agents
+- **Cross-Repository Knowledge Graph**: in-memory directed graph linking routes, schemas, and callers across repos with impact radius calculation
+- **RepoSwarm & SKILLS.md Interoperability**: natively ingests standardized `.arch.md` architecture discovery files
 - Domain adapter: auto-detects FinTech / CAD/CAM / MedTech / Legal / Web3 / Robotics
 - Blueprint engine: reuses prior architectural patterns (reduces LLM cost 36–63%)
 - Pre-flight cost radar: P50/P90 token forecaster with circuit breakers
@@ -233,7 +235,7 @@ If you're interested: [founders@ascm.dev](mailto:founders@ascm.dev)
 
 ## Stage & Honesty
 
-> Pre-revenue, open-source proof-of-concept. **98/98 tests passing. 0 paying customers.**
+> Pre-revenue, open-source proof-of-concept. **103/103 tests passing. 0 paying customers.**
 > 
 > We'd rather be transparent than oversell. The math and the code are open — evaluate them yourself.
 
