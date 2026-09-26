@@ -501,9 +501,17 @@ def _synthesize_fallback_response(agent_name: str, prompt: str, json_mode: bool)
     from orchestrator.domain import DomainAdapter
     user_goal = prompt
     if "User Requirement / PRD:\n" in prompt:
-        user_goal = prompt.split("User Requirement / PRD:\n", 1)[1].split("\n\n", 1)[0]
+        user_goal = prompt.split("User Requirement / PRD:\n", 1)[1]
+        if "\n\nClarification History:" in user_goal:
+            user_goal = user_goal.split("\n\nClarification History:", 1)[0]
+        elif "\n\n" in user_goal:
+            # take up to analysis instruction block
+            parts = user_goal.split("\n\nAnalyze with deep", 1)
+            user_goal = parts[0]
     elif "Feature Goal:\n" in prompt:
-        user_goal = prompt.split("Feature Goal:\n", 1)[1].split("\n\n", 1)[0]
+        user_goal = prompt.split("Feature Goal:\n", 1)[1]
+        if "\n\nBusiness Strategy" in user_goal:
+            user_goal = user_goal.split("\n\nBusiness Strategy", 1)[0]
     domain = DomainAdapter.detect_domain(user_goal)
 
     user_goal_lower = user_goal.lower()
@@ -511,7 +519,8 @@ def _synthesize_fallback_response(agent_name: str, prompt: str, json_mode: bool)
         "clarification:", "supported chains", "polygon", "evm", "qr invoice", "settlement flow", "hybrid", "non-custodial",
         "b-rep", "g-code", "toolpath", "3-axis", "5-axis", "fanuc", "haas", "grbl", "tolerance",
         "fhir", "hl7", "dicom", "hipaa", "ros2", "rtos", "can bus", "ast", "lexer",
-        "jurisdiction:", "statutory scope:", "clause ast", "redlining diff", "zero-retention", "gdpr article"
+        "jurisdiction:", "statutory scope:", "clause ast", "redlining diff", "zero-retention", "gdpr article",
+        "qwen", "phi-4", "llama", "gguf", "int4", "sharpe", "cagr", "alpha", "beta", "sebi", "sec rule", "sse"
     ])
 
     if agent_name in ("ProductAgent", "ProductManagerAgent"):
@@ -595,6 +604,71 @@ def _synthesize_fallback_response(agent_name: str, prompt: str, json_mode: bool)
                 "Technical case studies demonstrating automated verification and NFR audits"
             ],
             "executive_summary": f"ASCM eliminates the friction of building complex {domain.display_name} infrastructure with autonomous multi-agent engineering."
+        }
+        return json.dumps(payload, indent=2)
+
+    elif agent_name in ("DesignAgent", "LeadArchitectAgent"):
+        payload = {
+            "hld": (
+                f"# High-Level Design (HLD): {domain.display_name}\n\n"
+                f"## 1. System Topology & Architecture\n"
+                f"Dual-repository decoupled microservice topology:\n"
+                f"- **data-pipeline (Provider)**: Ingestion of Scheme Information Documents (SIDs), daily NAV feeds, and deterministic Sharpe/Alpha factor regression engine.\n"
+                f"- **slm-serving-engine (Consumer)**: Quantized Small Language Model (Qwen2.5-1.5B INT4 GGUF) serving API with SEBI/SEC Rule 482 disclaimer guardrails and SSE token streaming.\n\n"
+                f"## 2. Invariant Security & NFR Architecture\n"
+                f"- **Zero Data Retention**: Client queries and portfolio allocations are held strictly in ephemeral RAM.\n"
+                f"- **Mathematical Grounding**: Real-time function calling into the deterministic calculation engine to eliminate numerical hallucinations.\n"
+                f"- **Edge Latency**: Sub-50ms Time-To-First-Token (TTFT) on CPU via INT4 quantized weights."
+            ),
+            "lld": (
+                f"# Low-Level Design (LLD)\n\n"
+                f"### Module 1: `data-pipeline/app/fund_data.py`\n"
+                f"- `MutualFundMetricsCalculator`:\n"
+                f"  - `calculate_cagr(initial_nav, final_nav, years) -> float`\n"
+                f"  - `calculate_sharpe_ratio(fund_return, fund_std_dev, risk_free_rate) -> float`\n"
+                f"  - `calculate_beta(fund_returns, benchmark_returns) -> float`\n"
+                f"  - `calculate_alpha(fund_return, benchmark_return, beta) -> float`\n\n"
+                f"### Module 2: `slm-serving-engine/app/slm_serving.py`\n"
+                f"- `MutualFundSLMServingEngine`:\n"
+                f"  - `format_fund_query_prompt(query, context_chunks) -> str`\n"
+                f"  - `enforce_statutory_compliance(slm_output) -> Dict[str, Any]` (Injects mandatory SEBI/SEC disclaimers and sanitizes promissory return claims)\n"
+                f"  - `stream_inference_tokens(prompt) -> AsyncGenerator[str, None]`"
+            )
+        }
+        return json.dumps(payload, indent=2)
+
+    elif agent_name in ("ArchitectAgent", "SystemsArchitectAgent"):
+        payload = {
+            "tasks": [
+                {
+                    "id": "TASK-1",
+                    "title": "Deterministic Portfolio Metrics Engine (CAGR, Sharpe, Beta, Jensen's Alpha)",
+                    "description": "Implement zero-division safe numerical calculators for mutual fund performance metrics in Python with 100% unit test assertion coverage.",
+                    "assigned_agent": "coder",
+                    "target_file": "app/fund_data.py"
+                },
+                {
+                    "id": "TASK-2",
+                    "title": "Quantized SLM Serving Gateway & SSE Token Streamer",
+                    "description": "Implement lightweight Qwen2.5-Coder 1.5B (INT4 GGUF) serving wrapper with FastAPI Server-Sent Events (SSE) streaming targeting sub-50ms latency.",
+                    "assigned_agent": "coder",
+                    "target_file": "app/slm_serving.py"
+                },
+                {
+                    "id": "TASK-3",
+                    "title": "Statutory Regulatory Disclaimers & Anti-Hallucination Guardrails",
+                    "description": "Build post-generation compliance validator enforcing SEBI / SEC Rule 482 mandatory risk disclosures and blocking promissory return statements.",
+                    "assigned_agent": "security",
+                    "target_file": "app/guardrails.py"
+                },
+                {
+                    "id": "TASK-4",
+                    "title": "End-to-End TDD Test Harness & Verification Suite",
+                    "description": "Implement boundary condition unit tests: zero volatility, negative returns, missing disclaimers, and token rate limiting.",
+                    "assigned_agent": "coder",
+                    "target_file": "tests/test_fund_data.py"
+                }
+            ]
         }
         return json.dumps(payload, indent=2)
 

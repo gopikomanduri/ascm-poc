@@ -1,0 +1,109 @@
+{
+  "sync_timestamp": "2026-09-26T18:07:40.896152+00:00",
+  "duration_sec": 0.797,
+  "total_schemes": 3,
+  "status": "COMPLETED",
+  "funds": {
+    "hdfc_top_100": {
+      "id": "hdfc_top_100",
+      "name": "HDFC Top 100 Index Fund",
+      "category": "Large Cap Index",
+      "benchmark": "NIFTY 100 TRI",
+      "nav": 226.38,
+      "nav_history": [
+        134.59,
+        162.81,
+        193.2,
+        208.4,
+        226.38
+      ],
+      "benchmark_history": [
+        550.0,
+        680.0,
+        810.0,
+        890.0,
+        970.0
+      ],
+      "expense_ratio": 0.35,
+      "aum_cr": 34850,
+      "last_synced": "25-09-2026",
+      "sync_source": "AMFI_OPEN_API",
+      "metrics": {
+        "cagr_3yr_pct": 11.61,
+        "cagr_5yr_pct": 13.88,
+        "sharpe_ratio": 0.36,
+        "beta": 0.93,
+        "jensens_alpha_pct": -3.04,
+        "risk_free_rate_pct": 6.5
+      }
+    },
+    "parag_parikh_flexi": {
+      "id": "parag_parikh_flexi",
+      "name": "Parag Parikh Flexi Cap Fund",
+      "category": "Flexi Cap",
+      "benchmark": "NIFTY 500 TRI",
+      "nav": 89.958,
+      "nav_history": [
+        42.1,
+        52.8,
+        64.3,
+        73.5,
+        86.42,
+        89.958
+      ],
+      "benchmark_history": [
+        38.0,
+        48.0,
+        58.0,
+        66.0,
+        76.5
+      ],
+      "expense_ratio": 0.63,
+      "aum_cr": 72400,
+      "last_synced": "25-09-2026",
+      "sync_source": "AMFI_OPEN_API",
+      "metrics": {
+        "cagr_3yr_pct": 11.84,
+        "cagr_5yr_pct": 16.4,
+        "sharpe_ratio": 0.38,
+        "beta": 0.74,
+        "jensens_alpha_pct": -3.99,
+        "risk_free_rate_pct": 6.5
+      }
+    },
+    "vanguard_500": {
+      "id": "vanguard_500",
+      "name": "Vanguard 500 Index Fund",
+      "category": "Large Cap Blend (US)",
+      "benchmark": "S&P 500 Index",
+      "nav": 716.28,
+      "nav_history": [
+        310.0,
+        365.0,
+        420.0,
+        465.0,
+        524.18,
+        716.28
+      ],
+      "benchmark_history": [
+        308.0,
+        362.0,
+        418.0,
+        462.0,
+        521.0
+      ],
+      "expense_ratio": 0.04,
+      "aum_cr": 920000,
+      "last_synced": "2026-09-26",
+      "sync_source": "YAHOO_FINANCE_API",
+      "metrics": {
+        "cagr_3yr_pct": 19.48,
+        "cagr_5yr_pct": 18.23,
+        "sharpe_ratio": 0.91,
+        "beta": -0.92,
+        "jensens_alpha_pct": 19.91,
+        "risk_free_rate_pct": 6.5
+      }
+    }
+  }
+}

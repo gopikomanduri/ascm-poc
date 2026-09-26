@@ -382,11 +382,11 @@ VERTICAL_DOMAINS: Dict[str, DomainProfile] = {
             "Streaming Server-Sent Events (SSE)", "Tool calling / Function calling", "Evaluation benchmarks"
         ],
         grilling_dimensions=[
-            "1. Model Routing & Fallback: Multi-provider tiering (fast vs primary) with automated 429/503 circuit breakers?",
-            "2. Retrieval & Context: In-memory semantic search vs vector DB (Chroma, Qdrant, Pinecone) with chunking?",
-            "3. Streaming & Latency: Chunked Server-Sent Events (SSE) streaming vs synchronous JSON responses?",
-            "4. Token Budget & Guardrails: Pre-flight token forecasting, rate limiting, and output moderation?",
-            "5. Evaluation: Automated ground-truth eval datasets, LLM-as-a-judge scoring, latency telemetry?"
+            "1. Model Routing, Scale & Quantization: Base foundation model (Qwen2.5, Phi-4, Llama-3), parameter scale (1.5B vs 7B), and quantization format (INT4 GGUF, AWQ, FP16) for edge vs cloud execution?",
+            "2. Deterministic Tool Calling vs Neural Math: Offloading quantitative calculations (CAGR, Sharpe, Beta, Alpha) to verifiable zero-hallucination tools instead of neural weight sampling?",
+            "3. Real-Time API Ingestion & Dynamic Context: Daily scheduled synchronization with real-time financial/market APIs (AMFI, SEC EDGAR, Yahoo) and in-context document updates without model weight retraining?",
+            "4. Continuous Self-Correction via RL / DPO: Automated audit log mining, synthetic preference pair generation (prompt, chosen, rejected), and nightly LoRA alignment (DPO/GRPO)?",
+            "5. Statutory Guardrails & Data Privacy: Hard compliance interceptors (SEBI India / SEC Rule 482) for promissory returns, and zero-retention edge privacy for client PII / portfolio holdings?"
         ],
         architectural_patterns=[
             "Provider Abstraction with Retry & Circuit Breakers",
@@ -538,9 +538,9 @@ class DomainAdapter:
         ]):
             return VERTICAL_DOMAINS["DEVTOOLS_COMPILER"]
 
-        # AI / Machine Learning / Agent Systems
+        # AI / Machine Learning / Agent Systems & Specialized SLMs
         if any(k in combined for k in [
-            "llm", "agent", "rag", "vector", "embedding", "prompt", "inference",
+            "llm", "slm", "small language model", "language model", "agent", "rag", "vector", "embedding", "prompt", "inference",
             "langchain", "fine-tuning", "diffusion", "neural", "transformers"
         ]):
             return VERTICAL_DOMAINS["AI_ML_SYSTEMS"]

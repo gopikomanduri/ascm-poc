@@ -262,16 +262,32 @@ class OrchestratorEngine:
                     current_input += f"\nUser Milestone Feedback: {feedback}"
                     continue
 
-            # Confidence < 90%: continue grilling with targeted questions
-            GLOBAL_DASHBOARD_STATE.update_agent("ProductAgent", "waiting", f"Waiting for human clarification ({confidence*100:.1f}%)")
-            GLOBAL_DASHBOARD_STATE.request_clarification(questions)
-            print(f"\n[!] Requirements Confidence is {confidence * 100:.1f}% (< 90% threshold). Grilling for missing specifics:")
-            for i, q in enumerate(questions, 1):
-                print(f"  {i}. {q}")
+            # Confidence < 90%: continue grilling with targeted questions one by one
+            active_question = questions[0]
+            remaining_count = len(questions)
+            GLOBAL_DASHBOARD_STATE.update_agent(
+                "ProductAgent",
+                "waiting",
+                f"Grilling question 1 of {remaining_count} ({confidence*100:.1f}% confidence)",
+            )
+            GLOBAL_DASHBOARD_STATE.request_clarification([active_question])
+            print(f"\n" + "-" * 75)
+            print(f"🔥 PRODUCT AGENT DOMAIN GRILLING [Requirements Confidence: {confidence * 100:.1f}% / Target: >= 90.0%]")
+            print(f"   Unresolved Dimensions Queue: {remaining_count} items remaining")
+            print("-" * 75)
+            print(f"👉 Question: {active_question}\n")
 
-            user_answers = input("\nEnter clarification details: ").strip()
-            GLOBAL_DASHBOARD_STATE.submit_clarification(user_answers)
-            current_input += f"\nClarification: {user_answers}"
+            if auto_approve or not sys.stdin.isatty():
+                default_ans = "Standard industry-recommended default configuration."
+                self._log(f"[+] Auto-clarified question: {active_question} -> {default_ans}")
+                current_input += f"\nClarification for '{active_question}': {default_ans}"
+            else:
+                user_answer = input("Your Answer (or press ENTER to accept recommended default): ").strip()
+                if not user_answer:
+                    user_answer = "Standard industry-recommended default configuration."
+                    print(f"   ↳ Default accepted: {user_answer}")
+                GLOBAL_DASHBOARD_STATE.submit_clarification(user_answer)
+                current_input += f"\nClarification for '{active_question}': {user_answer}"
 
     def _run_business_and_revenue_strategy(self, auto_approve: bool = False) -> None:
         contracts_dict = {p: self.state.contracts[p].model_dump() for p in self.state.contracts}
