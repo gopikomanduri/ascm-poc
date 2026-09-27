@@ -37,7 +37,8 @@ class ProductAgent(BaseAgent):
         domain = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.narrow_domain(user_input)
 
         # Dynamically inject laser-focused system prompt for this specific domain (zero cross-domain clutter)
-        self.system_prompt = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.build_focused_product_system_prompt(domain)
+        self.system_instruction = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.build_focused_product_system_prompt(domain)
+        self.system_prompt = self.system_instruction
 
         history_str = json.dumps(conversation_history or [], indent=2)
         prompt = (
@@ -267,7 +268,8 @@ class BusinessStrategyAgent(BaseAgent):
         domain = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.narrow_domain(f"{user_goal} {clarified_prd}")
 
         # Dynamically inject focused GTM and competitor battlecards for this domain
-        self.system_prompt = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.build_focused_business_system_prompt(domain)
+        self.system_instruction = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.build_focused_business_system_prompt(domain)
+        self.system_prompt = self.system_instruction
 
         competitors_hint = ", ".join(c.get("competitor", "") for c in domain.competitor_archetypes)
         prompt = (

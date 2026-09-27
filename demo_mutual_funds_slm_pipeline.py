@@ -178,7 +178,6 @@ def main():
         "and retail investors. Provides scheme comparisons, portfolio factor analysis, Sharpe/Alpha calculation, "
         "and statutory compliance disclaimer verification."
     )
-    biz_system_prompt = biz_agent.system_instruction
     biz_user_prompt = (
         f"Product Goal:\n{user_goal}\n\n"
         f"Clarified Context:\n{clarified_initial}\n\n"
@@ -187,6 +186,7 @@ def main():
         f"and competitor analysis vs BloombergGPT, FinGPT, and Morningstar Direct."
     )
     biz_result = biz_agent.run(user_goal=user_goal, clarified_prd=clarified_initial, contracts=contracts_dict)
+    biz_system_prompt = biz_agent.system_instruction
     biz_log_file = log_agent_prompt_and_response(
         "01", "BusinessStrategyAgent", "Chief Commercial Officer & FinTech GTM Strategist",
         biz_system_prompt, biz_user_prompt, biz_result
@@ -244,7 +244,6 @@ def main():
     print("=" * 80)
     GLOBAL_DASHBOARD_STATE.update_agent("ProductAgent", "running", "Evaluating requirements & NFRs")
     prod_agent = ProductAgent()
-    prod_system_prompt = prod_agent.system_instruction
     prod_user_prompt = (
         f"User Requirement / PRD:\n{user_goal}\n\n"
         f"Target Domain: {domain.display_name}\n\n"
@@ -253,6 +252,7 @@ def main():
         "Evaluate confidence_score, functional completeness, NFR completeness, and detailed understanding."
     )
     prod_result = prod_agent.run(user_goal)
+    prod_system_prompt = prod_agent.system_instruction
     prod_log_file = log_agent_prompt_and_response(
         "03", "ProductAgent", "Principal Product Manager & FinTech AI Domain Expert",
         prod_system_prompt, prod_user_prompt, prod_result
