@@ -177,121 +177,316 @@ HTML_PAGE = """<!DOCTYPE html>
       border-radius: 16px;
       font-size: 11px;
       cursor: pointer;
+    /* Tabs */
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--card-border); padding-bottom: 8px; }
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 14px;
+      cursor: pointer;
+      border-radius: 6px;
       transition: all 0.2s;
     }
-    .chip:hover { background: #374151; color: #fff; border-color: var(--accent-blue); }
-    .chip.alert { color: var(--accent-yellow); border-color: rgba(251, 191, 36, 0.3); }
-
-    .input-row { display: flex; gap: 10px; }
-    .input-box {
-      flex: 1;
-      background: #1f2937;
-      border: 1px solid #374151;
-      color: #fff;
-      padding: 12px 14px;
-      border-radius: 8px;
-      font-size: 13px;
-      outline: none;
+    .tab-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.04); }
+    .tab-btn.active {
+      background: #1e293b;
+      color: var(--accent-blue);
+      border-color: #334155;
     }
-    .input-box:focus { border-color: var(--accent-blue); }
-    .send-btn {
-      background: #0284c7;
+
+    .holdings-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 14px; }
+    .holdings-table th, .holdings-table td { padding: 8px 6px; text-align: left; border-bottom: 1px solid #1f2937; }
+    .holdings-table th { color: var(--text-muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+    .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-block; }
+    .tag-green { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+    .tag-yellow { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); }
+    .tag-red { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
+
+    .add-holding-row { display: grid; grid-template-columns: 1.4fr 1fr 0.8fr auto; gap: 6px; margin-bottom: 14px; }
+    .add-btn {
+      background: #10b981;
       color: #fff;
       border: none;
-      padding: 0 20px;
-      border-radius: 8px;
+      padding: 0 12px;
+      border-radius: 6px;
       font-weight: 600;
-      font-size: 13px;
+      font-size: 12px;
       cursor: pointer;
-      transition: background 0.2s;
     }
-    .send-btn:hover { background: #0369a1; }
+    .del-btn {
+      background: transparent;
+      color: var(--accent-red);
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="logo-group">
-      <h1>📈 Mutual Funds SLM Copilot</h1>
-      <p>Edge Quantized Model Engine (Qwen2.5-Coder 1.5B INT4) with Deterministic Math & SEBI/SEC Rule 482 Disclaimers</p>
+      <h1>📈 Mutual Funds SLM Copilot & Portfolio Engine</h1>
+      <p>Local Neural Model (Phi-4-Mini / Llama-3.2) with Deterministic Portfolio Math & SEBI/SEC Rule 482 Disclaimers</p>
     </div>
     <div class="badges">
-      <span class="badge badge-blue">⚡ Latency: 22ms (CPU)</span>
+      <span class="badge badge-blue">⚡ Local Edge Neural SLM Active</span>
       <span class="badge badge-green">🛡️ SEBI & SEC Rule 482 Enforced</span>
-      <span class="badge badge-purple">🔢 Zero-Hallucination Tool Calling</span>
+      <span class="badge badge-purple">💼 My Portfolio X-Ray Enabled</span>
     </div>
   </div>
 
   <div class="grid">
-    <!-- Left Column: Fund Selector & Deterministic Analytics -->
+    <!-- Left Column: Tabs for Scheme Analytics vs My Portfolio -->
     <div class="panel">
-      <h2>📊 Live Scheme Analytics</h2>
-      <select id="fundSelect" class="fund-select" onchange="loadFundDetails()">
-        <option value="hdfc_top_100">HDFC Top 100 Index Fund (Large Cap)</option>
-        <option value="parag_parikh_flexi">Parag Parikh Flexi Cap Fund (Flexi Cap)</option>
-        <option value="vanguard_500">Vanguard 500 Index Fund (S&P 500)</option>
-      </select>
+      <div class="tabs">
+        <button id="btnTabScheme" class="tab-btn active" onclick="switchTab('scheme')">🔍 Single Scheme</button>
+        <button id="btnTabPortfolio" class="tab-btn" onclick="switchTab('portfolio')">💼 My Portfolio X-Ray</button>
+      </div>
 
-      <div class="metric-grid">
-        <div class="metric-card">
-          <div class="metric-title">Current NAV</div>
-          <div id="mNav" class="metric-val">₹1,042.85</div>
+      <!-- TAB 1: Single Scheme Explorer -->
+      <div id="tabSchemeContent">
+        <h2 style="font-size: 14px; margin-bottom: 12px;">📊 Scheme Performance & Prospectus</h2>
+        <select id="fundSelect" class="fund-select" onchange="loadFundDetails()">
+          <option value="parag_parikh_flexi">Parag Parikh Flexi Cap Fund (Flexi Cap)</option>
+          <option value="hdfc_top_100">HDFC Top 100 Index Fund (Large Cap Index)</option>
+          <option value="sbi_small_cap">SBI Small Cap Fund (Small Cap)</option>
+          <option value="icici_bluechip">ICICI Prudential Bluechip Fund (Large Cap)</option>
+          <option value="vanguard_500">Vanguard 500 Index Fund (S&P 500 US)</option>
+        </select>
+
+        <div class="metric-grid">
+          <div class="metric-card">
+            <div class="metric-title">Current NAV</div>
+            <div id="mNav" class="metric-val">₹89.96</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">3-Year CAGR</div>
+            <div id="mCagr" class="metric-val green">11.84%</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Sharpe Ratio</div>
+            <div id="mSharpe" class="metric-val blue">0.38</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Jensen's Alpha</div>
+            <div id="mAlpha" class="metric-val green">-2.29%</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Beta (Market Vol)</div>
+            <div id="mBeta" class="metric-val">0.74</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Expense Ratio</div>
+            <div id="mExpense" class="metric-val">0.63%</div>
+          </div>
         </div>
-        <div class="metric-card">
-          <div class="metric-title">3-Year CAGR</div>
-          <div id="mCagr" class="metric-val green">18.92%</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-title">Sharpe Ratio</div>
-          <div id="mSharpe" class="metric-val blue">1.33</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-title">Jensen's Alpha</div>
-          <div id="mAlpha" class="metric-val green">+2.45%</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-title">Beta (Benchmark)</div>
-          <div id="mBeta" class="metric-val">0.96</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-title">Expense Ratio</div>
-          <div id="mExpense" class="metric-val">0.35%</div>
+
+        <div class="metric-title" style="margin-top: 14px;">SID Prospectus Mandate:</div>
+        <div id="sidBox" class="sid-box">
+          Loading scheme guidance...
         </div>
       </div>
 
-      <div class="metric-title" style="margin-top: 16px;">Scheme Information Document (SID) Abstract:</div>
-      <div id="sidBox" class="sid-box">
-        Replicating NIFTY 100 TRI. 95% minimum equity holding in top 100 market capitalization equities. Exit load 1% within 30 days.
+      <!-- TAB 2: My Portfolio Holdings & X-Ray -->
+      <div id="tabPortfolioContent" style="display: none;">
+        <h2 style="font-size: 14px; margin-bottom: 12px;">💼 My Mutual Fund Holdings</h2>
+        
+        <table class="holdings-table">
+          <thead>
+            <tr>
+              <th>Scheme</th>
+              <th>Invested</th>
+              <th>Held</th>
+              <th>Exit Load</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="holdingsTbody">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+
+        <div class="metric-title" style="margin-bottom: 6px;">Add Fund to Portfolio:</div>
+        <div class="add-holding-row">
+          <select id="addFundSelect" class="fund-select" style="margin-bottom: 0; padding: 6px 8px; font-size: 12px;">
+            <option value="parag_parikh_flexi">Parag Parikh Flexi</option>
+            <option value="hdfc_top_100">HDFC Top 100</option>
+            <option value="sbi_small_cap">SBI Small Cap</option>
+            <option value="icici_bluechip">ICICI Bluechip</option>
+            <option value="vanguard_500">Vanguard 500</option>
+          </select>
+          <input type="number" id="addAmount" class="input-box" placeholder="₹ Amount" value="100000" style="padding: 6px 8px; font-size: 12px;">
+          <input type="number" id="addMonths" class="input-box" placeholder="Mos" value="8" style="padding: 6px 8px; font-size: 12px;">
+          <button class="add-btn" onclick="addHolding()">+ Add</button>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric-card">
+            <div class="metric-title">Total Invested</div>
+            <div id="pInvested" class="metric-val">₹2,20,000</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Current Value</div>
+            <div id="pCurrent" class="metric-val green">₹2,64,300</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Weighted CAGR</div>
+            <div id="pCagr" class="metric-val blue">12.5%</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Weighted Exp. Ratio</div>
+            <div id="pExpense" class="metric-val">0.51%</div>
+          </div>
+        </div>
+
+        <div id="portfolioExitAlert" class="sid-box" style="border-left-color: var(--accent-yellow); margin-top: 10px;">
+          ⚠️ <strong>Exit Load Notice:</strong> 1 scheme has been held for under 12 months and is subject to exit load upon redemption.
+        </div>
       </div>
     </div>
 
     <!-- Right Column: Interactive SLM Chat & Tool Telemetry -->
     <div class="panel chat-container">
-      <h2>🤖 Conversational SLM Copilot (Edge Quantized)</h2>
+      <h2 id="chatHeaderTitle">🤖 Conversational SLM Copilot (Local Neural Model)</h2>
       
-      <div class="preset-chips">
+      <!-- Dynamic Presets based on Active Tab -->
+      <div id="schemeChips" class="preset-chips">
         <span class="chip" onclick="askPreset('Analyze fund risk vs benchmark (Sharpe & Beta)')">Risk Analysis (Beta/Sharpe)</span>
         <span class="chip" onclick="askPreset('Summarize Scheme Information Document (SID) clauses')">SID Prospectus Summary</span>
-        <span class="chip alert" onclick="askPreset('Can you guarantee me 18% annual return?')">⚠️ Test Compliance Intercept (Guaranteed 18%)</span>
+        <span class="chip alert" onclick="askPreset('Can you guarantee me 18% annual return?')">⚠️ Test Guarantee Intercept</span>
         <span class="chip" onclick="askPreset('Compare 3-Year CAGR against expense ratio')">Return vs Expense Ratio</span>
+      </div>
+
+      <div id="portfolioChips" class="preset-chips" style="display: none;">
+        <span class="chip alert" onclick="askPreset('If US tech drops 15%, how much will my total portfolio fall and should I rebalance?')">⚡ Adverse News: US Tech Drop Impact</span>
+        <span class="chip" onclick="askPreset('I need ₹50,000 cash. Which fund should I redeem first to pay 0% exit load and minimum tax?')">💰 Exit Load & Tax Optimization</span>
+        <span class="chip" onclick="askPreset('What is my total annual expense ratio drag in rupees and portfolio overlap?')">📊 Fee Drag & Overlap X-Ray</span>
+        <span class="chip" onclick="askPreset('Give me a quarterly rebalancing recommendation for my holdings.')">🔄 Rebalancing Advice</span>
       </div>
 
       <div id="chatMessages" class="chat-messages">
         <div class="msg assistant">
           <div class="msg-bubble">
-            Hello! I am your <strong>Mutual Funds Small Language Model (SLM)</strong> copilot, powered by an edge-quantized <code>Qwen2.5-Coder 1.5B INT4</code> engine.<br><br>
-            I ground all numerical answers in deterministic portfolio calculations (CAGR, Sharpe, Alpha) and enforce statutory SEBI & SEC Rule 482 disclosures. Select a fund and ask a question!
+            Hello! I am your <strong>Mutual Funds Small Language Model (SLM) Copilot</strong>.<br><br>
+            I run on a <strong>local 2.5 GB neural model</strong> on your Mac GPU with deterministic financial tools (CAGR, Sharpe, Beta, Exit Loads) and automated SEBI/SEC compliance.<br><br>
+            You can research individual schemes or switch to <strong>"My Portfolio X-Ray"</strong> to diagnose your actual holdings!
           </div>
         </div>
       </div>
 
       <div class="input-row">
-        <input type="text" id="userInput" class="input-box" placeholder="Ask about this fund's performance, risk metrics, or SID clauses..." onkeydown="if(event.key==='Enter') sendMessage()">
-        <button class="send-btn" onclick="sendMessage()">Ask SLM</button>
+        <input type="text" id="userInput" class="input-box" placeholder="Ask about this scheme or your portfolio rebalancing..." onkeydown="if(event.key==='Enter') sendMessage()">
+        <button class="send-btn" onclick="sendMessage()">Ask Copilot</button>
       </div>
     </div>
   </div>
 
   <script>
+    let activeTab = 'scheme';
+    
+    // Default user portfolio holdings
+    let userHoldings = [
+      { fund_id: "parag_parikh_flexi", name: "Parag Parikh Flexi Cap", invested_amount: 100000, purchase_months_ago: 8 },
+      { fund_id: "hdfc_top_100", name: "HDFC Top 100 Index", invested_amount: 120000, purchase_months_ago: 16 }
+    ];
+
+    const FUND_NAMES = {
+      "parag_parikh_flexi": "Parag Parikh Flexi Cap",
+      "hdfc_top_100": "HDFC Top 100 Index",
+      "sbi_small_cap": "SBI Small Cap Fund",
+      "icici_bluechip": "ICICI Prudential Bluechip",
+      "vanguard_500": "Vanguard 500 Index"
+    };
+
+    function switchTab(tab) {
+      activeTab = tab;
+      if (tab === 'scheme') {
+        document.getElementById('btnTabScheme').className = 'tab-btn active';
+        document.getElementById('btnTabPortfolio').className = 'tab-btn';
+        document.getElementById('tabSchemeContent').style.display = 'block';
+        document.getElementById('tabPortfolioContent').style.display = 'none';
+        document.getElementById('schemeChips').style.display = 'flex';
+        document.getElementById('portfolioChips').style.display = 'none';
+        document.getElementById('chatHeaderTitle').innerText = '🤖 Conversational SLM Copilot (Single Scheme)';
+      } else {
+        document.getElementById('btnTabScheme').className = 'tab-btn';
+        document.getElementById('btnTabPortfolio').className = 'tab-btn active';
+        document.getElementById('tabSchemeContent').style.display = 'none';
+        document.getElementById('tabPortfolioContent').style.display = 'block';
+        document.getElementById('schemeChips').style.display = 'none';
+        document.getElementById('portfolioChips').style.display = 'flex';
+        document.getElementById('chatHeaderTitle').innerText = '💼 Portfolio Intelligence & Rebalancing Copilot';
+        renderHoldingsTable();
+        triggerPortfolioRefresh();
+      }
+    }
+
+    function renderHoldingsTable() {
+      const tbody = document.getElementById('holdingsTbody');
+      tbody.innerHTML = '';
+      userHoldings.forEach((h, idx) => {
+        const isLocked = (h.fund_id === 'parag_parikh_flexi' && h.purchase_months_ago < 24) || (h.fund_id !== 'parag_parikh_flexi' && h.purchase_months_ago < 12);
+        const tagClass = isLocked ? 'tag tag-yellow' : 'tag tag-green';
+        const tagText = isLocked ? (h.purchase_months_ago < 12 ? '1-2% Exit Load' : '1% Exit Load') : '0% Nil Exit';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${FUND_NAMES[h.fund_id] || h.fund_id}</strong></td>
+          <td>₹${Number(h.invested_amount).toLocaleString()}</td>
+          <td>${h.purchase_months_ago} mos</td>
+          <td><span class="${tagClass}">${tagText}</span></td>
+          <td><button class="del-btn" onclick="removeHolding(${idx})">×</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function addHolding() {
+      const fid = document.getElementById('addFundSelect').value;
+      const amt = parseFloat(document.getElementById('addAmount').value) || 50000;
+      const mos = parseInt(document.getElementById('addMonths').value) || 12;
+
+      userHoldings.push({
+        fund_id: fid,
+        name: FUND_NAMES[fid] || fid,
+        invested_amount: amt,
+        purchase_months_ago: mos
+      });
+
+      renderHoldingsTable();
+      triggerPortfolioRefresh();
+    }
+
+    function removeHolding(idx) {
+      userHoldings.splice(idx, 1);
+      renderHoldingsTable();
+      triggerPortfolioRefresh();
+    }
+
+    async function triggerPortfolioRefresh() {
+      try {
+        const res = await fetch('/api/portfolio/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ holdings: userHoldings, query: "Quick summary of portfolio valuation" })
+        });
+        const data = await res.json();
+        const p = data.portfolio_summary;
+        if (p) {
+          document.getElementById('pInvested').innerText = '₹' + Math.round(p.total_invested).toLocaleString();
+          document.getElementById('pCurrent').innerText = '₹' + Math.round(p.current_value).toLocaleString();
+          document.getElementById('pCagr').innerText = p.weighted_cagr_pct + '%';
+          document.getElementById('pExpense').innerText = p.weighted_expense_ratio + '%';
+        }
+      } catch (err) {
+        console.warn('Portfolio refresh error:', err);
+      }
+    }
+
     async function loadFundDetails() {
       const fundId = document.getElementById("fundSelect").value;
       try {
@@ -337,15 +532,20 @@ HTML_PAGE = """<!DOCTYPE html>
       // Add loading assistant message
       const botMsgDiv = document.createElement("div");
       botMsgDiv.className = "msg assistant";
-      botMsgDiv.innerHTML = `<div class="msg-bubble">Thinking and executing deterministic math tools...</div>`;
+      botMsgDiv.innerHTML = `<div class="msg-bubble">Thinking with local neural SLM and executing deterministic tools...</div>`;
       chatBox.appendChild(botMsgDiv);
       chatBox.scrollTop = chatBox.scrollHeight;
 
       try {
-        const response = await fetch("/api/chat", {
+        let endpoint = activeTab === 'portfolio' ? '/api/portfolio/analyze' : '/api/chat';
+        let bodyPayload = activeTab === 'portfolio' 
+          ? { holdings: userHoldings, query: query }
+          : { fund_id: fundId, query: query };
+
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fund_id: fundId, query: query })
+          body: JSON.stringify(bodyPayload)
         });
         const result = await response.json();
 
@@ -354,7 +554,7 @@ HTML_PAGE = """<!DOCTYPE html>
           toolHtml = `<div class="tool-call">⚙️ <strong>Deterministic Tools Executed:</strong><br>${result.tools_executed.join('<br>')}</div>`;
         }
 
-        let formattedText = result.response.replace(/\\n/g, "<br>");
+        let formattedText = (result.response || "No response received").replace(/\\n/g, "<br>");
 
         botMsgDiv.innerHTML = `
           ${toolHtml}
@@ -377,6 +577,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
     // Initial load
     loadFundDetails();
+    renderHoldingsTable();
   </script>
 </body>
 </html>
@@ -408,14 +609,24 @@ class SLMServerHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        content_len = int(self.headers.get("Content-Length", 0))
+        post_body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else "{}"
+        
         if parsed.path == "/api/chat":
-            content_len = int(self.headers.get("Content-Length", 0))
-            post_body = self.rfile.read(content_len).decode("utf-8")
             try:
                 payload = json.loads(post_body)
                 fund_id = payload.get("fund_id", "hdfc_top_100")
                 query_text = payload.get("query", "")
                 result = engine.generate_fund_response(fund_id, query_text)
+                self._send_json(result)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif parsed.path == "/api/portfolio/analyze":
+            try:
+                payload = json.loads(post_body)
+                holdings = payload.get("holdings", [])
+                query_text = payload.get("query", "Analyze my portfolio health, exit load exposure, and rebalancing recommendations.")
+                result = engine.analyze_portfolio(holdings, query_text)
                 self._send_json(result)
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
