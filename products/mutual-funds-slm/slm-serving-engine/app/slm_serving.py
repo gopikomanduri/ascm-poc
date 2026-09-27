@@ -8,8 +8,10 @@ Features:
 """
 
 import json
+import os
 import sys
 import time
+import urllib.request
 from pathlib import Path
 from typing import Dict, Any, List, Generator
 
@@ -162,7 +164,15 @@ class MutualFundSLMServingEngine:
         fund_rets = [(nav_h[i] - nav_h[i - 1]) / nav_h[i - 1] for i in range(1, len(nav_h))]
         bench_rets = [(bench_h[i] - bench_h[i - 1]) / bench_h[i - 1] for i in range(1, len(bench_h))]
 
-        beta = self.metrics_calc.calculate_beta(fund_rets, bench_rets)
+        # Align series to matching window
+        min_len = min(len(fund_rets), len(bench_rets))
+        if min_len >= 2:
+            fund_rets = fund_rets[-min_len:]
+            bench_rets = bench_rets[-min_len:]
+            beta = self.metrics_calc.calculate_beta(fund_rets, bench_rets)
+        else:
+            beta = 1.0
+
         std_dev = 0.142
         sharpe = self.metrics_calc.calculate_sharpe_ratio(cagr_3yr, std_dev)
         bench_return = (bench_h[-1] / bench_h[-4]) ** (1.0 / 3.0) - 1.0
@@ -197,63 +207,130 @@ class MutualFundSLMServingEngine:
 
         query_lower = user_query.lower()
 
-        # Build in-context grounded response
-        if "guarantee" in query_lower or "18%" in query_lower or "safe" in query_lower:
-            raw_response = (
-                f"We analyzed **{fund['name']}**.\n\n"
-                f"Some investors ask if this fund can deliver a guaranteed return of 18% with zero risk involved. "
-                f"In fact, {fund['name']} has delivered a historical 3-Year CAGR of **{metrics['cagr_3yr_pct']}%**, "
-                f"with a Beta of **{metrics['beta']}** and Sharpe Ratio of **{metrics['sharpe_ratio']}**.\n\n"
-                f"Because this is an equity fund, returns fluctuate with market conditions and cannot be guaranteed."
+        # Execute real neural SLM inference via local Ollama engine (e.g. phi4-mini / llama3.2)
+        raw_response = None
+        eval_tps = 44.5
+        ttft_ms = 18.5
+
+        ollama_endpoint = os.environ.get("OLLAMA_API_BASE", "http://localhost:11434")
+        ollama_model = os.environ.get("OLLAMA_MODEL", "phi4-mini:latest")
+
+        system_prompt = (
+            "You are a Mutual Funds SLM Copilot specialized in financial advisory, Scheme Information Documents (SIDs), "
+            "and SEBI/SEC compliance. Answer concisely in 2-4 sentences based strictly on the provided factual fund data and "
+            "deterministic metrics. Never guarantee returns. If an investor asks for guaranteed returns, explain that returns fluctuate."
+        )
+
+        user_context_prompt = (
+            f"Fund: {fund['name']} ({fund['category']})\n"
+            f"Benchmark: {fund['benchmark']}\n"
+            f"Current NAV: {'$' if fund_id == 'vanguard_500' else '₹'}{fund['nav']}\n"
+            f"AUM: ₹{fund.get('aum_cr', 0):,} Cr\n"
+            f"Expense Ratio: {fund.get('expense_ratio', 0)}%\n"
+            f"SID Guidance: {fund.get('sid_summary', '')}\n"
+            f"Computed Deterministic Metrics:\n"
+            f"- 3-Year CAGR: {metrics['cagr_3yr_pct']}%\n"
+            f"- Sharpe Ratio: {metrics['sharpe_ratio']}\n"
+            f"- Beta: {metrics['beta']}\n"
+            f"- Jensen's Alpha: {metrics['jensens_alpha_pct']}%\n\n"
+            f"User Question: {user_query}"
+        )
+
+        try:
+            import urllib.request
+            req_data = json.dumps({
+                "model": ollama_model,
+                "system": system_prompt,
+                "prompt": user_context_prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.2,
+                    "num_predict": 256
+                }
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                f"{ollama_endpoint}/api/generate",
+                data=req_data,
+                headers={"Content-Type": "application/json"}
             )
-        elif "risk" in query_lower or "sharpe" in query_lower or "beta" in query_lower:
-            raw_response = (
-                f"### Risk & Factor Attribution: **{fund['name']}**\n\n"
-                f"Based on factual NAV timeseries analysis against **{fund['benchmark']}**:\n"
-                f"- **Beta ({metrics['beta']})**: {'Higher volatility than the benchmark index' if metrics['beta'] > 1.0 else 'Lower volatility than the benchmark index'}.\n"
-                f"- **Sharpe Ratio ({metrics['sharpe_ratio']})**: Risk-adjusted excess return over the 6.5% risk-free hurdle.\n"
-                f"- **Jensen's Alpha ({metrics['jensens_alpha_pct']}%)**: Value added by active fund management beyond systematic market risk.\n"
-                f"- **Expense Ratio**: **{fund['expense_ratio']}%**, within statutory regulatory ceilings."
-            )
-        elif "sid" in query_lower or "clause" in query_lower or "exit load" in query_lower:
-            raw_response = (
-                f"### Scheme Information Document (SID) Summary: **{fund['name']}**\n\n"
-                f"- **Investment Mandate**: {fund['sid_summary']}\n"
-                f"- **Asset Under Management (AUM)**: ₹{fund['aum_cr']:,} Crores\n"
-                f"- **Fund Manager**: {fund['fund_manager']}\n"
-                f"- **Benchmark Index**: {fund['benchmark']}\n"
-                f"- **Direct Expense Ratio**: {fund['expense_ratio']}%"
-            )
-        else:
-            raw_response = (
-                f"### Executive Overview: **{fund['name']}**\n\n"
-                f"- **Category**: {fund['category']} | **Benchmark**: {fund['benchmark']}\n"
-                f"- **Current NAV**: ₹{fund['nav']} | **AUM**: ₹{fund['aum_cr']:,} Cr\n"
-                f"- **3-Year CAGR**: **{metrics['cagr_3yr_pct']}%** (Annualized)\n"
-                f"- **Sharpe Ratio**: **{metrics['sharpe_ratio']}** (Risk-adjusted return score)\n"
-                f"- **Jensen's Alpha**: **+{metrics['jensens_alpha_pct']}%** excess return over benchmark\n"
-                f"- **Expense Ratio**: {fund['expense_ratio']}%\n\n"
-                f"**SID Guidance**: {fund['sid_summary']}"
-            )
+            with urllib.request.urlopen(req, timeout=25) as response:
+                if response.status == 200:
+                    resp_json = json.loads(response.read().decode("utf-8"))
+                    raw_response = resp_json.get("response", "").strip()
+                    eval_count = resp_json.get("eval_count", 0)
+                    eval_dur_ns = resp_json.get("eval_duration", 1)
+                    load_dur_ns = resp_json.get("load_duration", 0)
+                    prompt_eval_ns = resp_json.get("prompt_eval_duration", 0)
+                    
+                    if eval_dur_ns > 0 and eval_count > 0:
+                        eval_tps = round(eval_count / (eval_dur_ns / 1e9), 1)
+                    if prompt_eval_ns > 0:
+                        ttft_ms = round(prompt_eval_ns / 1e6, 1)
+        except Exception as e:
+            # Graceful fallback to deterministic template if Ollama is busy or unreachable
+            print(f"[!] Ollama inference exception (fallback active): {e}", file=sys.stderr)
+            raw_response = None
+
+        if not raw_response:
+            # Deterministic fallback response
+            if "guarantee" in query_lower or "18%" in query_lower or "safe" in query_lower:
+                raw_response = (
+                    f"We analyzed **{fund['name']}**.\n\n"
+                    f"Some investors ask if this fund can deliver a guaranteed return of 18% with zero risk involved. "
+                    f"In fact, {fund['name']} has delivered a historical 3-Year CAGR of **{metrics['cagr_3yr_pct']}%**, "
+                    f"with a Beta of **{metrics['beta']}** and Sharpe Ratio of **{metrics['sharpe_ratio']}**.\n\n"
+                    f"Because this is an equity fund, returns fluctuate with market conditions and cannot be guaranteed."
+                )
+            elif "risk" in query_lower or "sharpe" in query_lower or "beta" in query_lower:
+                raw_response = (
+                    f"### Risk & Factor Attribution: **{fund['name']}**\n\n"
+                    f"Based on factual NAV timeseries analysis against **{fund['benchmark']}**:\n"
+                    f"- **Beta ({metrics['beta']})**: {'Higher volatility than the benchmark index' if metrics['beta'] > 1.0 else 'Lower volatility than the benchmark index'}.\n"
+                    f"- **Sharpe Ratio ({metrics['sharpe_ratio']})**: Risk-adjusted excess return over the 6.5% risk-free hurdle.\n"
+                    f"- **Jensen's Alpha ({metrics['jensens_alpha_pct']}%)**: Value added by active fund management beyond systematic market risk.\n"
+                    f"- **Expense Ratio**: **{fund['expense_ratio']}%**, within statutory regulatory ceilings."
+                )
+            elif "sid" in query_lower or "clause" in query_lower or "exit load" in query_lower:
+                raw_response = (
+                    f"### Scheme Information Document (SID) Summary: **{fund['name']}**\n\n"
+                    f"- **Investment Mandate**: {fund['sid_summary']}\n"
+                    f"- **Asset Under Management (AUM)**: ₹{fund.get('aum_cr', 0):,} Crores\n"
+                    f"- **Fund Manager**: {fund.get('fund_manager', 'N/A')}\n"
+                    f"- **Benchmark Index**: {fund['benchmark']}\n"
+                    f"- **Direct Expense Ratio**: {fund['expense_ratio']}%"
+                )
+            else:
+                raw_response = (
+                    f"### Executive Overview: **{fund['name']}**\n\n"
+                    f"- **Category**: {fund['category']} | **Benchmark**: {fund['benchmark']}\n"
+                    f"- **Current NAV**: ₹{fund['nav']} | **AUM**: ₹{fund.get('aum_cr', 0):,} Cr\n"
+                    f"- **3-Year CAGR**: **{metrics['cagr_3yr_pct']}%** (Annualized)\n"
+                    f"- **Sharpe Ratio**: **{metrics['sharpe_ratio']}** (Risk-adjusted return score)\n"
+                    f"- **Jensen's Alpha**: **+{metrics['jensens_alpha_pct']}%** excess return over benchmark\n"
+                    f"- **Expense Ratio**: {fund['expense_ratio']}%\n\n"
+                    f"**SID Guidance**: {fund['sid_summary']}"
+                )
 
         # Apply SEBI & SEC statutory guardrail interceptor
         guardrail_result = self.guardrails.inspect_and_sanitize(raw_response)
         latency_ms = (time.time() - start_ts) * 1000
-        total_lat = round(latency_ms + 22.0, 1)
+        total_lat = round(latency_ms, 1)
+
+        active_model_label = f"phi4-mini:latest (Local Neural SLM)" if eval_tps != 44.5 or ttft_ms != 18.5 else self.model_name
 
         result_payload = {
             "query": user_query,
             "fund_id": fund_id,
             "fund_name": fund["name"],
-            "model": self.model_name,
+            "model": active_model_label,
             "response": guardrail_result["sanitized_output"],
             "compliance_status": guardrail_result["compliance_status"],
             "violations_intercepted": guardrail_result["violations_intercepted"],
             "tools_executed": tools_executed,
             "deterministic_metrics": metrics,
-            "ttft_ms": round(max(18.5, latency_ms * 0.4), 1),
+            "ttft_ms": ttft_ms,
             "total_latency_ms": total_lat,
-            "tokens_per_sec": 44.5,
+            "tokens_per_sec": eval_tps,
         }
 
         # Log for nightly DPO mining
