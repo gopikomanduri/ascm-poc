@@ -21,8 +21,10 @@ sys.path.insert(0, str(app_dir.parent.parent / "data-pipeline"))
 sys.path.insert(0, str(app_dir.parent.parent / "data-pipeline" / "app"))
 
 from slm_serving import MutualFundSLMServingEngine
+from broker_connectors import UnifiedBrokerGateway
 
 engine = MutualFundSLMServingEngine()
+broker_gateway = UnifiedBrokerGateway()
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -224,6 +226,61 @@ HTML_PAGE = """<!DOCTYPE html>
       font-size: 14px;
       padding: 2px 6px;
     }
+
+    /* Broker Modal */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(4px);
+    }
+    .modal-content {
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 12px;
+      width: 580px; max-width: 92%;
+      padding: 24px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 12px;
+    }
+    .modal-header h3 { font-size: 16px; font-weight: 700; color: #fff; }
+    .close-btn { background: transparent; border: none; color: #9ca3af; font-size: 18px; cursor: pointer; }
+    .close-btn:hover { color: #fff; }
+    .broker-card {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 14px;
+      background: rgba(31, 41, 55, 0.5);
+      border: 1px solid #374151;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      transition: all 0.2s;
+    }
+    .broker-card:hover { border-color: var(--accent-blue); background: rgba(56, 189, 248, 0.05); }
+    .broker-card.highlight {
+      border-color: rgba(52, 211, 153, 0.4);
+      background: rgba(52, 211, 153, 0.06);
+    }
+    .broker-info h4 { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+    .broker-info p { font-size: 11px; color: var(--text-muted); }
+    .sync-btn {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.2s;
+    }
+    .sync-btn:hover { opacity: 0.9; }
+    .sync-btn.green { background: #10b981; }
+    .sync-btn.indigo { background: #6366f1; }
   </style>
 </head>
 <body>
@@ -293,7 +350,14 @@ HTML_PAGE = """<!DOCTYPE html>
 
       <!-- TAB 2: My Portfolio Holdings & X-Ray -->
       <div id="tabPortfolioContent" style="display: none;">
-        <h2 style="font-size: 14px; margin-bottom: 12px;">💼 My Mutual Fund Holdings</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h2 style="font-size: 14px; margin-bottom: 0;">💼 My Mutual Fund Holdings</h2>
+          <button class="sync-btn indigo" onclick="openBrokerModal()">🔗 Connect Broker / AA</button>
+        </div>
+        
+        <button class="sync-btn" style="background: linear-gradient(135deg, #4f46e5, #0284c7); width: 100%; margin-bottom: 14px; padding: 9px; font-size: 12px; font-weight: 600;" onclick="openBrokerModal()">
+          ⚡ Auto-Sync Holdings: Zerodha • Angel One • Groww (via RBI AA)
+        </button>
         
         <table class="holdings-table">
           <thead>
@@ -575,10 +639,122 @@ HTML_PAGE = """<!DOCTYPE html>
       chatBox.scrollTop = chatBox.scrollHeight;
     }
 
+    function openBrokerModal() {
+      document.getElementById('brokerModal').style.display = 'flex';
+    }
+
+    function closeBrokerModal() {
+      document.getElementById('brokerModal').style.display = 'none';
+    }
+
+    async function connectBroker(provider) {
+      closeBrokerModal();
+      const chatBox = document.getElementById("chatMessages");
+      const botMsgDiv = document.createElement("div");
+      botMsgDiv.className = "msg assistant";
+      botMsgDiv.innerHTML = `<div class="msg-bubble">🔄 Connecting to <strong>${provider}</strong> API & fetching mutual fund folios...</div>`;
+      chatBox.appendChild(botMsgDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      try {
+        const res = await fetch('/api/brokers/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: provider, credentials: { use_demo: true } })
+        });
+        const data = await res.json();
+        if (data.status === 'SUCCESS' && data.holdings) {
+          userHoldings = data.holdings;
+          renderHoldingsTable();
+          triggerPortfolioRefresh();
+
+          botMsgDiv.innerHTML = `
+            <div class="tool-call">
+              ✅ <strong>Broker Gateway Success:</strong> Connected to ${data.provider}<br>
+              • Discovered Schemes: ${data.holdings_count}<br>
+              • Total Invested: ₹${Number(data.total_invested).toLocaleString()}<br>
+              • Current Valuation: ₹${Number(data.total_current_value).toLocaleString()}
+            </div>
+            <div class="msg-bubble">
+              Successfully synced <strong>${data.holdings_count} mutual fund schemes</strong> from <strong>${data.provider}</strong>!<br><br>
+              Your portfolio table and KPI analytics have been updated. Analyzing exit load status, fee drag, and rebalancing priorities now...
+            </div>
+          `;
+          
+          if (activeTab !== 'portfolio') {
+            switchTab('portfolio');
+          }
+
+          setTimeout(() => {
+            document.getElementById('userInput').value = `Analyze my newly synced portfolio from ${data.provider} and advise on exit load exposure and tax optimization.`;
+            sendMessage();
+          }, 800);
+        } else {
+          botMsgDiv.innerHTML = `<div class="msg-bubble" style="color: #f87171;">Failed to sync with ${provider}: ${data.error || 'Unknown error'}</div>`;
+        }
+      } catch (err) {
+        botMsgDiv.innerHTML = `<div class="msg-bubble" style="color: #f87171;">Network error connecting to ${provider}: ${err.message}</div>`;
+      }
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
     // Initial load
     loadFundDetails();
     renderHoldingsTable();
   </script>
+
+  <!-- Broker Connect Modal -->
+  <div id="brokerModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🔗 Connect Broker or Account Aggregator</h3>
+        <button class="close-btn" onclick="closeBrokerModal()">✕</button>
+      </div>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">
+        Select your broker or use the <strong>RBI Account Aggregator (The Plaid of India)</strong> to discover 100% of your mutual fund schemes across Groww, CAMS, and all AMCs.
+      </p>
+
+      <div class="broker-card highlight">
+        <div class="broker-info">
+          <h4>🏛️ RBI Account Aggregator (AA) — Plaid of India</h4>
+          <p>Connects <strong>Groww</strong>, Kuvera, CAMS, KFintech, and all 44 AMCs via mobile OTP.</p>
+        </div>
+        <button class="sync-btn green" onclick="connectBroker('RBI_ACCOUNT_AGGREGATOR')">⚡ 1-Click OTP Sync</button>
+      </div>
+
+      <div class="broker-card">
+        <div class="broker-info">
+          <h4>📈 Zerodha Kite Connect</h4>
+          <p>Syncs Coin demat mutual funds via official Kite Connect API.</p>
+        </div>
+        <button class="sync-btn" onclick="connectBroker('ZERODHA')">⚡ Sync Zerodha</button>
+      </div>
+
+      <div class="broker-card">
+        <div class="broker-info">
+          <h4>🦅 Angel One SmartAPI</h4>
+          <p>Syncs Angel One demat holdings via SmartAPI gateway.</p>
+        </div>
+        <button class="sync-btn indigo" onclick="connectBroker('ANGEL_ONE')">⚡ Sync Angel One</button>
+      </div>
+
+      <div class="broker-card">
+        <div class="broker-info">
+          <h4>🚀 Upstox API v2</h4>
+          <p>Syncs Upstox long-term mutual fund portfolio.</p>
+        </div>
+        <button class="sync-btn" onclick="connectBroker('UPSTOX')">⚡ Sync Upstox</button>
+      </div>
+
+      <div class="broker-card">
+        <div class="broker-info">
+          <h4>💎 Dhan (DhanHQ)</h4>
+          <p>Syncs DhanHQ portfolio holdings directly.</p>
+        </div>
+        <button class="sync-btn" onclick="connectBroker('DHAN')">⚡ Sync Dhan</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
 """
@@ -599,6 +775,8 @@ class SLMServerHandler(BaseHTTPRequestHandler):
                 self._send_json(data)
             except Exception as e:
                 self._send_json({"error": str(e)}, status=404)
+        elif path == "/api/brokers":
+            self._send_json({"connectors": broker_gateway.get_supported_connectors()})
         else:
             # Serve the interactive HTML dashboard
             self.send_response(200)
@@ -628,6 +806,23 @@ class SLMServerHandler(BaseHTTPRequestHandler):
                 query_text = payload.get("query", "Analyze my portfolio health, exit load exposure, and rebalancing recommendations.")
                 result = engine.analyze_portfolio(holdings, query_text)
                 self._send_json(result)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif parsed.path == "/api/brokers/connect":
+            try:
+                payload = json.loads(post_body)
+                provider = payload.get("provider", "ZERODHA")
+                creds = payload.get("credentials", {})
+                res = broker_gateway.connect_and_sync(provider, creds)
+                self._send_json(res)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif parsed.path == "/api/brokers/aa/consent":
+            try:
+                payload = json.loads(post_body)
+                mobile = payload.get("mobile", "9876543210")
+                res = broker_gateway.account_aggregator.create_consent_request(mobile)
+                self._send_json(res)
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         else:
