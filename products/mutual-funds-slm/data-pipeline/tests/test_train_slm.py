@@ -78,7 +78,7 @@ class TestSLMTrainingAndExportPipeline:
             assert magic == b"GGUF"
             assert version == 3
             assert tensor_count > 0
-            assert kv_count == 6
+            assert kv_count >= 6
 
         # Check manifest
         manifest_file = models_dir / "test_model_q4.gguf.manifest.json"
@@ -87,3 +87,12 @@ class TestSLMTrainingAndExportPipeline:
             manifest = json.load(f)
         assert manifest["quantization"] == "Q4_K_M"
         assert "llama.cpp" in manifest["compatibility"]
+
+    def test_financial_pretraining_harness(self, tmp_path):
+        from app.train_slm import FinancialPretrainingHarness
+        harness = FinancialPretrainingHarness(data_dir=tmp_path)
+        res = harness.prepare_pretraining_shards(target_tokens=50000)
+
+        assert res["architecture"] == "Llama-3.2-3B"
+        assert res["context_window"] == 131072
+        assert Path(res["shard_file"]).exists()

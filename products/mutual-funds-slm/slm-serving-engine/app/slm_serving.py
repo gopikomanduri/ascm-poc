@@ -85,9 +85,10 @@ SAMPLE_FUNDS_DB = {
 class MutualFundSLMServingEngine:
     """
     Quantized SLM serving gateway with financial tool execution and disclaimer enforcement.
+    Configured for meta-llama/Llama-3.2-3B-Instruct edge inference.
     """
 
-    def __init__(self, model_name: str = "Qwen2.5-Coder-1.5B-Instruct-GGUF-INT4"):
+    def __init__(self, model_name: str = "meta-llama/Llama-3.2-3B-Instruct-GGUF-INT4"):
         self.model_name = model_name
         self.metrics_calc = MutualFundMetricsCalculator(risk_free_rate=0.065)
         self.guardrails = RegulatoryGuardrailEngine(jurisdiction="DUAL")
@@ -120,16 +121,24 @@ class MutualFundSLMServingEngine:
     def format_fund_query_prompt(self, query: str, context_chunks: List[str]) -> str:
         ctx_str = "\n".join(f"- {c}" for c in context_chunks)
         return (
-            f"<|im_start|>system\nYou are a Mutual Funds SLM Copilot grounded in Scheme Information Documents.<|im_end|>\n"
-            f"<|im_start|>user\nContext:\n{ctx_str}\n\nQuestion: {query}<|im_end|>\n"
-            f"<|im_start|>assistant\n"
+            f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n"
+            f"You are a Mutual Funds SLM Copilot grounded in Scheme Information Documents and statutory compliance.<|eot_id|>\n"
+            f"<|start_header_id|>user<|end_header_id|>\n"
+            f"Context:\n{ctx_str}\n\nQuestion: {query}<|eot_id|>\n"
+            f"<|start_header_id|>assistant<|end_header_id|>\n"
         )
 
     def enforce_statutory_compliance(self, text: str) -> Dict[str, Any]:
+        """
+        Hybrid Regulatory Guardrail:
+        Allows SLM to formulate rich financial estimates and comparative attribution,
+        while strictly attaching statutory SEBI risk-o-meter disclosures and SEC Rule 482 warnings.
+        """
         res = self.guardrails.inspect_and_sanitize(text)
         resp_text = res["sanitized_output"]
-        if "Past performance is not indicative of future returns" not in resp_text and res["violations_intercepted"]:
-            resp_text += "\n📜 [Statutory Notice]: Past performance is not indicative of future returns."
+        disclaimer = "\n\n📜 [Statutory Notice]: Mutual Fund investments are subject to market risks. Read all scheme related documents carefully. Past performance is not indicative of future returns (SEBI / SEC Rule 482)."
+        if "Past performance is not indicative of future returns" not in resp_text:
+            resp_text += disclaimer
         return {
             "response": resp_text,
             "compliance_status": "APPROVED" if not res["violations_intercepted"] else "APPROVED_WITH_MODIFICATIONS",

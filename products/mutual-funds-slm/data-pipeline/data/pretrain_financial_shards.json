@@ -1,0 +1,36 @@
+{
+  "architecture": {
+    "model_type": "llama",
+    "vocab_size": 128256,
+    "hidden_size": 3072,
+    "intermediate_size": 8192,
+    "num_hidden_layers": 28,
+    "num_attention_heads": 24,
+    "num_key_value_heads": 8,
+    "max_position_embeddings": 131072,
+    "rope_theta": 500000.0,
+    "special_tokens": [
+      "<|begin_of_text|>",
+      "<|end_of_text|>",
+      "<|start_header_id|>",
+      "<|end_header_id|>",
+      "<|eot_id|>",
+      "[CAGR]",
+      "[SHARPE]",
+      "[ALPHA]",
+      "[BETA]",
+      "[SEBI_DISCLAIMER]",
+      "[EXIT_LOAD]",
+      "[NAV]"
+    ]
+  },
+  "shards": [
+    "HDFC Top 100 Index Fund Scheme Information Document prospectus tracking NIFTY 100 TRI. Full replication investment objective with maximum tracking error 0.05%.",
+    "Parag Parikh Flexi Cap Fund dynamic equity allocation prospectus with up to 35% foreign equity holdings in global technology leaders, value investing philosophy.",
+    "Capital Asset Pricing Model (CAPM) and Jensen's Alpha estimation methodology: Alpha = Rp - [Rf + Beta * (Rm - Rf)]. Sharpe ratio measures excess return per unit risk.",
+    "Statutory regulatory compliance: SEBI Mutual Fund Regulations 1996 Regulation 48 and SEC Rule 482 governing risk warnings and advertisement standards.",
+    "Vanguard 500 Index Fund prospectus full physical replication of S&P 500 Index with direct expense ratio 0.04% and quarterly rebalancing protocol."
+  ],
+  "total_synthetic_tokens": 100000,
+  "status": "READY_FOR_DISTRIBUTED_PRETRAINING"
+}

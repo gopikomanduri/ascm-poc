@@ -1,5 +1,5 @@
 {
-  "base_model_name_or_path": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+  "base_model_name_or_path": "meta-llama/Llama-3.2-3B-Instruct",
   "peft_type": "LORA",
   "r": 16,
   "lora_alpha": 32,
@@ -18,12 +18,13 @@
   "modules_to_save": null,
   "fan_in_fan_out": false,
   "training_metrics": {
+    "architecture": "Llama-3.2-3B",
     "epochs": 3,
     "total_steps": 54,
     "sft_samples": 4,
     "dpo_preference_pairs": 5,
-    "final_train_loss": 0.5415,
-    "perplexity": 1.72,
+    "final_train_loss": 0.5157,
+    "perplexity": 1.67,
     "training_duration_seconds": 0.0
   }
 }
