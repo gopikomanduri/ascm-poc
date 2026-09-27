@@ -1,0 +1,90 @@
+{
+  "domain_id": "MUTUAL_FUNDS_WEALTH_SLM",
+  "display_name": "Mutual Funds, Wealth Management & Specialized Financial SLMs",
+  "category_summary": "Small Language Model (SLM) edge serving, Scheme Information Document (SID) clause parsing, deterministic NAV/CAGR/Sharpe/Alpha factor calculation, real-time AMFI/SEC API synchronization, and statutory regulatory compliance (SEBI/SEC Rule 482).",
+  "primary_language": "python",
+  "core_primitives": [
+    "Scheme Information Document (SID) / KIM parsing",
+    "NAV timeseries tracking & historical growth curves",
+    "Deterministic factor math (CAGR, Sharpe, Beta, Jensen's Alpha, XIRR)",
+    "SEBI Mutual Fund regulations & statutory risk disclosures",
+    "US SEC Rule 482 / FINRA advertising standards",
+    "Promissory return interception ('guaranteed 18%') & PII sanitization",
+    "Real-time AMFI & Yahoo Finance API data synchronization",
+    "Continuous DPO (Direct Preference Optimization) preference pair synthesis",
+    "Edge INT4 GGUF quantized SLM inference (< 2GB RAM)"
+  ],
+  "grilling_dimensions": [
+    "1. SLM Architecture & Quantization: What base foundation model (Qwen2.5-Coder-1.5B, Phi-4-mini, Llama-3.2-3B), parameter scale (1.5B vs 3B), and quantization format (INT4 GGUF, AWQ, FP16) for edge CPU/laptop execution vs centralized cloud?",
+    "2. Deterministic Tool Calling vs Neural Math: How will quantitative financial calculations (3Y/5Y CAGR, Sharpe ratio, Beta, Jensen's Alpha, XIRR) be handled? Will all math be strictly routed to a deterministic calculation engine rather than attempting neural math?",
+    "3. SID In-Context Retrieval: How are official Scheme Information Documents (SIDs) and Key Information Memorandums (KIMs) ingested and cited without fine-tuning drift?",
+    "4. Real-Time API Synchronization: How will daily changing market NAVs and SID filings be ingested (automated cron connecting to AMFI/SEC EDGAR/Yahoo Finance APIs) without model weight retraining?",
+    "5. Continuous Self-Correction via RL / DPO: How does the model auto-correct from runtime failure logs? Automated generation of (prompt, chosen, rejected) DPO preference pairs for nightly LoRA alignment?",
+    "6. Statutory Guardrails & Data Privacy: Which statutory compliance requirements apply (SEBI risk-o-meter disclosures, SEC Rule 482 risk warnings)? How will client portfolio holdings and PII be quarantined from public clouds?"
+  ],
+  "architectural_patterns": [
+    "Deterministic Math Tool Dispatcher",
+    "SID In-Context Document Chunk Retriever",
+    "Statutory Regulatory Interceptor & PII Redactor",
+    "Daily Real-Time API Sync Cron Worker",
+    "DPO Preference Pair Synthesizer & Telemetry Miner"
+  ],
+  "standard_libraries": {
+    "python": [
+      "numpy",
+      "scipy",
+      "pydantic",
+      "fastapi",
+      "urllib3"
+    ],
+    "go": [
+      "gonum.org/v1/gonum/stat",
+      "net/http"
+    ]
+  },
+  "safety_and_nfr_focus": [
+    "Zero tolerance for forward-looking promissory returns or guaranteed yield claims",
+    "Zero numerical hallucination on fund performance metrics",
+    "Local on-premise execution to prevent client portfolio PII leakage (DPDP / GDPR)",
+    "Deterministic audit trail for all advisor-facing AI recommendations"
+  ],
+  "competitor_archetypes": [
+    {
+      "competitor": "BloombergGPT (50B)",
+      "limitations": "Massive parameter scale requiring expensive cloud GPU clusters; closed proprietary ecosystem ($24,000+/year terminal seats); cannot run at the edge.",
+      "ascm_advantage": "Ultra-lightweight edge footprint (1.5B INT4, < 2GB RAM); runs locally on commodity CPU with sub-25ms latency and zero cloud costs."
+    },
+    {
+      "competitor": "FinGPT / FinMA / FinSLM",
+      "limitations": "Trained predominantly on generic news sentiment and earnings calls; hallucinates numerical NAV/CAGR metrics; lacks statutory regulatory compliance guardrails.",
+      "ascm_advantage": "0% math hallucination via deterministic tool calling, and hard SEBI/SEC promissory return interceptors."
+    },
+    {
+      "competitor": "Morningstar Direct / Commercial AMC RAG Bots",
+      "limitations": "Rely on remote cloud LLMs (GPT-4 / Claude), exposing sensitive client portfolio holdings (PII) to third-party cloud APIs and incurring steep token fees.",
+      "ascm_advantage": "100% on-premise edge execution with client data remaining strictly inside the institutional firewall."
+    }
+  ],
+  "preferred_models": {
+    "coder": "qwen2.5-coder:32b",
+    "reviewer": "claude-3-5-sonnet",
+    "architect": "gemini-2.5-pro",
+    "product": "gemini-2.5-flash",
+    "business": "gemini-2.5-flash"
+  },
+  "unit_test_frameworks": {
+    "python": "unittest",
+    "go": "testing"
+  },
+  "role_titles": {
+    "product": "Specialized WealthTech, Mutual Funds & Financial SLM Principal",
+    "architect": "Lead Financial SLM Systems Architect & Quant Designer",
+    "thinking": "Senior Quantitative Finance & Statutory Guardrails Critic",
+    "code_review": "Adversarial Financial Math & Regulatory Code Auditor",
+    "orchestrator": "Lead WealthTech Multi-Agent Orchestrator",
+    "planner": "Financial Model Pipeline Coordinator",
+    "coder": "Principal Quant & Edge SLM Software Engineer",
+    "business": "Chief Commercial Officer & WealthTech GTM Strategist",
+    "security": "Financial Data Privacy & Regulatory Compliance Auditor"
+  }
+}

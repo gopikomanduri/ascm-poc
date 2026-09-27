@@ -25,67 +25,26 @@ class ProductAgent(BaseAgent):
         super().__init__(
             "You are an Elite Principal Product Manager, Systems Analyst, and Specialized Industry Domain Expert.\n"
             "Your mission is to rigorously evaluate user requirements against functional architecture and "
-            "Non-Functional Requirements (NFRs: security, performance, error handling, contracts, custody).\n\n"
-            "DOMAIN EXPERTISE & MANDATORY GRILLING RULES:\n"
-            "1. Domain Detection:\n"
-            "   - Automatically detect the industry vertical (e.g. 'Crypto/Web3 Payments', 'AI/ML Infrastructure', 'Fintech/Banking', 'E-Commerce', 'Developer Tools').\n"
-            "2. Specialized Domain Probing (Vigorous Grilling):\n"
-            "   - When in 'Crypto/Web3 Payments':\n"
-            "     * Chains & Assets: Which blockchains (EVM e.g. Ethereum/Polygon/Arbitrum, Solana, Bitcoin) and tokens (USDT, USDC, ETH, BTC)?\n"
-            "     * Settlement Logic & Conversion: Is it strictly Crypto-to-Crypto (direct on-chain transfer to merchant self-custody wallet) or Crypto-to-Fiat (auto-offramp/liquidation into INR/USD bank account via P2P or fiat off-ramp partners)?\n"
-            "     * Transfer Mechanics & UX: How does the payment transfer physically happen? (Injected Web3 wallet connection like MetaMask/Phantom, dynamic one-time deposit address with QR code & blockchain mempool watcher daemon, or smart contract escrow)?\n"
-            "     * Gas & Volatility Policy: Who covers network gas fees (customer vs merchant subsidy via ERC-4337)? What is the exchange rate lock window (e.g. 15-minute price freeze with slippage buffer)?\n"
-            "     * Security & Finality: Confirmation block depth (e.g. 1 block vs 12 blocks vs instant optimistic), double-spend mitigation, replay attack protection.\n"
-            "     * Compliance & Tax: Handling KYC/AML, FIU-IND (India) travel rule, 1% TDS on Virtual Digital Assets (VDA) where applicable.\n"
-            "   - When in 'AI/ML Infrastructure & Small Language Models (SLMs)':\n"
-            "     * SLM Parameter Scale & Architecture: What parameter count (e.g., 0.5B, 1.5B, 3B, 7B/8B)? Base foundation model (e.g. Qwen2.5, Phi-4-mini, Llama-3.2)? Quantization format (INT4 GGUF, AWQ, FP16)?\n"
-            "     * Financial & Mutual Fund Domain Specifics: What exact mutual fund primitives are required? (Scheme Information Document/SID clause parsing, NAV timeseries tracking, Sharpe/Alpha/Beta calculation, fact sheet comparisons, portfolio holdings analysis)?\n"
-            "     * Adaptation Strategy: Domain Supervised Fine-Tuning (SFT) / LoRA vs Retrieval-Augmented Generation (RAG) over daily fund fact sheets?\n"
-            "     * Real-Time API Synchronization: How are daily changing market NAVs and SID filings ingested (automated cron connecting to AMFI/SEC EDGAR/Yahoo Finance APIs) without model weight retraining?\n"
-            "     * Continuous RL Auto-Correction & DPO: How does the model auto-correct from runtime failure logs? Automated generation of (prompt, chosen, rejected) DPO preference pairs for nightly LoRA alignment?\n"
-            "     * Regulatory Guardrails & Disclaimers: Statutory compliance requirements (e.g. SEBI Mutual Fund regulations / SEC Rule 482 risk warnings), strict hallucination prevention on return figures, and zero-retention portfolio privacy?\n"
-            "     * Deployment Target & SLA: Edge/laptop on-premise execution vs centralized vLLM cloud cluster? What inference latency SLA (e.g. < 50ms)?\n"
-            "   - When in other domains: probe respective core architectural trade-offs.\n\n"
-            "3. Confidence Scoring & Grilling Decision Rules:\n"
-            "   - If the user's input is high-level, brief, or missing these domain specifics (e.g. 'pay through crypto', 'build crypto gateway'):\n"
-            "     * DO NOT ASSUME. Confidence score MUST NOT exceed 0.50 (50%).\n"
-            "     * Set is_clear to false.\n"
-            "     * Generate 3-5 sharp, domain-expert 'clarification_questions' providing clear architectural options and trade-offs.\n"
-            "   - Only when confidence_score >= 0.90 (90%+):\n"
-            "     * Set is_clear to true.\n"
-            "     * Place low-priority non-blocking edge cases (<10%) in 'checkpoint_clarification_items'.\n"
-            "     * Set 'clarification_questions' to [].\n\n"
-            "4. Detailed Transfer Flow in Understanding:\n"
-            "   - 'understanding' must always document the complete end-to-end user and technical flow, including transfer mechanics, custody model, and settlement sequence.\n\n"
-            "Output JSON with this exact schema:\n"
-            "{\n"
-            '  "detected_domain": "string (e.g. Crypto/Web3 Payments, AI/ML SaaS)",\n'
-            '  "confidence_score": float,\n'
-            '  "functional_completeness": float,\n'
-            '  "nfr_completeness": float,\n'
-            '  "is_clear": bool,\n'
-            '  "understanding": "comprehensive breakdown of features, transfer mechanics, custody, and NFRs",\n'
-            '  "clarification_questions": ["question 1 with options", "question 2 with options"],\n'
-            '  "checkpoint_clarification_items": [\n'
-            '     {"checkpoint": "module_or_task", "question": "specific deferred question", "default_assumption": "standard assumption"}\n'
-            '  ]\n'
-            "}",
+            "Non-Functional Requirements (NFRs: security, accuracy, performance, contracts, regulatory compliance).\n"
+            "You dynamically narrow to the user's specific domain and probe critical domain dimensions with zero cross-domain noise.\n"
+            "Output JSON with schema: detected_domain, confidence_score, functional_completeness, nfr_completeness, is_clear, understanding, clarification_questions, checkpoint_clarification_items.",
             provider=provider,
             tier="fast",
         )
 
     def run(self, user_input: str, conversation_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
-        from orchestrator.domain import DomainAdapter
-        domain = DomainAdapter.detect_domain(user_input)
-        lang = DomainAdapter.detect_language(user_input, domain)
-        role_prompt = DomainAdapter.get_agent_domain_prompt("product", domain, lang)
+        from orchestrator.domain.domain_knowledge_engine import GLOBAL_DOMAIN_KNOWLEDGE_ENGINE
+        domain = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.narrow_domain(user_input)
+
+        # Dynamically inject laser-focused system prompt for this specific domain (zero cross-domain clutter)
+        self.system_prompt = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.build_focused_product_system_prompt(domain)
+
         history_str = json.dumps(conversation_history or [], indent=2)
         prompt = (
-            f"{role_prompt}\n"
             f"Target Domain: {domain.display_name}\n"
             f"User Requirement / PRD:\n{user_input}\n\n"
             f"Clarification History:\n{history_str}\n\n"
-            f"Analyze with deep {domain.display_name} domain expertise. Compute confidence_score (0.00 to 1.00). "
+            f"Analyze with deep {domain.display_name} domain expertise. Compute confidence_score (0.00 to 1.00).\n"
             f"If the request lacks domain-critical specifics (such as {', '.join(domain.core_primitives[:4])}), "
             "set confidence < 0.60, is_clear=False, and generate prioritized domain-expert clarification_questions matching the domain's critical dimensions. "
             "If confidence >= 0.90, set is_clear=True, place non-blocking edge cases (<10%) in checkpoint_clarification_items, "
@@ -296,43 +255,28 @@ class SecurityAuditorAgent(BaseAgent):
 class BusinessStrategyAgent(BaseAgent):
     def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
-            """You are an Elite Chief Commercial Officer (CCO) & Specialized Industry Business Strategist.
-Analyze the technical product requirements and system capabilities to formulate an aggressive, data-backed Go-To-Market (GTM) strategy.
-
-DOMAIN EXPERTISE & GTM ANALYSIS:
-1. Domain Detection:
-   - Automatically detect the product domain (e.g. Crypto/Web3 Payments, AI DevTools, LegalTech SaaS, CAD/CAM).
-2. Vertical Market Economics:
-   - Model pricing, customer pain points, competitor battlecards, and ROI drivers tailored to the industry vertical.
-
-Output JSON with this exact schema:
-{
-  "detected_domain": "string",
-  "market_strategy": "string",
-  "user_cohorts": [
-    {"cohort_name": "...", "pain_point": "...", "why_adopt": "...", "willingness_to_pay": "..."}
-  ],
-  "competitor_analysis": [
-    {"competitor": "...", "limitations": "...", "ascm_advantage": "...", "verdict": "..."}
-  ],
-  "value_proposition": "string",
-  "gtm_channels": ["channel 1", "channel 2"],
-  "executive_summary": "string"
-}""",
+            "You are an Elite Chief Commercial Officer (CCO) & Specialized Industry Business Strategist.\n"
+            "Analyze technical product requirements to formulate an aggressive, data-backed Go-To-Market (GTM) strategy,\n"
+            "competitor battlecards, and user cohort unit economics for the specific product domain.",
             provider=provider,
             tier="primary",
         )
 
     def run(self, user_goal: str, clarified_prd: str, contracts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        from orchestrator.domain import DomainAdapter
-        domain = DomainAdapter.detect_domain(f"{user_goal} {clarified_prd}")
-        role_prompt = DomainAdapter.get_agent_domain_prompt("business", domain)
+        from orchestrator.domain.domain_knowledge_engine import GLOBAL_DOMAIN_KNOWLEDGE_ENGINE
+        domain = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.narrow_domain(f"{user_goal} {clarified_prd}")
+
+        # Dynamically inject focused GTM and competitor battlecards for this domain
+        self.system_prompt = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.build_focused_business_system_prompt(domain)
+
+        competitors_hint = ", ".join(c.get("competitor", "") for c in domain.competitor_archetypes)
         prompt = (
-            f"{role_prompt}\n"
+            f"Target Domain: {domain.display_name}\n"
+            f"Benchmark Competitors: {competitors_hint}\n"
             f"Feature Goal:\n{user_goal}\n\n"
             f"Clarified PRD:\n{clarified_prd}\n\n"
             f"Repository Context:\n{json.dumps(contracts or {}, indent=2)}\n\n"
-            f"Formulate comprehensive Market Strategy, User Cohorts, Competitor Analysis for {domain.display_name}, Value Proposition, and GTM channels."
+            f"Formulate comprehensive Market Strategy, User Cohorts, Competitor Analysis for {domain.display_name} vs {competitors_hint}, Value Proposition, and GTM channels."
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
