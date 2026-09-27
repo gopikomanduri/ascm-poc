@@ -62,7 +62,7 @@ BUILTIN_PROFILES: Dict[str, DomainProfile] = {
             "Edge INT4 GGUF quantized SLM inference (< 2GB RAM)"
         ],
         grilling_dimensions=[
-            "1. SLM Architecture & Quantization: What base foundation model (Qwen2.5-Coder-1.5B, Phi-4-mini, Llama-3.2-3B), parameter scale (1.5B vs 3B), and quantization format (INT4 GGUF, AWQ, FP16) for edge CPU/laptop execution vs centralized cloud?",
+            "1. SLM Architecture & Quantization (Pre-train vs LoRA vs RAG): Are you pre-training raw weights from scratch, fine-tuning an open base foundation model (Qwen2.5-Coder-1.5B, Phi-4-mini, Llama-3.2-3B) via LoRA/SFT on SID/AMFI datasets, or building an edge inference copilot with deterministic tool calling? What parameter scale (1.5B vs 3B), quantization format (INT4 GGUF, AWQ, FP16), and artifact delivery (adapter safetensors vs GGUF) are required for edge CPU/laptop execution vs cloud?",
             "2. Deterministic Tool Calling vs Neural Math: How will quantitative financial calculations (3Y/5Y CAGR, Sharpe ratio, Beta, Jensen's Alpha, XIRR) be handled? Will all math be strictly routed to a deterministic calculation engine rather than attempting neural math?",
             "3. SID In-Context Retrieval: How are official Scheme Information Documents (SIDs) and Key Information Memorandums (KIMs) ingested and cited without fine-tuning drift?",
             "4. Real-Time API Synchronization: How will daily changing market NAVs and SID filings be ingested (automated cron connecting to AMFI/SEC EDGAR/Yahoo Finance APIs) without model weight retraining?",
@@ -177,10 +177,108 @@ class DomainKnowledgeEngine:
         except Exception as err:
             logger.warning(f"Failed to persist domain {profile.domain_id}: {err}")
 
+    def list_cached_domains(self) -> List[DomainProfile]:
+        """Scans local disk cache for all persisted domains."""
+        domains = []
+        if self.cache_dir.exists():
+            for p in self.cache_dir.glob("*.json"):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        domains.append(DomainProfile(**data))
+                except Exception:
+                    pass
+        return domains
+
+    def synthesize_domain_profile(self, user_goal: str, context: Optional[str] = None) -> DomainProfile:
+        """
+        Dynamically synthesizes a new DomainProfile for previously unseen or novel domains
+        (e.g., Agritech, Satellite Imagery, Veterinary Tech, Quantum Computing).
+        Uses LLM provider with fast fallback to heuristic synthesis, then caches to '.ascm_domains/<domain_id>.json'.
+        """
+        prompt = (
+            f"Analyze this software/product requirement and extract its exact vertical industry domain:\n"
+            f"Requirement: {user_goal}\n"
+            f"Context: {context or 'None'}\n\n"
+            f"Generate a specialized domain profile JSON with this exact schema:\n"
+            f"{{\n"
+            f'  "domain_id": "short_lowercase_snake_case_id",\n'
+            f'  "display_name": "Full Domain Display Name",\n'
+            f'  "category_summary": "1-2 sentence technical summary of the vertical",\n'
+            f'  "core_primitives": ["primitive 1", "primitive 2", "primitive 3", "primitive 4", "primitive 5"],\n'
+            f'  "grilling_dimensions": [\n'
+            f'     "1. Architecture & Model Choice: ...",\n'
+            f'     "2. Verifiable Precision & State Handling: ...",\n'
+            f'     "3. Integration & Hardware / API Protocols: ...",\n'
+            f'     "4. Real-time Telemetry & Ingestion: ...",\n'
+            f'     "5. Statutory, Safety & Regulatory Standards: ..."\n'
+            f'  ],\n'
+            f'  "competitor_archetypes": [\n'
+            f'     {{"competitor": "Dominant Legacy Competitor", "limitations": "their key bottlenecks", "ascm_advantage": "how ASCM wins"}}\n'
+            f'  ],\n'
+            f'  "safety_and_nfr_focus": ["NFR 1", "NFR 2"],\n'
+            f'  "standard_libraries": {{"python": ["lib1", "lib2"], "go": ["pkg1"]}}\n'
+            f"}}"
+        )
+        try:
+            from orchestrator.agents.base import get_configured_provider
+            provider = get_configured_provider(tier="fast", agent_name="DomainKnowledgeEngine")
+            raw = provider.generate(
+                prompt=prompt,
+                system_instruction="You are a Principal Domain Systems Architect. Output strictly valid JSON.",
+                json_mode=True
+            )
+            data = json.loads(raw)
+            profile = DomainProfile(**data)
+            self.persist_domain_to_disk(profile)
+            return profile
+        except Exception as err:
+            logger.info(f"LLM domain synthesis fallback for '{user_goal}': {err}")
+
+        # Intelligent heuristic fallback synthesis
+        slug = re.sub(r"[^a-z0-9]+", "_", user_goal.lower().strip())[:40].strip("_") or "custom_vertical"
+        clean_name = " ".join(word.capitalize() for word in slug.split("_"))
+        profile = DomainProfile(
+            domain_id=slug,
+            display_name=f"{clean_name} Systems Engineering",
+            name=f"{clean_name} Systems Engineering",
+            category_summary=f"Specialized systems architecture, protocols, and regulatory validation for {clean_name}.",
+            primary_language="python",
+            core_primitives=[
+                f"{clean_name} domain data ingestion & serialization",
+                f"Protocol verification & state validation for {clean_name}",
+                "Deterministic calculation & precision factor attribution",
+                "Real-time event streaming and pipeline telemetry",
+                "Statutory standards and domain safety compliance guardrails"
+            ],
+            grilling_dimensions=[
+                f"1. Architecture & Engine Selection: What compute runtime, framework, and hardware target for {clean_name}?",
+                "2. Deterministic Precision vs Stochastic Estimation: How are mission-critical calculations verified to prevent hallucination?",
+                "3. Ingestion & Real-Time Sync: What upstream APIs, industrial protocols, or data schemas are ingested?",
+                "4. Continuous Monitoring & Automated Feedback: How are runtime anomalies detected and integrated into automated self-correction loops?",
+                "5. Statutory & Safety Guardrails: Which vertical regulatory bodies, safety certifications, or legal disclaimers apply?"
+            ],
+            competitor_archetypes=[
+                {
+                    "competitor": f"Legacy {clean_name} Monoliths",
+                    "limitations": "Rigid closed enterprise licensing, slow update cycles, lack of Git-native automation.",
+                    "ascm_advantage": "Autonomous, verified multi-repo microservices synthesized directly into codebase."
+                }
+            ],
+            safety_and_nfr_focus=[
+                f"Strict zero-fault tolerance for critical {clean_name} operations",
+                "Deterministic audit logs with cryptographic hash integrity"
+            ],
+            standard_libraries={"python": ["pydantic", "fastapi", "numpy"]}
+        )
+        self.persist_domain_to_disk(profile)
+        return profile
+
     def narrow_domain(self, user_goal: str, context: Optional[str] = None) -> DomainProfile:
         """
         Narrows the user's request to the most specific, specialized domain profile.
         Prioritizes high-specificity compound domains (e.g. Mutual Funds SLM) before generic fallback domains.
+        Autonomously synthesizes and learns new domains if not previously encountered.
         """
         combined = f"{user_goal} {context or ''}".lower()
 
@@ -196,39 +294,44 @@ class DomainKnowledgeEngine:
                 return cached
             return BUILTIN_PROFILES["MUTUAL_FUNDS_WEALTH_SLM"]
 
+        # 2. Check previously synthesized domains in local disk cache (.ascm_domains/*.json)
+        for cached_profile in self.list_cached_domains():
+            if cached_profile.domain_id in combined or cached_profile.display_name.lower() in combined:
+                return cached_profile
+
         # Check existing vertical domains from domain_adapter
         from orchestrator.domain.domain_adapter import VERTICAL_DOMAINS
 
-        # 2. Crypto / Web3 Payments
+        # 3. Crypto / Web3 Payments
         if any(k in combined for k in ["crypto", "bitcoin", "ethereum", "web3", "token", "solana", "blockchain", "wallet", "onchain", "smart contract"]):
             return VERTICAL_DOMAINS["FINTECH_CRYPTO"]
 
-        # 3. CAD / CAM Manufacturing
+        # 4. CAD / CAM Manufacturing
         if any(k in combined for k in ["cad", "cam", "cnc", "toolpath", "g-code", "mesh", "stl", "step", "nurbs", "spindle", "slicer"]):
             return VERTICAL_DOMAINS["CAD_CAM"]
 
-        # 4. Healthcare / MedTech
+        # 5. Healthcare / MedTech
         if any(k in combined for k in ["health", "medical", "patient", "ehr", "emr", "fhir", "hl7", "dicom", "hipaa", "radiology", "pharma"]):
             return VERTICAL_DOMAINS["HEALTHCARE_MEDTECH"]
 
-        # 5. LegalTech / Contracts
+        # 6. LegalTech / Contracts
         if any(k in combined for k in ["contract", "contracts", "clause", "nda", "gdpr", "ediscovery", "redline", "lawyer", "attorney"]):
             return VERTICAL_DOMAINS["LEGALTECH_COMPLIANCE"]
 
-        # 6. Robotics & Embedded
+        # 7. Robotics & Embedded
         if any(k in combined for k in ["robot", "embedded", "firmware", "iot", "rtos", "ros2", "microcontroller", "stm32"]):
             return VERTICAL_DOMAINS["ROBOTICS_EMBEDDED"]
 
-        # 7. DevTools & Compilers
+        # 8. DevTools & Compilers
         if any(k in combined for k in ["compiler", "parser", "ast", "lexer", "transpiler", "linter", "lsp", "bytecode"]):
             return VERTICAL_DOMAINS["DEVTOOLS_COMPILER"]
 
-        # 8. General AI / ML Systems
+        # 9. General AI / ML Systems
         if any(k in combined for k in ["llm", "slm", "small language model", "language model", "rag", "vector", "embedding", "inference"]):
             return VERTICAL_DOMAINS["AI_ML_SYSTEMS"]
 
-        # Fallback to Generic Microservice
-        return VERTICAL_DOMAINS["GENERIC_MICROSERVICE"]
+        # 10. Infinite Domain Discovery: Synthesize and learn any new vertical dynamically
+        return self.synthesize_domain_profile(user_goal, context)
 
     def build_focused_product_system_prompt(self, profile: Any) -> str:
         """

@@ -1,0 +1,43 @@
+{
+  "domain_id": "build_a_product",
+  "display_name": "Build A Product Systems Engineering",
+  "name": "Build A Product Systems Engineering",
+  "category_summary": "Specialized systems architecture, protocols, and regulatory validation for Build A Product.",
+  "primary_language": "python",
+  "core_primitives": [
+    "Build A Product domain data ingestion & serialization",
+    "Protocol verification & state validation for Build A Product",
+    "Deterministic calculation & precision factor attribution",
+    "Real-time event streaming and pipeline telemetry",
+    "Statutory standards and domain safety compliance guardrails"
+  ],
+  "grilling_dimensions": [
+    "1. Architecture & Engine Selection: What compute runtime, framework, and hardware target for Build A Product?",
+    "2. Deterministic Precision vs Stochastic Estimation: How are mission-critical calculations verified to prevent hallucination?",
+    "3. Ingestion & Real-Time Sync: What upstream APIs, industrial protocols, or data schemas are ingested?",
+    "4. Continuous Monitoring & Automated Feedback: How are runtime anomalies detected and integrated into automated self-correction loops?",
+    "5. Statutory & Safety Guardrails: Which vertical regulatory bodies, safety certifications, or legal disclaimers apply?"
+  ],
+  "architectural_patterns": [],
+  "standard_libraries": {
+    "python": [
+      "pydantic",
+      "fastapi",
+      "numpy"
+    ]
+  },
+  "safety_and_nfr_focus": [
+    "Strict zero-fault tolerance for critical Build A Product operations",
+    "Deterministic audit logs with cryptographic hash integrity"
+  ],
+  "competitor_archetypes": [
+    {
+      "competitor": "Legacy Build A Product Monoliths",
+      "limitations": "Rigid closed enterprise licensing, slow update cycles, lack of Git-native automation.",
+      "ascm_advantage": "Autonomous, verified multi-repo microservices synthesized directly into codebase."
+    }
+  ],
+  "preferred_models": {},
+  "unit_test_frameworks": {},
+  "role_titles": {}
+}

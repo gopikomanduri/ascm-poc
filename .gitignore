@@ -5,5 +5,8 @@ __pycache__/
 .ascm_history/
 logs/
 *.log
-*.jsonl
+models/
+*.gguf
+*.safetensors
+*.bin
 
