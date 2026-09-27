@@ -5,4 +5,9 @@ __pycache__/
 .ascm_history/
 logs/
 *.log
+*.gguf
+*.safetensors
+*.bin
+!*.manifest.json
+!model_registry_pointer.json
 

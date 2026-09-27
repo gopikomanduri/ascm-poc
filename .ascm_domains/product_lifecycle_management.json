@@ -1,0 +1,52 @@
+{
+  "domain_id": "product_lifecycle_management",
+  "display_name": "Digital Product Lifecycle Management (PLM) & Engineering Platform",
+  "name": "Digital Product Lifecycle Management (PLM) & Engineering Platform",
+  "category_summary": "Platforms orchestrating the end-to-end conceptualization, iterative engineering, compliance traceability, and release lifecycle of complex software and cyber-physical products.",
+  "primary_language": "python",
+  "core_primitives": [
+    "Bill of Materials (BOM) and Dependency Graph",
+    "Engineering Change Order (ECO) Workflow",
+    "Immutable Artifact and Asset Registry",
+    "Finite State Product Lifecycle Engine",
+    "Requirements Traceability Matrix (RTM)"
+  ],
+  "grilling_dimensions": [
+    "1. Architecture & Model Choice: Graph-native representations (DAG/Property Graph) for multi-level BOMs and feature hierarchies versus relational models with recursive CTE bottlenecks.",
+    "2. Verifiable Precision & State Handling: Deterministic state transitions across asynchronous distributed review boards, transactional consistency for ECO sign-offs, and cryptographically verified revision trees.",
+    "3. Integration & Hardware / API Protocols: Bi-directional synchronization across heterogeneous CAD/CASE tools, ALM pipelines, ERP connectors (SAP/NetSuite), and webhook-driven event buses using Open Services for Lifecycle Collaboration (OSLC) protocols.",
+    "4. Real-time Telemetry & Ingestion: Ingestion of live operational telemetry and build/CI metrics via high-throughput message streams to dynamically map runtime defects back to engineering requirements.",
+    "5. Statutory, Safety & Regulatory Standards: Strict alignment with ISO 9001 (Quality Management), ISO/IEC/IEEE 15288 (Systems Life Cycle Processes), 21 CFR Part 11 (Electronic Records/Signatures), and ISO 26262/IEC 62304 where safety-critical components apply."
+  ],
+  "architectural_patterns": [],
+  "standard_libraries": {
+    "python": [
+      "networkx",
+      "pydantic",
+      "sqlalchemy",
+      "celery"
+    ],
+    "go": [
+      "github.com/google/wire",
+      "gonum.org/v1/gonum/graph",
+      "github.com/casbin/casbin/v2",
+      "go.temporal.io/sdk"
+    ]
+  },
+  "safety_and_nfr_focus": [
+    "Strict auditable immutability and non-repudiation of engineering approvals",
+    "Sub-second traversal latencies for deep BOM hierarchies up to 10^6 nodes",
+    "High availability (99.999%) for global engineering collaboration pipelines",
+    "Granular Attribute-Based Access Control (ABAC) preserving ITAR/IP segregation"
+  ],
+  "competitor_archetypes": [
+    {
+      "competitor": "Siemens Teamcenter / PTC Windchill",
+      "limitations": "Rigid, monolithic architectures with slow migration cycles, high custom-code maintenance overhead, and poor integration into modern continuous deployment/ALM toolchains.",
+      "ascm_advantage": "Cloud-native, event-driven microservices architecture offering real-time graph traversal, declarative schema extensions, and zero-downtime CI/CD continuous compliance validation."
+    }
+  ],
+  "preferred_models": {},
+  "unit_test_frameworks": {},
+  "role_titles": {}
+}

@@ -67,14 +67,16 @@ BUILTIN_PROFILES: Dict[str, DomainProfile] = {
             "3. SID In-Context Retrieval: How are official Scheme Information Documents (SIDs) and Key Information Memorandums (KIMs) ingested and cited without fine-tuning drift?",
             "4. Real-Time API Synchronization: How will daily changing market NAVs and SID filings be ingested (automated cron connecting to AMFI/SEC EDGAR/Yahoo Finance APIs) without model weight retraining?",
             "5. Continuous Self-Correction via RL / DPO: How does the model auto-correct from runtime failure logs? Automated generation of (prompt, chosen, rejected) DPO preference pairs for nightly LoRA alignment?",
-            "6. Statutory Guardrails & Data Privacy: Which statutory compliance requirements apply (SEBI risk-o-meter disclosures, SEC Rule 482 risk warnings)? How will client portfolio holdings and PII be quarantined from public clouds?"
+            "6. Statutory Guardrails & Data Privacy: Which statutory compliance requirements apply (SEBI risk-o-meter disclosures, SEC Rule 482 risk warnings)? How will client portfolio holdings and PII be quarantined from public clouds?",
+            "7. Model Weight Offload & Storage Registry: Since multi-gigabyte neural weights (.gguf / .safetensors) exceed GitHub's 100MB ceiling, which remote storage target should be configured (AWS S3, Google Cloud Storage, Google Drive, Hugging Face Hub, Cloudflare R2)? ASCM will offload the binary to your storage bucket and push the verified SHA-256 pointer manifest to GitHub."
         ],
         architectural_patterns=[
             "Deterministic Math Tool Dispatcher",
             "SID In-Context Document Chunk Retriever",
             "Statutory Regulatory Interceptor & PII Redactor",
             "Daily Real-Time API Sync Cron Worker",
-            "DPO Preference Pair Synthesizer & Telemetry Miner"
+            "DPO Preference Pair Synthesizer & Telemetry Miner",
+            "Model Weight Remote Offload & Git Pointer Registry"
         ],
         standard_libraries={
             "python": ["numpy", "scipy", "pydantic", "fastapi", "urllib3"],

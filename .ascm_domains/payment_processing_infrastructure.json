@@ -1,0 +1,57 @@
+{
+  "domain_id": "payment_processing_infrastructure",
+  "display_name": "Payment Processing & Financial Clearing Infrastructure",
+  "name": "Payment Processing & Financial Clearing Infrastructure",
+  "category_summary": "High-throughput, strictly consistent financial transaction infrastructure supporting multi-rail payment orchestration, immutable double-entry ledgering, and clearing/settlement lifecycle management.",
+  "primary_language": "python",
+  "core_primitives": [
+    "Payment Intent & Authorization",
+    "Double-Entry Ledger Account",
+    "Idempotency Key & Mutex",
+    "Payment Rail Router (ACH/RTP/Card/Wire)",
+    "Settlement Batch & Reconciliation Statement"
+  ],
+  "grilling_dimensions": [
+    "1. Architecture & Model Choice: Event-driven Saga patterns vs. distributed two-phase commit (2PC) for multi-rail clearing, outbox pattern implementations, and high-concurrency balance locking models.",
+    "2. Verifiable Precision & State Handling: Arbitrary-precision decimal arithmetic (no IEEE-754 floats), transactional idempotency windows, write-ahead immutable ledgers, and zero-loss ledger invariance verification.",
+    "3. Integration & Hardware / API Protocols: ISO 8583 / ISO 20022 message encoding/decoding, Hardware Security Module (HSM) key-exchange protocols, FedNow/RTP real-time network integration, and PCI-compliant token vaults.",
+    "4. Real-time Telemetry & Ingestion: Sub-50ms streaming fraud/risk inference pipelines, real-time liquidity tracking across nostro/vostro accounts, and automated reconciliation delta detectors.",
+    "5. Statutory, Safety & Regulatory Standards: PCI-DSS v4.0 Level 1 isolation, SOC 1 Type II (SSAE 18) controls, OFAC/Sanctions real-time screening, Nacha operating rules, and PSD2/Strong Customer Authentication (SCA)."
+  ],
+  "architectural_patterns": [],
+  "standard_libraries": {
+    "python": [
+      "decimal",
+      "cryptography",
+      "pydantic",
+      "iso8583-processor"
+    ],
+    "go": [
+      "github.com/shopspring/decimal",
+      "github.com/moov-io/iso8583",
+      "github.com/moov-io/ach",
+      "crypto/tls"
+    ]
+  },
+  "safety_and_nfr_focus": [
+    "Strict linearizability (Serializable ACID isolation) for all balance mutators",
+    "Zero transaction data loss (RPO = 0, multi-region synchronous replication)",
+    "p99 end-to-end authorization latency under 200ms under 20,000 TPS load",
+    "Zero-knowledge cardholder data environment (CDE) air-gapping and hardware-level encryption at rest"
+  ],
+  "competitor_archetypes": [
+    {
+      "competitor": "Legacy Processing Cores (e.g., Fiserv, FIS)",
+      "limitations": "Coupled batch-window architectures, monolithic COBOL/mainframe reliance, lack of real-time multi-currency settlement and poor developer-facing instrumentation.",
+      "ascm_advantage": "Cloud-native, horizontally scalable micro-ledgering with sub-second finality, microsecond audit trailing, and declarative programmable payment workflows."
+    },
+    {
+      "competitor": "Developer Aggregators (e.g., Stripe, Adyen)",
+      "limitations": "High transaction take-rates, opaque internal routing/ledger abstractions, and regulatory/vendor lock-in restricting multi-acquirer sovereignty.",
+      "ascm_advantage": "Self-hosted zero-trust tokenization pipelines, cost-optimized dynamic least-cost routing across direct clearing rails, and inspectable open-schema ledgers."
+    }
+  ],
+  "preferred_models": {},
+  "unit_test_frameworks": {},
+  "role_titles": {}
+}

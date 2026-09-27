@@ -1,0 +1,59 @@
+{
+  "domain_id": "legaltech_regulatory_engineering",
+  "display_name": "LegalTech, Regulatory Engineering & Compliance Automation",
+  "name": "LegalTech, Regulatory Engineering & Compliance Automation",
+  "category_summary": "Domain focused on codifying statutory, contractual, and regulatory obligations into deterministic, verifiable software workflows. It unifies semantic legal parsing, executable policy-as-code, real-time audit event ingestion, and provable regulatory compliance pipelines.",
+  "primary_language": "python",
+  "core_primitives": [
+    "Executable Policy Graph (Policy-as-Code)",
+    "Bi-Temporal Statutory Knowledge Representation",
+    "Immutable Compliance Audit Trail & Evidence Provenance",
+    "Contractual Obligation State Machine",
+    "Semantic Legal Taxonomy & Jurisdictional Ontologies"
+  ],
+  "grilling_dimensions": [
+    "1. Architecture & Model Choice: Evaluation of deterministic rule compilers (Catala, OPA/Rego, Cedar, Z3 SMT) versus stochastic LLM semantic extractors, enforcing strict runtime isolation where models extract context but formal solvers evaluate compliance.",
+    "2. Verifiable Precision & State Handling: Elimination of semantic hallucinations through citation-grounded AST validation, bi-temporal state mechanics (distinguishing enactment date, effective date, and system assertion timestamp), and formal verification of rule non-contradiction.",
+    "3. Integration & Hardware / API Protocols: Interfacing with legacy Document Management Systems (iManage, NetDocuments via REST/CMIS), regulatory dissemination networks (EDGAR XBRL, EU e-Codex, FinCEN BSA E-Filing), and cryptographic signature standards (eIDAS, PAdES/CAdES).",
+    "4. Real-time Telemetry & Ingestion: Ingestion architectures for continuous control monitoring across operational infrastructure via distributed event streaming (Kafka/Flink), converting transactional telemetry into real-time compliance assertion records.",
+    "5. Statutory, Safety & Regulatory Standards: Strict alignment with cross-border sovereignty and governance mandates (GDPR Art. 22 automated processing, HIPAA, SOC 2 Type II, ISO 27001, FedRAMP High, and ABA Model Rule 1.6 confidentiality constraints)."
+  ],
+  "architectural_patterns": [],
+  "standard_libraries": {
+    "python": [
+      "catala",
+      "arelle",
+      "pydantic",
+      "z3-solver",
+      "cryptography",
+      "networkx"
+    ],
+    "go": [
+      "github.com/open-policy-agent/opa",
+      "github.com/cedar-policy/cedar-go",
+      "github.com/google/trillian",
+      "github.com/segmentio/kafka-go"
+    ]
+  },
+  "safety_and_nfr_focus": [
+    "Bi-Temporal Reproducibility & Point-in-Time Regulatory Replay",
+    "Zero-Knowledge Tenant Isolation & Cryptographic Evidence Non-Repudiation",
+    "Deterministic Decision Enclave Guarantees",
+    "Sub-100ms Policy Evaluation Latency under Peak Transactional Load"
+  ],
+  "competitor_archetypes": [
+    {
+      "competitor": "Legacy Enterprise GRC (e.g., Archer, MetricStream)",
+      "limitations": "Relies on manual assessment surveys, static relational schemas incapable of tracking dynamic cross-statutory dependencies, and lack of real-time programmatic continuous control validation.",
+      "ascm_advantage": "Executes declarative regulatory code directly against runtime operational telemetry, offering sub-second compliance drift detection and mathematical audit certainty."
+    },
+    {
+      "competitor": "Heuristic Legal Document AI (e.g., Ironclad, Kira/Litera)",
+      "limitations": "High propensity for edge-case hallucinations in unconstrained LLM parsing, brittle regex/NLP pipelines, and an inability to model post-execution operational contract lifecycle obligations.",
+      "ascm_advantage": "Combines neuro-symbolic extraction with formal SMT solvers and state machines, ensuring verified legal consistency, dependency tracking, and automated fulfillment triggering."
+    }
+  ],
+  "preferred_models": {},
+  "unit_test_frameworks": {},
+  "role_titles": {}
+}

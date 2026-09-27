@@ -1,0 +1,23 @@
+{
+  "model_name": "MutualFunds-SLM-Llama-3.2-3B-Instruct",
+  "artifact_filename": "mutual_funds_slm_llama3_2_3b_q4_k_m.gguf",
+  "architecture": "Llama-3.2-3B",
+  "quantization": "Q4_K_M",
+  "file_size_bytes": 4491,
+  "file_size_human": "0.00 MB",
+  "sha256": "6b0c225506fcdc868b7edb33b6104f2a10eb52032fdcac0933281eac312e4bc9",
+  "storage_provider": "AWS_S3",
+  "remote_uri": "s3://institutional-slm-vault/mutual-funds-slm/v1/mutual_funds_slm_llama3_2_3b_q4_k_m.gguf",
+  "download_command": "aws s3 cp s3://institutional-slm-vault/mutual-funds-slm/v1/mutual_funds_slm_llama3_2_3b_q4_k_m.gguf products/mutual-funds-slm/models/mutual_funds_slm_llama3_2_3b_q4_k_m.gguf",
+  "git_tracking_policy": "POINTER_ONLY_BINARY_OFFLOADED",
+  "registered_at": "2026-09-27 16:47:18 UTC",
+  "verification": {
+    "hash_algorithm": "SHA-256",
+    "checksum": "6b0c225506fcdc868b7edb33b6104f2a10eb52032fdcac0933281eac312e4bc9",
+    "verification_command": "python3 -c \"import hashlib; print('Valid' if hashlib.sha256(open('products/mutual-funds-slm/models/mutual_funds_slm_llama3_2_3b_q4_k_m.gguf','rb').read()).hexdigest() == '6b0c225506fcdc868b7edb33b6104f2a10eb52032fdcac0933281eac312e4bc9' else 'Corrupted')\""
+  },
+  "metadata": {
+    "google_drive_mirror": "https://drive.google.com/file/d/1_Llama3_2_MutualFunds_SLM_GGUF/view?usp=sharing",
+    "hugging_face_mirror": "https://huggingface.co/models/mutual-funds-slm-llama3-2-3b-q4"
+  }
+}
