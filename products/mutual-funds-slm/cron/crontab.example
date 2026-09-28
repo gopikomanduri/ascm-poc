@@ -1,0 +1,13 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Mutual Funds SLM Production Crontab Configuration
+# 
+# To install on Linux/macOS server:
+#   crontab -e
+# and append the line below (adjust path to your repo directory):
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Run every day at 23:30 IST (18:00 UTC) right after AMFI day-end NAV publication
+00 18 * * * /bin/bash /opt/ascm-poc/products/mutual-funds-slm/cron/sync_job.sh >> /opt/ascm-poc/products/mutual-funds-slm/data-pipeline/logs/cron_output.log 2>&1
+
+# (Optional) Run an hourly healthcheck & ping
+00 * * * * curl -sf http://localhost:8095/api/funds > /dev/null || echo "[!] SLM Serving Engine unresponsive" | mail -s "MF SLM Alert" admin@example.com

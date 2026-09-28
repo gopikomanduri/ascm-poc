@@ -1,6 +1,6 @@
 {
-  "sync_timestamp": "2026-09-26T18:07:40.896152+00:00",
-  "duration_sec": 0.797,
+  "sync_timestamp": "2026-09-28T03:13:50.544249+00:00",
+  "duration_sec": 0.474,
   "total_schemes": 3,
   "status": "COMPLETED",
   "funds": {
@@ -94,7 +94,7 @@
       ],
       "expense_ratio": 0.04,
       "aum_cr": 920000,
-      "last_synced": "2026-09-26",
+      "last_synced": "2026-09-28",
       "sync_source": "YAHOO_FINANCE_API",
       "metrics": {
         "cagr_3yr_pct": 19.48,

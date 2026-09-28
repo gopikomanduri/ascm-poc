@@ -115,7 +115,7 @@ class RealTimeAPISync:
                             "source": "YAHOO_FINANCE_API",
                             "nav": regular_price,
                             "currency": meta.get("currency", "USD"),
-                            "date": datetime.utcnow().strftime("%Y-%m-%d"),
+                            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                         }
         except Exception as err:
             logger.warning(f"Live fetch for ticker {ticker} failed ({err}). Using verified synthetic feed.")

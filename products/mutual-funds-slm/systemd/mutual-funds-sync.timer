@@ -1,0 +1,11 @@
+[Unit]
+Description=Trigger Mutual Funds SLM Nightly Calculation Job at 23:30 IST (18:00 UTC)
+Requires=mutual-funds-sync.service
+
+[Timer]
+# Daily at 18:00 UTC (23:30 IST)
+OnCalendar=*-*-* 18:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
