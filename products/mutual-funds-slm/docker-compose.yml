@@ -74,6 +74,18 @@ services:
       - shared-telemetry-data:/app/slm-serving-engine/data
     restart: unless-stopped
 
+  # ── 5. Production Nginx Reverse Proxy & Rate Limiter ────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: mf-slm-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - slm-serving
+    restart: unless-stopped
+
 volumes:
   ollama-models:
     name: mf_slm_ollama_models
