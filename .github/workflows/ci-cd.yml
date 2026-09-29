@@ -1,4 +1,4 @@
-name: Mutual Funds SLM & ASCM CI/CD Pipeline
+name: ASCM Multi-Agent Engine CI/CD
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
     branches: [ main ]
 
 jobs:
-  # ── 1. Continuous Integration: Test, Validate & Calculate ────────────────
-  test-and-validate:
-    name: Run Pytest Suite & Pipeline Verifications
+  # ── 1. ASCM Core Test Suite & Mathematical Validation ───────────────────
+  test-ascm-core:
+    name: Run ASCM Core Tests & Math Proofs
     runs-on: ubuntu-latest
 
     steps:
@@ -28,60 +28,30 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
 
-      - name: Run Complete Pytest Suite
+      - name: Run ASCM 103 Core Engine Unit Tests
         env:
           PYTHONPATH: .
         run: |
-          pytest tests/ \
-                 products/mutual-funds-slm/data-pipeline/tests/ \
-                 products/mutual-funds-slm/slm-serving-engine/tests/ -v
+          pytest tests/ -v
 
-      - name: Test Daily Calculation & AMFI Sync Job
-        env:
-          PYTHONPATH: products/mutual-funds-slm/data-pipeline:products/mutual-funds-slm/data-pipeline/app
+      - name: Validate ASCM Mathematical Proofs
         run: |
-          python products/mutual-funds-slm/data-pipeline/app/daily_sync_pipeline.py --run-once
+          python ascm_math_proofs.py
 
-      - name: Test DPO Preference Pair Generator
-        env:
-          PYTHONPATH: products/mutual-funds-slm/data-pipeline:products/mutual-funds-slm/data-pipeline/app
+      - name: Validate MR-Bench Multi-Repo Coordination
         run: |
-          python products/mutual-funds-slm/data-pipeline/app/dpo_preference_generator.py
+          python mr_bench.py --task-limit 1
 
-  # ── 2. Container Build & Lint Validation ──────────────────────────────────
+  # ── 2. Container Build Validation ────────────────────────────────────────
   docker-build-verification:
-    name: Build Production Docker Image
+    name: Build ASCM Engine Docker Image
     runs-on: ubuntu-latest
-    needs: test-and-validate
+    needs: test-ascm-core
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: actions/setup-docker-actions@v3
-        continue-on-error: true
-
-      - name: Build SLM Docker Image
+      - name: Build ASCM Platform Docker Image
         run: |
-          docker build \
-            -f products/mutual-funds-slm/Dockerfile \
-            -t mutual-funds-slm:latest .
-
-  # ── 3. Continuous Deployment (CD) ─────────────────────────────────────────
-  # To enable automated deployment to your cloud VM or local runner on git push:
-  # 1. For Cloud VM: Store SSH_HOST, SSH_USER, SSH_KEY in GitHub Secrets.
-  # 2. For Local Laptop: Register a GitHub Self-Hosted Runner (Settings -> Actions -> Runners).
-  deploy:
-    name: Continuous Deployment Trigger
-    runs-on: ubuntu-latest
-    needs: [test-and-validate, docker-build-verification]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - name: Notify Deployment Readiness
-        run: |
-          echo "=========================================================="
-          echo "[+] Build and validation passed for commit ${{ github.sha }}."
-          echo "[+] Ready for continuous deployment to Cloud VM or Local Laptop Runner."
-          echo "=========================================================="
+          docker build -t ascm-poc:latest .
