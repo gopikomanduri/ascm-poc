@@ -63,10 +63,11 @@ ASCM is not an autocomplete plugin or a chatbot wrapper. It is an **autonomous, 
 
 ### 2. Codebase Directory Map
 - `orchestrator/`: The engine core (agents, domain profiles, execution sandbox, token budget forecaster, security, and knowledge engines).
-- `products/`: 3 working end-to-end reference applications generated and tested by ASCM:
+- `products/`: Reference applications generated and tested by ASCM:
   - `products/paypulse-sentinel/`: FinTech Stripe webhook gateway with replay attack prevention and HMAC validation.
   - `products/pay-through-crypto/`: Non-custodial Web3 crypto checkout supporting EVM (Polygon) & Solana with QR code generation.
   - `products/cad-cam-engine/`: CNC machining G-code toolpath slicing engine.
+  - External Flagship: [**Mutual Funds SLM Copilot**](https://github.com/gopikomanduri/mutual-funds-slm) — SEBI/SEC compliant edge financial copilot with real-time AMFI data sync, multi-broker gateway, and RBI Account Aggregator.
 - `ascm_math_proofs.py`: 6 probabilistic theorems with Monte Carlo simulation scripts (500k trials) proving defect reduction and coordination correctness.
 - `mr_bench.py`: Benchmark suite evaluating multi-repo AI coordination tasks.
 - `tests/`: 15 comprehensive test suites covering 89 core tests + 9 product tests (98/98 passing).
