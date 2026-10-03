@@ -1,0 +1,219 @@
+{
+  "experiment_name": "ASCM First GTM Experiment",
+  "date_completed": "2026-10-03T16:30:09.821791",
+  "phases": {
+    "sales": {
+      "leads_discovered": 25,
+      "verified_emails": 25,
+      "first_sequence_dispatched": true,
+      "reply_classification_rules": [
+        {
+          "reply": "INTERESTED",
+          "action": "Route to Cal.com for meeting booking"
+        },
+        {
+          "reply": "OBJECTION",
+          "action": "Send follow-up sequence to address concerns"
+        },
+        {
+          "reply": "NEGATIVE",
+          "action": "Silently suppress, no founder notification"
+        },
+        {
+          "reply": "OUT_OF_OFFICE",
+          "action": "Send follow-up sequence to check availability"
+        }
+      ],
+      "cal_com_booking_logic": "IF reply is INTERESTED, THEN dispatch Cal.com booking link",
+      "founder_notification_criteria": "ONLY interested + meeting booked",
+      "unsubscribe_handling": "silent suppression",
+      "estimated_meeting_bookings_week1": 10
+    },
+    "marketing": {},
+    "ads": {
+      "campaign_structure": {
+        "Google_Ads": {
+          "Search": {
+            "target_keywords": [
+              "product development automation",
+              "MVP launch tools",
+              "rapid scaling software"
+            ],
+            "bid_strategy": "CPA",
+            "target_cpa": 50
+          },
+          "Display": {
+            "target_keywords": [
+              "CTO tools",
+              "engineering automation",
+              "software development"
+            ],
+            "bid_strategy": "CPM",
+            "target_cpm": 10
+          }
+        },
+        "LinkedIn_Ads": {
+          "ABM": {
+            "target_companies": [
+              "Series B-D SaaS ($20M-$500M ARR)"
+            ],
+            "bid_strategy": "CPA",
+            "target_cpa": 50
+          },
+          "Lead_Gen": {
+            "target_companies": [
+              "CTO / VP Engineering"
+            ],
+            "bid_strategy": "CPA",
+            "target_cpa": 50
+          }
+        },
+        "Programmatic": {
+          "target_keywords": [
+            "product development automation",
+            "MVP launch tools",
+            "rapid scaling software"
+          ],
+          "bid_strategy": "CPA",
+          "target_cpa": 50
+        }
+      },
+      "target_channels": [
+        "Google",
+        "LinkedIn",
+        "Programmatic"
+      ],
+      "icp_audience_segments": [
+        "CTO / VP Engineering",
+        "Series B-D SaaS ($20M-$500M ARR)",
+        "50-500 people team size",
+        "US/EU tech hubs",
+        "Go/Python + PostgreSQL + Microservices tech stack"
+      ],
+      "ad_copy_variants": {
+        "Google_Ads": {
+          "Search": [
+            "Discover Product Development Automation",
+            "Launch MVP with Ease",
+            "Accelerate Your Software Development"
+          ],
+          "Display": [
+            "Automate Your Product Development",
+            "MVP Launch Tools for Rapid Scaling",
+            "Engineering Automation Solutions"
+          ]
+        },
+        "LinkedIn_Ads": {
+          "ABM": [
+            "Automate Product Development for CTOs",
+            "VP Engineering Tools for Rapid Scaling",
+            "Product Development Automation for Series B-D SaaS"
+          ],
+          "Lead_Gen": [
+            "CTO / VP Engineering Tools",
+            "Product Development Automation for Engineering Teams",
+            "Rapid Scaling Software for SaaS Companies"
+          ]
+        }
+      },
+      "landing_page_brief": "Optimize for conversion rate optimization (CRO) with clear call-to-action (CTA), streamlined form fields, and engaging visuals. Highlight the benefits of ASCM for CTOs and VP Engineering roles, focusing on faster feature launches, reduced cross-repo coordination, and accelerated time-to-market.",
+      "budget_allocation": {
+        "Google_Ads": 100,
+        "LinkedIn_Ads": 50,
+        "Programmatic": 50
+      },
+      "monthly_budget_recommended": 200,
+      "estimated_sql_monthly": 400,
+      "target_cac": 50,
+      "measurement_framework": {
+        "attribution": "Multi-touch attribution with 40% first-touch, 40% last-touch, 20% linear",
+        "utm_strategy": "utm_source, utm_medium, utm_campaign, utm_term, utm_content",
+        "conversion_tracking": "Google Analytics, LinkedIn Analytics"
+      },
+      "bid_strategies": {
+        "Google_Ads": {
+          "Search": "CPA",
+          "Display": "CPM"
+        },
+        "LinkedIn_Ads": {
+          "ABM": "CPA",
+          "Lead_Gen": "CPA"
+        },
+        "Programmatic": "CPA"
+      },
+      "automation_rules": {
+        "Google_Ads": {
+          "Search": "Increase bids for high-performing keywords",
+          "Display": "Increase bids for high-performing ad groups"
+        },
+        "LinkedIn_Ads": {
+          "ABM": "Increase bids for high-performing companies",
+          "Lead_Gen": "Increase bids for high-performing lead sources"
+        },
+        "Programmatic": "Increase bids for high-performing keywords"
+      }
+    },
+    "seo": {
+      "keyword_clusters": [
+        "ASCM product development",
+        "Auto-discover product requirements",
+        "High-level architecture generation",
+        "Low-level design implementation",
+        "Full-stack code generation",
+        "Security audits in product development",
+        "Quality validation in software engineering",
+        "Rapid scaling with ASCM",
+        "MVP launches with ASCM",
+        "ASCM for deadline-driven features"
+      ],
+      "content_gap_analysis": {
+        "github.com": "Comprehensive guides on GitHub Actions, CI/CD pipelines, and community contributions.",
+        "vercel.com": "Tutorials on deploying applications with Vercel, including serverless functions and edge computing.",
+        "stripe.com": "Detailed documentation on integrating Stripe for payments, handling webhooks, and managing subscriptions."
+      },
+      "technical_seo_audit": [
+        "Improve site speed by optimizing images and leveraging browser caching.",
+        "Ensure all pages are crawlable by fixing broken links and adding a sitemap.",
+        "Enhance indexation by removing noindex tags where necessary and using robots.txt effectively."
+      ],
+      "on_page_strategy": {
+        "title_tag_formula": "ASCM [Keyword] | [Brand Name] - [Unique Selling Proposition]",
+        "meta_description_templates": "Explore how ASCM can streamline your product development lifecycle. Discover auto-discovery, HLD, LLD, and more. Learn to ship production-ready features in 2-3 weeks.",
+        "schema_markup_strategy": "Use Product, HowTo, and Article schema to enhance rich snippets and improve click-through rates."
+      },
+      "internal_linking_map": {
+        "strategy": "Connect related content within the site to distribute link equity and improve user navigation. Use breadcrumb links and related post links to guide users."
+      },
+      "backlink_strategy": [
+        "Write guest posts for popular developer blogs and forums.",
+        "Create resource pages that link back to our site for comprehensive guides on ASCM.",
+        "Reach out to industry influencers for interviews and features."
+      ],
+      "content_calendar": [
+        "Month 1-3: Introduction to ASCM, Benefits, and Getting Started Guides.",
+        "Month 4-6: Deep Dive into HLD and LLD, Case Studies.",
+        "Month 7-9: Full-stack Code Generation, Security Audits, and Quality Validation.",
+        "Month 10-12: Rapid Scaling, MVP Launches, and Deadline-Driven Features."
+      ],
+      "measurement_framework": {
+        "tracking_setup": "Use Google Analytics and Search Console to track rankings, organic traffic, and conversions. Set up conversion tracking for key actions like downloads and sign-ups."
+      },
+      "estimated_organic_traffic_6mo": 5000,
+      "12_month_ramp_forecast": [
+        "Month 1-3: 500 visits/month",
+        "Month 4-6: 1000 visits/month",
+        "Month 7-9: 1500 visits/month",
+        "Month 10-12: 2000 visits/month"
+      ]
+    }
+  },
+  "summary": {
+    "leads_discovered": 25,
+    "verified_emails": 25,
+    "estimated_meetings_week1": 10,
+    "content_pillars": 0,
+    "social_posts_ready": 0,
+    "ad_channels": 3,
+    "budget_allocated": 200
+  }
+}
