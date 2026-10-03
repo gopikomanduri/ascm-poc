@@ -1,0 +1,294 @@
+╔════════════════════════════════════════════════════════════════════════════════════╗
+║                    ASCM AGENTS & WORKFLOW - QUICK REFERENCE                        ║
+╚════════════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ THE 13 AGENTS IN ORDER OF EXECUTION                                                 │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+0️⃣  CHECKER AGENT 🔍
+    ├─ When: START of project + EVERY milestone gate
+    ├─ Purpose: Conversational discovery & user communication
+    ├─ Questions: "What?", "Why?", "How it helps?"
+    ├─ Output: User clarification → ProductAgent
+    └─ User Touch: ⭐ USER INTERACTS HERE
+
+1️⃣  ORCHESTRATOR AGENT 🎭
+    ├─ When: THROUGHOUT entire project
+    ├─ Purpose: Master conductor, milestone tracker
+    ├─ Creates: Milestones, allocates tokens, tracks variance
+    ├─ Variance Detection: GREEN (≤75%) | YELLOW (75-100%) | RED (>100%)
+    └─ Output: Milestone tracking, Excel export
+
+2️⃣  BUSINESS AGENT 💼
+    ├─ When: After requirements cleared (Phase 1)
+    ├─ Purpose: Market strategy, GTM, ROI
+    ├─ Asks: Customer cohorts? Competition? Revenue model?
+    └─ Output: Business strategy, market analysis
+
+3️⃣  PRODUCT AGENT 🎯
+    ├─ When: Early in project (Phase 1)
+    ├─ Purpose: Requirements refinement
+    ├─ Calculates: Confidence score (target ≥90%)
+    ├─ Consults: BusinessAgent (ROI), ArchitectAgent (tokens)
+    └─ Decision: PROCEED or REWORK
+    └─ User Touch: ⭐ USER GATE 1: Requirements approval
+
+4️⃣  ARCHITECTURE AGENT 🏗️
+    ├─ When: After requirements (Phase 2)
+    ├─ Purpose: System design, HLD/LLD, task DAG
+    ├─ Optimizes: Minimal token usage
+    ├─ Coordinates: With ComplianceAgent for constraints
+    └─ Output: Designs, task DAG, architectural diagrams
+    └─ User Touch: ⭐ USER GATE 2: Architecture approval
+
+5️⃣  COMPLIANCE AGENT ⚖️
+    ├─ When: PRE-DESIGN check (Phase 2)
+    ├─ Purpose: Regulatory framework validation
+    ├─ Validates: PCI-DSS, GDPR, HIPAA, DPDP, AML/KYC
+    ├─ Action: BLOCKS code if violations found
+    └─ Output: Compliance scorecard, remediation steps
+
+6️⃣  CODING AGENTS 👨‍💻 (Polyglot)
+    ├─ When: After architecture approval (Phase 3)
+    ├─ Who: GoCoderAgent, PyCoderAgent, TSCoderAgent
+    ├─ Method: TDD (Tests FIRST, then code)
+    ├─ Output: Production code + Unit tests
+    └─ Tokens: Tracked in real-time
+
+7️⃣  DATABASE AGENT 🗄️
+    ├─ When: Before code generation (Phase 3)
+    ├─ Purpose: Schema design, data retention
+    ├─ Ensures: Compliance, indexing, migrations
+    └─ Output: Database schema, DDL statements
+
+8️⃣  QA AGENT ✅
+    ├─ When: After code generation (Phase 4)
+    ├─ Purpose: Test orchestration, SLA validation
+    ├─ Generates: Test plans, runs tests (testify/pytest/jest)
+    ├─ Validates: Coverage >80%, P99 <500ms, Error rate <0.1%
+    ├─ Action: BLOCKS release if SLAs not met
+    └─ Output: Test results, coverage report, SLA verdict
+    └─ User Touch: ⭐ USER GATE 3: QA approval
+
+9️⃣  SRE AGENT 🚀
+    ├─ When: After QA approval (Phase 4)
+    ├─ Purpose: Deployment architecture, Infrastructure as Code
+    ├─ Designs: EKS/ECS/Fargate, VPC, security, disaster recovery
+    ├─ Generates: Terraform, runbooks
+    └─ Output: Deployment strategy, IaC code, runbooks
+    └─ User Touch: ⭐ USER GATE 4: Deployment approval
+
+🔟 APM AGENT 📊
+    ├─ When: Before deployment (Phase 5)
+    ├─ Purpose: Performance monitoring, SLO enforcement
+    ├─ Defines: SLOs (P99, availability, error rate)
+    ├─ Configures: Alerts, dashboards, instrumentation
+    └─ Output: Prometheus/Datadog config, alert rules
+
+1️⃣1️⃣ ON-CALL AGENT 🔧
+    ├─ When: ALWAYS (production monitoring)
+    ├─ Purpose: Incident response, automated fixes
+    ├─ Process: Alert → Root Cause → Propose Fix → Execute
+    ├─ Tracks: MTTA (Mean Time to Alert), MTTR (Mean Time to Resolve)
+    └─ Output: Incident logs, RCA, fixes
+
+1️⃣3️⃣ DOMAIN-SPECIFIC LOGGERS 📝
+    ├─ When: THROUGHOUT entire project
+    ├─ Purpose: Comprehensive audit trail (tamper-evident)
+    ├─ Generates: 14 log files
+    │  ├─ checker_agent.log
+    │  ├─ orchestrator_agent.log
+    │  ├─ product_agent.log
+    │  ├─ business_agent.log
+    │  ├─ architecture_agent.log
+    │  ├─ compliance_agent.log
+    │  ├─ coding_agents.log
+    │  ├─ database_agent.log
+    │  ├─ qa_agent.log
+    │  ├─ sre_agent.log
+    │  ├─ apm_agent.log
+    │  ├─ oncall_agent.log
+    │  ├─ milestone_tracking.log
+    │  └─ orchestrator_execution.jsonl (tamper-evident)
+    └─ Output: Complete audit trail for compliance
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ USER INTERACTION POINTS (APPROVAL GATES)                                            │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+⭐ GATE 1: Requirements Approval (CheckerAgent + ProductAgent)
+   └─ User decision: PROCEED or REWORK
+
+⭐ GATE 2: Architecture Approval (ArchitectAgent + CheckerAgent)
+   └─ User decision: PROCEED or REWORK
+
+⭐ GATE 3: Code Review Approval (CodeReviewAgent + CheckerAgent)
+   └─ User decision: PROCEED or REWORK
+
+⭐ GATE 4: QA Approval (QAAgent + CheckerAgent)
+   └─ User decision: PROCEED or DEPLOY
+
+⭐ GATE 5: Final Approval (SREAgent + CheckerAgent)
+   └─ User decision: DEPLOY to production
+
+⭐ GATE 6: Production Release (CheckerAgent confirms)
+   └─ User decision: GO LIVE
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ SAMPLE WORKFLOW: "Add 3D Secure 2.0 to Payment API"                                 │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+TIME    AGENT            ACTIVITY                         USER ACTION
+────────────────────────────────────────────────────────────────────
+0 min   CheckerAgent     Asks discovery questions         User answers
+5 min   ProductAgent     Clarifies requirements           User approves ⭐
+10 min  BusinessAgent    Calculates ROI                   (auto)
+15 min  ArchitectAgent   Designs system                   User approves ⭐
+20 min  ComplianceAgent  Validates PCI-DSS               (auto)
+25 min  CoderAgent       Generates code + tests          (auto)
+40 min  CodeReviewAgent  Reviews code                     User approves ⭐
+50 min  QAAgent          Runs 45 tests                    User approves ⭐
+65 min  SREAgent         Designs deployment              User approves ⭐
+75 min  APMAgent         Sets up monitoring              (auto)
+80 min  OrchestratorAgent Exports milestone report        Ready to deploy!
+85 min  (Deploy)         Deploy to production            User initiates
+90 min+ OnCallAgent      Monitor, handle incidents       24/7 monitoring
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ TOKEN BUDGET TRACKING (Real-Time)                                                   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+Budget P90: 5000 tokens
+├─ ArchitectAgent:    1600 tokens (32%)  [GREEN ✓]
+├─ CoderAgent:        2200 tokens (44%)  [YELLOW ⚠️  - 76% total]
+├─ CodeReviewAgent:    600 tokens (12%)  [RED 🔴 - 88% total]
+├─ QAAgent:            400 tokens (8%)   [RED 🔴 - 96% total]
+├─ SREAgent:           300 tokens (6%)   [RED 🔴 - 102% OVERRUN]
+└─ TOTAL:            5100 tokens (102%)
+
+Variance Detection:
+├─ After Architect:    32% utilization → GREEN ✓
+├─ After Coder:        76% utilization → YELLOW ⚠️ Ask user
+├─ After Review:       88% utilization → RED 🔴 Ask user
+├─ Final:             102% utilization → RED 🔴 User approved override
+
+CheckerAgent alerts user: "Token budget exceeded by 2%. Worth it?"
+User: "YES, quality > budget" ✓
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ HOW NEW AGENT COMMUNICATES WITH EXISTING PROJECTS (Repo Analysis)                   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+RepositoryAnalyzer (NEW!):
+├─ Scans existing repos
+├─ Creates 5-angle semantic summaries:
+│  ├─ Business Angle: Purpose, users, strategy
+│  ├─ Architecture Angle: System design, patterns
+│  ├─ Technical Angle: Code, libraries, patterns
+│  ├─ Deployment Angle: Infrastructure, ops
+│  └─ Data Flow Angle: Data movement, governance
+├─ Saves to: logs/repo_summaries/{repo}_*_angle.md
+└─ Result: Agents use these as CONTEXT for enhancements
+
+When enhancing existing projects:
+├─ RepositoryAnalyzer: Understand codebase
+├─ All agents: Use summaries as reference
+├─ Result: Zero breaking changes, maintains consistency
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ DECISION FLOW CHART                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+                              USER INPUT
+                                  ↓
+                         CheckerAgent Discovery
+                                  ↓
+                         (User Gate 1: Approve?)
+                                  ↓
+                         ProductAgent Clarifies
+                                  ↓
+                         Confidence ≥90%?
+                            ├─ NO → REWORK
+                            └─ YES → Continue
+                                  ↓
+                         (User Gate 2: Architecture)
+                                  ↓
+                         ArchitectAgent Designs
+                                  ↓
+                         ComplianceAgent Validates
+                                  ↓
+                         Compliance OK?
+                            ├─ NO → REMEDIATE
+                            └─ YES → Continue
+                                  ↓
+                         (User Gate 3: Code Review)
+                                  ↓
+                         CoderAgent Generates
+                         + CodeReviewAgent Reviews
+                                  ↓
+                         Review OK?
+                            ├─ NO → REWORK
+                            └─ YES → Continue
+                                  ↓
+                         (User Gate 4: QA)
+                                  ↓
+                         QAAgent Runs Tests
+                         SLA Validation
+                                  ↓
+                         Tests Pass & SLAs Met?
+                            ├─ NO → REWORK
+                            └─ YES → Continue
+                                  ↓
+                         (User Gate 5: Deploy)
+                                  ↓
+                         SREAgent Deploys
+                         APMAgent Monitors
+                                  ↓
+                         DEPLOYED TO PRODUCTION
+                                  ↓
+                         OnCallAgent 24/7 Monitoring
+                         (Handle incidents, RCA, fixes)
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ KEY METRICS                                                                          │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+PHASE 1 (Foundation):
+├─ Milestones tracked: Yes
+├─ Token budgeting: Real-time
+├─ Variance detection: GREEN/YELLOW/RED
+└─ Time: ~5 minutes
+
+PHASES 2-6 (Complete):
+├─ Compliance checks: 5 frameworks
+├─ Code quality: TDD, 80%+ coverage
+├─ SLA validation: P99, availability, error rate
+├─ Production readiness: Checked ✓
+└─ Time: ~80-100 minutes
+
+PRODUCTION:
+├─ Monitoring: Real-time APM
+├─ Incident response: Automated
+├─ MTTA: Mean Time to Alert (minutes)
+├─ MTTR: Mean Time to Resolution (minutes)
+└─ Audit trail: 14 logs, tamper-evident
+
+═══════════════════════════════════════════════════════════════════════════════════════
+
+CHECKLIST: Is my project ready?
+
+✓ All 13 agents operational
+✓ 6 approval gates defined
+✓ Real-time token tracking
+✓ Variance detection working
+✓ All phases 1-6 implemented
+✓ Compliance validated
+✓ Tests passing
+✓ Monitoring active
+✓ Audit trail complete
+✓ Documentation ready
+
+STATUS: ✅ READY TO DEPLOY
+
+═══════════════════════════════════════════════════════════════════════════════════════

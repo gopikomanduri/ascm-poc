@@ -444,3 +444,58 @@ class CodeReviewAgent(BaseAgent):
 CodeCriticAgent = CodeReviewAgent
 
 
+# ============================================================================
+# NEXT-GEN AGENTS (Phase 1-6 Implementation)
+# ============================================================================
+
+# Phase 1: Foundation
+from .checker_agent import CheckerAgent
+from .compliance_agent import ComplianceAgent
+
+# Phase 2: Testing & Compliance
+from .qa_agent import QAAgent
+
+# Phase 3: Deployment & Ops
+from .sre_agent import SREAgent
+from .apm_agent import APMAgent
+from .oncall_agent import OnCallAgent
+
+# ============================================================================
+# GTM AGENTS (v4.0 - Independent Commercial Agents)
+# ============================================================================
+from ..gtm.sales_agent import SalesAgent
+from ..gtm.marketing_agent import MarketingAgent
+from ..gtm.ad_agent import AdAgent
+from ..gtm.seo_agent import SEOAgent
+
+
+__all__ = [
+    # Original agents
+    "DiscoveryAgent",
+    "ProductAgent",
+    "BusinessStrategyAgent",
+    "RevenueROIAgent",
+    "DesignAgent",
+    "ArchitectAgent",
+    "ArchitectureReviewAgent",
+    "PlannerAgent",
+    "DatabaseAgent",
+    "GoCoderAgent",
+    "SecurityAuditorAgent",
+    "CodeReviewAgent",
+    "CodeCriticAgent",
+    # Next-Gen coding agents
+    "CheckerAgent",
+    "ComplianceAgent",
+    "QAAgent",
+    "SREAgent",
+    "APMAgent",
+    "OnCallAgent",
+    # GTM Agents (v4.0)
+    "SalesAgent",
+    "MarketingAgent",
+    "AdAgent",
+    "SEOAgent",
+]
+
+
