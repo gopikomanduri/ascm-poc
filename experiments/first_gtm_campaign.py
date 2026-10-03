@@ -187,10 +187,11 @@ async def run_seo_agent_phase():
 
     logger.info("\n✅ SEOAgent Execution Complete")
     keyword_clusters = result.get('keyword_clusters', [])
-    logger.info(f"   Keyword clusters: {len(keyword_clusters)}")
-    if keyword_clusters:
+    logger.info(f"   Keyword clusters: {len(keyword_clusters) if isinstance(keyword_clusters, list) else 0}")
+    if keyword_clusters and isinstance(keyword_clusters, list):
         for cluster in keyword_clusters[:3]:
-            logger.info(f"     - {cluster.get('cluster', 'Unknown')}: {len(cluster.get('keywords', []))} keywords")
+            if isinstance(cluster, dict):
+                logger.info(f"     - {cluster.get('cluster', 'Unknown')}: {len(cluster.get('keywords', []))} keywords")
     logger.info(f"   Est. organic traffic 6mo: {result.get('estimated_organic_traffic_6mo', 0)}")
 
     return result
