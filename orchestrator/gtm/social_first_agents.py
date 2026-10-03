@@ -151,7 +151,7 @@ OUTPUT FORMAT (JSON):
 }}
 """
 
-        output = self.run_prompt(prompt)
+        output = self.call(prompt)
         logger.info(f"✅ Social content generated: {len(output) if isinstance(output, str) else 'complete'}")
 
         return {
@@ -334,7 +334,7 @@ OUTPUT FORMAT (JSON):
 }}
 """
 
-        output = self.run_prompt(prompt)
+        output = self.call(prompt)
         logger.info(f"✅ Warm email sequences generated")
 
         return {
@@ -373,7 +373,7 @@ class ReplyHandlingAgent(BaseAgent):
             tier="primary",
         )
 
-    def classify_reply(self, reply_text: str) -> Dict[str, Any]:
+    def classify_reply(self, reply_text: str, cal_com_link: str = "https://cal.com/gopi/ascm-demo-15min") -> Dict[str, Any]:
         """Classify inbound reply and determine action"""
 
         prompt = f"""
@@ -395,4 +395,4 @@ OUTPUT (JSON):
 }}
 """
 
-        return self.run_prompt(prompt)
+        return self.call(prompt)

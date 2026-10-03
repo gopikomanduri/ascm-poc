@@ -17,7 +17,7 @@ from orchestrator.gtm.social_first_agents import (
     WarmAudienceSalesAgent,
     ReplyHandlingAgent,
 )
-from orchestrator.agents.llm import get_llm_provider
+from orchestrator.agents.base import get_configured_provider
 
 # Setup logging
 logging.basicConfig(
@@ -90,7 +90,7 @@ def phase_1_social_awareness():
     print("  - 2 Dev.to articles (thought leadership)")
     print()
 
-    llm_provider = get_llm_provider()
+    llm_provider = get_configured_provider()
     marketing_agent = SocialFirstMarketingAgent(provider=llm_provider)
 
     result = marketing_agent.run(
@@ -131,7 +131,7 @@ def phase_2_warm_email(social_summary: str):
     print("  - Cal.com booking in email #2")
     print()
 
-    llm_provider = get_llm_provider()
+    llm_provider = get_configured_provider()
     sales_agent = WarmAudienceSalesAgent(provider=llm_provider)
 
     result = sales_agent.run(
@@ -176,7 +176,7 @@ def phase_3_reply_handling():
     print("  - OUT_OF_OFFICE → Queue for 2 weeks")
     print()
 
-    llm_provider = get_llm_provider()
+    llm_provider = get_configured_provider()
     reply_agent = ReplyHandlingAgent(provider=llm_provider)
 
     # Example replies to classify
