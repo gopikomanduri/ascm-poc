@@ -93,7 +93,7 @@ async def run_sales_agent_phase():
     result = agent.run(
         product_thesis=EXPERIMENT_CONFIG["product"]["thesis"],
         icp_description=json.dumps(EXPERIMENT_CONFIG["icp"], indent=2),
-        cal_com_link=EXPERIMENT_CONFIG["founder_cal"],
+        cal_com_booking_link=EXPERIMENT_CONFIG["founder_cal"],
         daily_quota=EXPERIMENT_CONFIG["daily_lead_quota"],
     )
 

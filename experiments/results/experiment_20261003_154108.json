@@ -1,0 +1,19 @@
+{
+  "experiment_name": "ASCM First GTM Experiment",
+  "date_completed": "2026-10-03T15:41:08.137343",
+  "phases": {
+    "sales": {},
+    "marketing": {},
+    "ads": {},
+    "seo": {}
+  },
+  "summary": {
+    "leads_discovered": 0,
+    "verified_emails": 0,
+    "estimated_meetings_week1": 0,
+    "content_pillars": 0,
+    "social_posts_ready": 0,
+    "ad_channels": 0,
+    "budget_allocated": 200
+  }
+}
