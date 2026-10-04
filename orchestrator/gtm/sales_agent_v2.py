@@ -61,6 +61,7 @@ class SalesAgentV2(BaseAgent):
         daily_quota: int = 25,
     ) -> Dict[str, Any]:
         """Generate specific leads + detailed emails with full audit trail"""
+        cal_com_link = cal_com_booking_link
 
         self.log_action("AGENT_START", {
             "agent": "SalesAgent",

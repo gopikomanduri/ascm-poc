@@ -43,7 +43,8 @@ def main():
     parser.add_argument("--create-pr", action="store_true", help="Push branches and generate linked Pull Requests on GitHub")
     parser.add_argument("--sandbox", action="store_true", help="Execute test verifications inside hermetic Docker containers")
     parser.add_argument("--log-dir", default="logs", help="Directory for enterprise security audit logs (default: logs)")
-    parser.add_argument("--scrub-outbound-pii", action="store_true", default=True, help="Scrub PII and credentials from outbound LLM prompts (default: True)")
+    parser.add_argument("--gtm-zero-setup", action="store_true", help="Launch autonomous Zero-Setup GTM engine (Medium Selection + Staging + 1-Click Dispatch)")
+    parser.add_argument("--gtm-publish", action="store_true", help="Run 1-click multi-channel publisher (LinkedIn + X.com + Outbound Relay)")
     args = parser.parse_args()
 
     import os
@@ -82,6 +83,17 @@ def main():
         except KeyboardInterrupt:
             print("\n[+] Dashboard server stopped.")
             sys.exit(0)
+
+    if getattr(args, "gtm_zero_setup", False):
+        from orchestrator.gtm.zero_setup_launcher import ZeroSetupGTMLauncher
+        launcher = ZeroSetupGTMLauncher()
+        launcher.launch()
+        sys.exit(0)
+
+    if getattr(args, "gtm_publish", False):
+        from orchestrator.gtm.publish_to_channels import main as publish_main
+        publish_main()
+        sys.exit(0)
 
     if not args.repos:
         parser.error("the following arguments are required: -r/--repos (unless --dashboard-only is specified)")

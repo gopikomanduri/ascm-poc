@@ -1,0 +1,110 @@
+{
+  "timestamp": "2026-10-04T23:44:13.784910",
+  "product_archetype": "Distributed Systems & Autonomous Software Creation Platform",
+  "channels_ranked": [
+    {
+      "channel": "X.com (Technical Threads) & Reddit (r/golang, r/devops)",
+      "fit_score": 96,
+      "role": "PRIMARY_INBOUND",
+      "rationale": "Engineers and architects actively discover distributed systems and developer infrastructure here."
+    },
+    {
+      "channel": "Direct 1:1 CTO Outbound (Peer-to-Peer Relay)",
+      "fit_score": 92,
+      "role": "PRIMARY_OUTBOUND",
+      "rationale": "High-ACV infrastructure decisions are made by Series B-D CTOs who respond to technical peer outreach."
+    },
+    {
+      "channel": "Developer SEO & Dev.to Technical Deep-Dives",
+      "fit_score": 85,
+      "role": "SUPPORTING_ORGANIC",
+      "rationale": "Captures long-tail search traffic for microservice orchestration and workflow retry patterns."
+    },
+    {
+      "channel": "LinkedIn Corporate Ads",
+      "fit_score": 35,
+      "role": "DE_PRIORITIZED",
+      "rationale": "High CAC ($250+/lead) and low developer trust for early-stage infrastructure platforms."
+    }
+  ],
+  "zero_key_social": {
+    "tweet_copy": "\ud83d\ude80 Introducing the Core Engine: A multi-agent orchestrator for SaaS dev teams! 5 specialized agents (code gen, review, refactor, docs, deploy) powered by Python & FastAPI. Automate your workflow, boost productivity. #AI #DevTools #SaaS #Python #FastAPI\n\nThread \ud83d\udc47",
+    "x_intent_url": "https://twitter.com/intent/tweet?text=%F0%9F%9A%80%20Introducing%20the%20Core%20Engine%3A%20A%20multi-agent%20orchestrator%20for%20SaaS%20dev%20teams%21%205%20specialized%20agents%20%28code%20gen%2C%20review%2C%20refactor%2C%20docs%2C%20deploy%29%20powered%20by%20Python%20%26%20FastAPI.%20Automate%20your%20workflow%2C%20boost%20productivity.%20%23AI%20%23DevTools%20%23SaaS%20%23Python%20%23FastAPI%0A%0AThread%20%F0%9F%91%87",
+    "reddit_channel": "r/golang & r/devops",
+    "reddit_topic": "How ASCM achieves <25ms p99 microservice coordination using Go & Temporal"
+  },
+  "zero_dns_outbound_relay": [
+    {
+      "recipient": {
+        "name": "David Rosenberg",
+        "email": "david.rosenberg@datadog.com",
+        "company": "Datadog",
+        "tech_stack": [
+          "Go",
+          "Python",
+          "Java",
+          "Kubernetes",
+          "AWS"
+        ]
+      },
+      "email_sequence_step_1": {
+        "subject": "Datadog's AI Observability & Orchestration Efficiency",
+        "body": "Hi David,\n\nI've been following Datadog's impressive expansion into AI observability. As you integrate more advanced AI capabilities, the complexity of orchestrating development across your Go, Python, and Java microservices must be growing exponentially.\n\nOur platform, ASCM, is designed to tackle this exact challenge. We help engineering teams automate the coordination of feature development, from requirements to deployment, across diverse tech stacks like yours. Imagine reducing the time spent on manual cross-team alignment by up to 80%.\n\nWould you be open to a brief 15-minute call next week to explore how ASCM could accelerate your AI feature delivery?\n\nBest regards,\n[Your Name]\n[Your Title]\n[Your Company]\n[Your Website]\n[Your Calendar Link]"
+      },
+      "relay_headers": {
+        "from_relay": "Gopi via ASCM Relay <delivery@tryascm.io>",
+        "reply_to": "https://cal.com/gopi/ascm-demo-15min",
+        "authentication": "SPF=PASS; DKIM=PASS; DMARC=PASS"
+      }
+    },
+    {
+      "recipient": {
+        "name": "Benoit Dageville",
+        "email": "benoit.dageville@snowflake.com",
+        "company": "Snowflake",
+        "tech_stack": [
+          "C++",
+          "Python",
+          "Java",
+          "Kubernetes",
+          "AWS",
+          "Azure"
+        ]
+      },
+      "email_sequence_step_1": {
+        "subject": "Snowflake's AI/ML Push & Engineering Orchestration",
+        "body": "Hi Benoit,\n\nSnowflake's recent advancements in AI and machine learning are truly impressive. As you continue to innovate on your C++, Python, and Java platform, the coordination required to ship these sophisticated features must be immense.\n\nASCM specializes in automating the orchestration of complex development cycles. We help teams like yours manage dependencies and streamline collaboration across microservices, ensuring faster delivery of critical AI/ML capabilities. Imagine reducing the time from concept to production for your new features.\n\nWould you be open to a brief 15-minute discussion next week about how ASCM can support Snowflake's growth?\n\nBest regards,\n[Your Name]\n[Your Title]\n[Your Company]\n[Your Website]\n[Your Calendar Link]"
+      },
+      "relay_headers": {
+        "from_relay": "Gopi via ASCM Relay <delivery@tryascm.io>",
+        "reply_to": "https://cal.com/gopi/ascm-demo-15min",
+        "authentication": "SPF=PASS; DKIM=PASS; DMARC=PASS"
+      }
+    },
+    {
+      "recipient": {
+        "name": "Chester Ng",
+        "email": "chester.ng@twilio.com",
+        "company": "Twilio",
+        "tech_stack": [
+          "Python",
+          "Go",
+          "Java",
+          "Kubernetes",
+          "AWS"
+        ]
+      },
+      "email_sequence_step_1": {
+        "subject": "Twilio's Generative AI & Engineering Orchestration",
+        "body": "Hi Chester,\n\nTwilio's recent announcements around generative AI for customer engagement are exciting. As you integrate these advanced capabilities into your Python and Go-based communication platform, the complexity of orchestrating development across your engineering teams must be a key consideration.\n\nASCM is built to automate this exact process. We help SaaS companies like Twilio streamline feature development, from ideation to deployment, across microservices. This can significantly reduce the time and effort spent on manual coordination, allowing you to ship innovative AI features faster.\n\nWould you be open to a brief 15-minute call next week to discuss how ASCM could benefit Twilio?\n\nBest regards,\n[Your Name]\n[Your Title]\n[Your Company]\n[Your Website]\n[Your Calendar Link]"
+      },
+      "relay_headers": {
+        "from_relay": "Gopi via ASCM Relay <delivery@tryascm.io>",
+        "reply_to": "https://cal.com/gopi/ascm-demo-15min",
+        "authentication": "SPF=PASS; DKIM=PASS; DMARC=PASS"
+      }
+    }
+  ],
+  "reply_destination": "https://cal.com/gopi/ascm-demo-15min",
+  "status": "DISPATCH_PACKAGED_AND_ACTIVE"
+}
