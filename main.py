@@ -45,6 +45,8 @@ def main():
     parser.add_argument("--log-dir", default="logs", help="Directory for enterprise security audit logs (default: logs)")
     parser.add_argument("--gtm-zero-setup", action="store_true", help="Launch autonomous Zero-Setup GTM engine (Medium Selection + Staging + 1-Click Dispatch)")
     parser.add_argument("--gtm-publish", action="store_true", help="Run 1-click multi-channel publisher (LinkedIn + X.com + Outbound Relay)")
+    parser.add_argument("--mentor", action="store_true", help="Run ASCM Proactive Founder & Engineering Mentor")
+    parser.add_argument("--no-mentor", action="store_false", dest="mentor_enabled", default=True, help="Disable proactive mentor interception")
     args = parser.parse_args()
 
     import os
@@ -64,7 +66,7 @@ def main():
         os.environ["USE_DOCKER_SANDBOX"] = "true"
     if args.log_dir:
         os.environ["ASCM_LOG_DIR"] = args.log_dir
-    if args.scrub_outbound_pii:
+    if getattr(args, "scrub_outbound_pii", False):
         os.environ["SCRUB_OUTBOUND_PII"] = "true"
 
     from orchestrator.security.audit_logger import AUDIT_LOGGER
@@ -95,12 +97,34 @@ def main():
         publish_main()
         sys.exit(0)
 
+    if getattr(args, "mentor", False):
+        from orchestrator.mentor.proactive_mentor import main as mentor_main
+        mentor_main()
+        sys.exit(0)
+
     if not args.repos:
-        parser.error("the following arguments are required: -r/--repos (unless --dashboard-only is specified)")
+        parser.error("the following arguments are required: -r/--repos (unless --dashboard-only or --mentor is specified)")
 
     goal = args.goal or input("Stakeholder requirement / PRD: ").strip()
     if not goal:
         sys.exit("Requirement cannot be empty.")
+
+    # Proactive Mentor: Intercept goal for pre-build demand validation & architecture check
+    if getattr(args, "mentor_enabled", True) and not getattr(args, "auto_approve", False):
+        from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
+        mentor = ASCMProactiveMentor(repo_path=args.repos[0] if args.repos else ".")
+        mentor_insights = mentor.clarify_goal_and_pre_validate(goal)
+        print(f"\n💡 [ASCM PROACTIVE MENTOR] Advice for: '{mentor_insights.get('clarified_goal', goal)}'")
+        print(f"   Target ICP: {mentor_insights.get('target_icp')}")
+        print(f"   Strategic Note: {mentor_insights.get('mentor_advice')}")
+        print("   Pre-Build Validation:")
+        for step in mentor_insights.get("pre_build_validation_plan", [])[:2]:
+            print(f"   • {step}")
+        if mentor_insights.get("architecture_alternatives"):
+            print("   Architecture Note:")
+            for alt in mentor_insights.get("architecture_alternatives", [])[:2]:
+                print(f"   ⚡ {alt}")
+        print()
 
     if args.dashboard:
         _ensure_dashboard_running(args.port)
