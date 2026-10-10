@@ -29,6 +29,14 @@ def main():
     print("[+] Dashboard process is decoupled from orchestrator runs and will remain online even if main.py crashes.")
     print("[+] Press Ctrl+C to stop the dashboard server.\n")
 
+    # Start autonomous sales waitlist syncer with Google Cloud Run
+    try:
+        from orchestrator.gtm.waitlist_sync import WaitlistSyncAgent
+        syncer = WaitlistSyncAgent()
+        syncer.start_background_loop(interval_seconds=30)
+    except Exception as e:
+        print(f"[!] Waitlist syncer init notice: {e}")
+
     try:
         while True:
             time.sleep(1)

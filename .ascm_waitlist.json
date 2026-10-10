@@ -1,6 +1,7 @@
 {
-  "total_count": 3,
-  "updated_at": "2026-10-10T19:15:12.558259",
+  "total_count": 4,
+  "updated_at": "2026-10-11T01:56:30",
+  "source": "Synced from https://outcode-652462271352.us-central1.run.app",
   "entries": [
     {
       "email": "founder@deeptech.ai",
@@ -29,6 +30,17 @@
       "tier": "alpha",
       "created_at": "2026-10-10T19:15:12.558011",
       "updated_at": "2026-10-10T19:15:12.558011",
+      "request_count": 1,
+      "metadata": {
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+        "source": "outcode_landing"
+      }
+    },
+    {
+      "email": "komanduri.gopik@gmail.com",
+      "tier": "alpha",
+      "created_at": "2026-10-10T20:20:01.473410",
+      "updated_at": "2026-10-10T20:20:01.473410",
       "request_count": 1,
       "metadata": {
         "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
