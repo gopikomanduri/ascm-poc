@@ -6,8 +6,8 @@ WORKDIR /app
 COPY . /app
 
 # Dashboard server uses Python standard library for zero-latency startup.
-# Optional requirements can be installed if needed.
-RUN pip install --no-cache-dir pydantic || true
+# Dependencies for validation and optional GCP Firestore sync
+RUN pip install --no-cache-dir pydantic google-cloud-firestore || true
 
 ENV PORT=8080
 EXPOSE 8080

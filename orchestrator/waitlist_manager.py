@@ -113,6 +113,14 @@ class WaitlistManager:
             self.entries.append(record)
             self._save()
 
+        # Optional sync to Google Cloud Firestore (automatic when running on GCP Cloud Run)
+        try:
+            from google.cloud import firestore
+            db = firestore.Client()
+            db.collection("outcode_waitlist").document(clean_email).set(record, merge=True)
+        except Exception:
+            pass
+
         return {
             "status": "ok",
             "message": "You're in! Access request queued successfully.",
