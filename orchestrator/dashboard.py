@@ -856,8 +856,13 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             admin_key = os.environ.get("ADMIN_KEY") or os.environ.get("WAITLIST_ADMIN_KEY", "outcode-secret-2026")
             query = parse_qs(parsed_url.query)
             provided_key = self.headers.get("X-Admin-Key") or (query.get("key", [None])[0])
-            is_admin = bool(provided_key and provided_key == admin_key)
-            stats = WAITLIST_MANAGER.get_stats(include_emails=is_admin)
+            if not provided_key or provided_key != admin_key:
+                self.send_response(403)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "error", "message": "403 Forbidden: Waitlist is private."}).encode("utf-8"))
+                return
+            stats = WAITLIST_MANAGER.get_stats(include_emails=True)
             self._send_json({"status": "ok", **stats})
 
         elif path == "/" or path == "/index.html":
