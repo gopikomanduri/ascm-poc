@@ -20,14 +20,14 @@ pip install openpyxl
 
 ### Step 2: Run Demo
 ```bash
-python demo_nextgen_orchestrator.py
+python demos/demo_nextgen_orchestrator.py
 ```
 
 ### Step 3: Read Docs
-- `NEXTGEN_INTEGRATION_GUIDE.md` — How to use
+- `docs/guides/NEXTGEN_INTEGRATION_GUIDE.md` — How to use
 - `NEXTGEN_ASCM_ARCHITECTURE.md` — Full design
-- `IMPLEMENTATION_SUMMARY.md` — What was built
-- `DELIVERY_SUMMARY.md` — Completion status
+- `docs/archive/IMPLEMENTATION_SUMMARY.md` — What was built
+- `docs/archive/DELIVERY_SUMMARY.md` — Completion status
 
 ## 📁 New Files (13 Total)
 
@@ -54,11 +54,11 @@ orchestrator/agents/
 
 ### Documentation
 ```
-demo_nextgen_orchestrator.py        # Working demo
-NEXTGEN_INTEGRATION_GUIDE.md        # Usage guide with code examples
+demos/demo_nextgen_orchestrator.py        # Working demo
+docs/guides/NEXTGEN_INTEGRATION_GUIDE.md        # Usage guide with code examples
 NEXTGEN_ASCM_ARCHITECTURE.md        # Full architecture & design
-IMPLEMENTATION_SUMMARY.md           # Phase breakdown & metrics
-DELIVERY_SUMMARY.md                 # Completion status
+docs/archive/IMPLEMENTATION_SUMMARY.md           # Phase breakdown & metrics
+docs/archive/DELIVERY_SUMMARY.md                 # Completion status
 QUICKSTART.md                       # This file
 ```
 
@@ -121,14 +121,14 @@ Run the demo to see:
 
 ## 📈 Next Phase
 
-See `IMPLEMENTATION_SUMMARY.md` for Phase 2-6 roadmap (Weeks 4-18).
+See `docs/archive/IMPLEMENTATION_SUMMARY.md` for Phase 2-6 roadmap (Weeks 4-18).
 
 ## ❓ Questions?
 
-- **How to use?** → `NEXTGEN_INTEGRATION_GUIDE.md`
+- **How to use?** → `docs/guides/NEXTGEN_INTEGRATION_GUIDE.md`
 - **Architecture?** → `NEXTGEN_ASCM_ARCHITECTURE.md`
-- **What was built?** → `IMPLEMENTATION_SUMMARY.md`
-- **Status?** → `DELIVERY_SUMMARY.md`
+- **What was built?** → `docs/archive/IMPLEMENTATION_SUMMARY.md`
+- **Status?** → `docs/archive/DELIVERY_SUMMARY.md`
 
 ---
 

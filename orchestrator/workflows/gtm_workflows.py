@@ -48,7 +48,7 @@ class GTMActivities:
         logger.info(f"OpenOutreach Discovery: searching for {limit} leads matching ICP")
 
         # In production, calls OpenOutreach HTTP API or CLI
-        from orchestrator.gtm.adapters import OpenOutreachLeadAdapter
+        from orchestrator.gtm.channels.adapters import OpenOutreachLeadAdapter
 
         adapter = OpenOutreachLeadAdapter()
         leads = await adapter.search_and_verify_leads(thesis, icp_spec, limit=limit)
@@ -79,7 +79,7 @@ class GTMActivities:
         """
         logger.info(f"Dispatching step {step_number} to {lead['email']} ({lead.get('company', 'Unknown')})")
 
-        from orchestrator.gtm.adapters import ComposioGTMAdapter
+        from orchestrator.gtm.channels.adapters import ComposioGTMAdapter
 
         adapter = ComposioGTMAdapter()
         success = await adapter.send_email_sequence_step(
@@ -113,7 +113,7 @@ class GTMActivities:
         """
         logger.info("Marketing Agent: Generating technical content strategy")
 
-        from orchestrator.gtm.marketing_agent import MarketingAgent
+        from orchestrator.gtm.agents.marketing_agent import MarketingAgent
 
         agent = MarketingAgent()
         strategy = agent.run(
@@ -145,7 +145,7 @@ class GTMActivities:
         """
         logger.info(f"Classifying reply from {prospect_email}")
 
-        from orchestrator.gtm.adapters import SentimentClassifier, ComposioGTMAdapter
+        from orchestrator.gtm.channels.adapters import SentimentClassifier, ComposioGTMAdapter
 
         sentiment = SentimentClassifier.classify(reply_body)
         suppressed = SentimentClassifier.should_suppress_from_founder(sentiment)

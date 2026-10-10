@@ -29,7 +29,7 @@ class PlannerActivities:
         """📋 Generate sales strategy"""
         logger.info("[WORKFLOW] 📋 PLANNER: Running SalesAgent...")
 
-        from orchestrator.gtm.sales_agent import SalesAgent
+        from orchestrator.gtm.agents.sales_agent import SalesAgent
         agent = SalesAgent()
         result = agent.run(
             product_thesis=thesis,
@@ -46,7 +46,7 @@ class PlannerActivities:
         """📋 Generate marketing strategy"""
         logger.info("[WORKFLOW] 📋 PLANNER: Running MarketingAgent...")
 
-        from orchestrator.gtm.marketing_agent import MarketingAgent
+        from orchestrator.gtm.agents.marketing_agent import MarketingAgent
         agent = MarketingAgent()
         result = agent.run(product_thesis=thesis)
 
@@ -58,7 +58,7 @@ class PlannerActivities:
         """📋 Generate ad strategy"""
         logger.info("[WORKFLOW] 📋 PLANNER: Running AdAgent...")
 
-        from orchestrator.gtm.ad_agent import AdAgent
+        from orchestrator.gtm.agents.ad_agent import AdAgent
         agent = AdAgent()
         result = agent.run(
             product_thesis=thesis,
@@ -82,7 +82,7 @@ class ExecutorActivities:
         """🔍 EXECUTOR: Discover leads via OpenOutreach API"""
         logger.info(f"[WORKFLOW] 🔍 EXECUTOR: Discovering {limit} leads...")
 
-        from orchestrator.gtm.executor_agents import SalesExecutor
+        from orchestrator.gtm.agents.executor_agents import SalesExecutor
         executor = SalesExecutor()
         leads = await executor.discover_leads(thesis, icp_spec, limit)
 
@@ -94,7 +94,7 @@ class ExecutorActivities:
         """📧 EXECUTOR: Send email via Smartlead API"""
         logger.info(f"[WORKFLOW] 📧 EXECUTOR: Sending email to {lead['email']} (step {step})")
 
-        from orchestrator.gtm.executor_agents import SalesExecutor
+        from orchestrator.gtm.agents.executor_agents import SalesExecutor
         executor = SalesExecutor()
         success = await executor.dispatch_sequence_step(lead, step, subject, body)
 
@@ -107,7 +107,7 @@ class ExecutorActivities:
         """💬 EXECUTOR: Handle inbound reply"""
         logger.info(f"[WORKFLOW] 💬 EXECUTOR: Processing reply from {reply['email']}...")
 
-        from orchestrator.gtm.executor_agents import SalesExecutor
+        from orchestrator.gtm.agents.executor_agents import SalesExecutor
         executor = SalesExecutor()
         result = await executor.handle_inbound_reply(reply, cal_link)
 
@@ -119,7 +119,7 @@ class ExecutorActivities:
         """✍️ EXECUTOR: Publish blog post"""
         logger.info(f"[WORKFLOW] ✍️ EXECUTOR: Publishing blog: {title}")
 
-        from orchestrator.gtm.executor_agents import MarketingExecutor
+        from orchestrator.gtm.agents.executor_agents import MarketingExecutor
         executor = MarketingExecutor()
         post_id = await executor.publish_blog_post(title, content, tags)
 
@@ -131,7 +131,7 @@ class ExecutorActivities:
         """📱 EXECUTOR: Schedule social post"""
         logger.info(f"[WORKFLOW] 📱 EXECUTOR: Scheduling {platform} post")
 
-        from orchestrator.gtm.executor_agents import MarketingExecutor
+        from orchestrator.gtm.agents.executor_agents import MarketingExecutor
         executor = MarketingExecutor()
         post_id = await executor.schedule_social_post(platform, content)
 
@@ -143,7 +143,7 @@ class ExecutorActivities:
         """🔍 EXECUTOR: Launch Google Ads"""
         logger.info(f"[WORKFLOW] 🔍 EXECUTOR: Launching Google Ads campaign")
 
-        from orchestrator.gtm.executor_agents import AdExecutor
+        from orchestrator.gtm.agents.executor_agents import AdExecutor
         executor = AdExecutor()
         campaign_id = await executor.launch_google_ads_campaign(config)
 
@@ -155,7 +155,7 @@ class ExecutorActivities:
         """💼 EXECUTOR: Launch LinkedIn Ads"""
         logger.info(f"[WORKFLOW] 💼 EXECUTOR: Launching LinkedIn Ads campaign")
 
-        from orchestrator.gtm.executor_agents import AdExecutor
+        from orchestrator.gtm.agents.executor_agents import AdExecutor
         executor = AdExecutor()
         campaign_id = await executor.launch_linkedin_ads_campaign(config)
 

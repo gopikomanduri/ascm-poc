@@ -28,10 +28,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import ASCM agents
-from orchestrator.gtm.sales_agent import SalesAgent
-from orchestrator.gtm.marketing_agent import MarketingAgent
-from orchestrator.gtm.ad_agent import AdAgent
-from orchestrator.gtm.seo_agent import SEOAgent
+from orchestrator.gtm.agents.sales_agent import SalesAgent
+from orchestrator.gtm.agents.marketing_agent import MarketingAgent
+from orchestrator.gtm.agents.ad_agent import AdAgent
+from orchestrator.gtm.agents.seo_agent import SEOAgent
 from orchestrator.models.intent import ProjectIntentRequest, TeamComposition
 
 

@@ -1,1 +1,1 @@
-web: python dashboard_server.py --host 0.0.0.0 --port $PORT
+web: python3 dashboard_server.py

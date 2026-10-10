@@ -154,6 +154,36 @@ class CrossPlatformNotifier:
         except (EOFError, KeyboardInterrupt):
             return default_text
 
+    @staticmethod
+    def confirm_dialog(text: str, buttons=("No", "Allow once", "Always allow"), title: str = "ASCM Mentor") -> Optional[str]:
+        """
+        Ask the user to pick one button. Returns the chosen label, or None if the dialog
+        could not be shown / was dismissed (callers must treat None as "no").
+        Native dialog on macOS; terminal prompt elsewhere when a TTY is attached.
+        """
+        if sys.platform.lower().startswith("darwin"):
+            try:
+                safe_t = text.replace("\\", "\\\\").replace('"', '\\"')
+                btns = ", ".join('"%s"' % b for b in buttons)
+                script = (f'display dialog "{safe_t}" with title "{title}" buttons {{{btns}}} '
+                          f'default button "{buttons[0]}" cancel button "{buttons[0]}"')
+                res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=120)
+                if res.returncode == 0 and "button returned:" in res.stdout:
+                    return res.stdout.split("button returned:")[-1].split(",")[0].strip()
+                return None
+            except Exception as e:
+                logger.debug(f"macOS confirm dialog failed: {e}")
+                return None
+
+        if sys.stdin and sys.stdin.isatty():
+            try:
+                opts = "/".join(f"{i}={b}" for i, b in enumerate(buttons))
+                ans = input(f"\n💡 [{title.upper()}] {text}\n   Choose [{opts}] (default 0): ").strip() or "0"
+                return buttons[int(ans)]
+            except (EOFError, KeyboardInterrupt, ValueError, IndexError):
+                return None
+        return None
+
 
 if __name__ == "__main__":
     CrossPlatformNotifier.notify("ASCM Mentor", "Universal cross-platform notification test")

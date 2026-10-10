@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: outcode-landing
+    runtime: python
+    buildCommand: "pip install --no-cache-dir pydantic || true"
+    startCommand: "python3 dashboard_server.py"
+    envVars:
+      - key: PORT
+        value: 10000

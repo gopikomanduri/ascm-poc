@@ -1,8 +1,8 @@
 # ASCM v4.0 GTM Package
-from .sales_agent import SalesAgent
-from .marketing_agent import MarketingAgent
-from .ad_agent import AdAgent
-from .seo_agent import SEOAgent
+from .agents.sales_agent import SalesAgent
+from .agents.marketing_agent import MarketingAgent
+from .agents.ad_agent import AdAgent
+from .agents.seo_agent import SEOAgent
 
 __all__ = [
     "SalesAgent",

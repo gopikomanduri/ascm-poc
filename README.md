@@ -68,8 +68,8 @@ ASCM is not an autocomplete plugin or a chatbot wrapper. It is an **autonomous, 
   - `products/pay-through-crypto/`: Non-custodial Web3 crypto checkout supporting EVM (Polygon) & Solana with QR code generation.
   - `products/cad-cam-engine/`: CNC machining G-code toolpath slicing engine.
   - External Flagship: [**Mutual Funds SLM Copilot**](https://github.com/gopikomanduri/mutual-funds-slm) — SEBI/SEC compliant edge financial copilot with real-time AMFI data sync, multi-broker gateway, and RBI Account Aggregator.
-- `ascm_math_proofs.py`: 6 probabilistic theorems with Monte Carlo simulation scripts (500k trials) proving defect reduction and coordination correctness.
-- `mr_bench.py`: Benchmark suite evaluating multi-repo AI coordination tasks.
+- `tools/ascm_math_proofs.py`: 6 probabilistic theorems with Monte Carlo simulation scripts (500k trials) proving defect reduction and coordination correctness.
+- `tools/mr_bench.py`: Benchmark suite evaluating multi-repo AI coordination tasks.
 - `tests/`: 15 comprehensive test suites covering 89 core tests + 9 product tests (98/98 passing).
 
 ---
@@ -125,7 +125,7 @@ Six peer-reviewable probabilistic theorems prove ASCM's architectural claims:
 - **Defect Escape Equation**: 16.7× improvement, **p-independent** (holds for any LLM)
 
 ```bash
-python ascm_math_proofs.py --publish   # Verify all proofs yourself
+python tools/ascm_math_proofs.py --publish   # Verify all proofs yourself
 ```
 
 ### MR-Bench — The Multi-Repo Benchmark
@@ -133,7 +133,7 @@ The first benchmark for multi-repo AI coordination tasks (SWE-bench only tests s
 20 tasks across 4 tiers, 4 dimensions scored per task.
 
 ```bash
-python mr_bench.py --run-all --publish   # Run the benchmark
+python tools/mr_bench.py --run-all --publish   # Run the benchmark
 ```
 
 ---

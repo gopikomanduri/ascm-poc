@@ -12,7 +12,7 @@ import os
 import json
 import logging
 from datetime import datetime
-from orchestrator.gtm.social_first_agents import (
+from orchestrator.gtm.agents.social_first_agents import (
     SocialFirstMarketingAgent,
     WarmAudienceSalesAgent,
     ReplyHandlingAgent,

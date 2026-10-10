@@ -32,11 +32,30 @@ Output format:
 - For escalation: JSON with {alert_type, severity, details, recommended_action}
 """
 
-    def __init__(self, model: Optional[str] = None, fast_mode: bool = True):
-        super().__init__(model=model, tier="fast" if fast_mode else "primary")
-        self.system_instruction = self.SYSTEM_INSTRUCTION
+    def __init__(
+        self,
+        system_instruction: Optional[str] = None,
+        provider: Optional[Any] = None,
+        tier: Optional[str] = None,
+        model: Optional[str] = None,
+        fast_mode: bool = True,
+        **kwargs,
+    ):
+        chosen_tier = tier or ("fast" if fast_mode else "primary")
+        super().__init__(
+            system_instruction=system_instruction or self.SYSTEM_INSTRUCTION,
+            provider=provider,
+            tier=chosen_tier,
+            model=model,
+        )
+        self.system_instruction = system_instruction or self.SYSTEM_INSTRUCTION
         self.discovery_history: List[Dict[str, Any]] = []
         self.approval_history: List[Dict[str, Any]] = []
+
+    def run(self, user_input: str = "", **kwargs) -> Dict[str, Any]:
+        """Unified entrypoint for discovery or milestone gating."""
+        target = user_input or kwargs.get("goal", "") or kwargs.get("initial_input", "")
+        return self.discover_user_goal(initial_input=target, previous_context=kwargs.get("previous_context"))
 
     def discover_user_goal(
         self,

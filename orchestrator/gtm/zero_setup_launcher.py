@@ -14,13 +14,14 @@ import logging
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
+from orchestrator.gtm.strategy.claims_guard import audit_text, blocking_issues, load_citable_facts
 from typing import Dict, Any, List
 
 from orchestrator.agents.base import _load_dotenv, get_configured_provider
-from orchestrator.gtm.repo_analyzer import RepoAnalyzer
-from orchestrator.gtm.marketing_constraints import MarketingConstraintEngine
-from orchestrator.gtm.marketing_agent import MarketingAgent
-from orchestrator.gtm.sales_agent_v2 import SalesAgentV2
+from orchestrator.gtm.strategy.repo_analyzer import RepoAnalyzer
+from orchestrator.gtm.strategy.marketing_constraints import MarketingConstraintEngine
+from orchestrator.gtm.agents.marketing_agent import MarketingAgent
+from orchestrator.gtm.agents.sales_agent_v2 import SalesAgentV2
 
 _load_dotenv()
 logger = logging.getLogger("ZeroSetupGTM")
@@ -74,7 +75,7 @@ class ZeroSetupGTMLauncher:
         channels.sort(key=lambda c: c["fit_score"], reverse=True)
         return channels
 
-    def launch(self, quota: int = 3) -> Dict[str, Any]:
+    def launch(self, quota: int = 3, known_leads=None) -> Dict[str, Any]:
         """Execute full zero-setup GTM flow."""
         logger.info("=" * 80)
         logger.info("🚀 ASCM ZERO-SETUP GTM ENGINE STARTING...")
@@ -103,10 +104,14 @@ class ZeroSetupGTMLauncher:
         )
 
         social_posts = marketing_data.get("social_posts", [])
-        primary_tweet = "Building scalable microservices with Go + Temporal. Cuts coordination overhead 10x. Read our architecture: https://github.com/ascm-poc/ascm"
+        primary_tweet = "Early proof of concept: AI agents that plan and change several repos together, with a human approval gate before any commit. Honest feedback welcome."
         for p in social_posts:
             if p.get("platform", "").lower() in ["twitter", "x"]:
-                primary_tweet = p.get("content", primary_tweet)
+                candidate = p.get("content", primary_tweet)
+                if blocking_issues(audit_text(candidate, load_citable_facts())):
+                    logger.warning("Generated tweet failed the claims check; using the safe default.")
+                else:
+                    primary_tweet = candidate
                 break
 
         encoded_tweet = urllib.parse.quote(primary_tweet)
@@ -116,6 +121,7 @@ class ZeroSetupGTMLauncher:
         logger.info(f"Generating {quota} verified CTO outreach sequences...")
         sales_agent = SalesAgentV2(provider=self.provider)
         sales_data = sales_agent.run(
+            known_leads=known_leads,
             product_thesis=product_thesis,
             icp_description=f"CTOs/VPs at fast-growing SaaS companies using {', '.join(tech_stack.get('languages', ['Go', 'Python']))}",
             cal_com_booking_link=self.cal_com_link,
@@ -128,15 +134,15 @@ class ZeroSetupGTMLauncher:
         # Package Outbound Relay Batch
         relay_batch = []
         for i, lead in enumerate(leads):
-            seq = sequences[i] if i < len(sequences) else {}
+            seq = sequences[i] if i < len(sequences) else (sequences[0] if sequences else {})
             emails = seq.get("emails", [])
             first_email = emails[0] if emails else {"subject": "ASCM feature acceleration", "body": "Hi there..."}
             
             relay_batch.append({
                 "recipient": {
-                    "name": lead.get("cto_name", "Engineering Leader"),
-                    "email": lead.get("email", "cto@company.com"),
-                    "company": lead.get("company_name", "Target Company"),
+                    "name": lead.get("cto_name") or lead.get("name"),
+                    "email": lead.get("email"),
+                    "company": lead.get("company_name") or lead.get("company"),
                     "tech_stack": lead.get("tech_stack", [])
                 },
                 "email_sequence_step_1": {
@@ -150,19 +156,26 @@ class ZeroSetupGTMLauncher:
                 }
             })
 
+        # Fail loudly if the LLM produced nothing, and don't reset the GTM-activity clock.
+        sales_ready = bool(sales_data.get("prospect_profiles") or sales_data.get("email_sequences") or leads)
+        degraded = not social_posts and not sales_ready
+        if degraded:
+            logger.error("❌ ZERO-SETUP GTM DEGRADED: LLM returned 0 social posts and no sales content "
+                         "(provider unavailable or rate-limited?). Nothing was staged.")
+
         # 5. Record GTM activity timestamp so ProactiveGitMonitor resets
-        history_dir = Path(".ascm_history")
-        history_dir.mkdir(parents=True, exist_ok=True)
         now_iso = datetime.now().isoformat()
-        activity_file = history_dir / "last_gtm_run.json"
-        with open(activity_file, "w") as f:
-            json.dump({
-                "timestamp": now_iso,
-                "type": "ZERO_SETUP_GTM_DISPATCH",
-                "channels_activated": [c["channel"] for c in top_channels],
-                "social_intent_created": True,
-                "outbound_relay_leads": len(relay_batch)
-            }, f, indent=2)
+        if not degraded:
+            history_dir = Path(".ascm_history")
+            history_dir.mkdir(parents=True, exist_ok=True)
+            with open(history_dir / "last_gtm_run.json", "w") as f:
+                json.dump({
+                    "timestamp": now_iso,
+                    "type": "ZERO_SETUP_GTM_DISPATCH",
+                    "channels_activated": [c["channel"] for c in top_channels],
+                    "social_intent_created": True,
+                    "outbound_relay_leads": len(relay_batch)
+                }, f, indent=2)
 
         results = {
             "timestamp": now_iso,
@@ -175,8 +188,11 @@ class ZeroSetupGTMLauncher:
                 "reddit_topic": "How ASCM achieves <25ms p99 microservice coordination using Go & Temporal"
             },
             "zero_dns_outbound_relay": relay_batch,
+            "prospect_profiles": sales_data.get("prospect_profiles", []),
+            "email_templates": sequences,
+            "content_audit": {"sales": sales_data.get("content_audit"), "marketing": marketing_data.get("content_audit")},
             "reply_destination": self.cal_com_link,
-            "status": "DISPATCH_PACKAGED_AND_ACTIVE"
+            "status": "DEGRADED_NO_LLM_OUTPUT" if degraded else "DISPATCH_PACKAGED_AND_ACTIVE"
         }
 
         # Save artifact
@@ -185,7 +201,8 @@ class ZeroSetupGTMLauncher:
         with open(out_path, "w") as f:
             json.dump(results, f, indent=2)
 
-        logger.info(f"✅ ZERO-SETUP GTM RUN COMPLETED! Artifact: {out_path}")
+        if not degraded:
+            logger.info(f"✅ ZERO-SETUP GTM RUN COMPLETED! Artifact: {out_path}")
         return results
 
 

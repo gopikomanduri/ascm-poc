@@ -10,9 +10,9 @@ from datetime import datetime
 from pathlib import Path
 
 from orchestrator.agents.base import _load_dotenv, get_configured_provider
-from orchestrator.gtm.marketing_agent import MarketingAgent
-from orchestrator.gtm.sales_agent import SalesAgent
-from orchestrator.gtm.sales_agent_v2 import SalesAgentV2
+from orchestrator.gtm.agents.marketing_agent import MarketingAgent
+from orchestrator.gtm.agents.sales_agent import SalesAgent
+from orchestrator.gtm.agents.sales_agent_v2 import SalesAgentV2
 
 _load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

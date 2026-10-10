@@ -45,8 +45,12 @@ def main():
     parser.add_argument("--log-dir", default="logs", help="Directory for enterprise security audit logs (default: logs)")
     parser.add_argument("--gtm-zero-setup", action="store_true", help="Launch autonomous Zero-Setup GTM engine (Medium Selection + Staging + 1-Click Dispatch)")
     parser.add_argument("--gtm-publish", action="store_true", help="Run 1-click multi-channel publisher (LinkedIn + X.com + Outbound Relay)")
+    parser.add_argument("--linkedin-only", action="store_true", help="Post to LinkedIn only when using --gtm-publish")
+    parser.add_argument("--x-only", action="store_true", help="Post to X.com only when using --gtm-publish")
+    parser.add_argument("--no-prompt", action="store_true", help="Skip interactive preview prompt during publishing")
     parser.add_argument("--mentor", action="store_true", help="Run ASCM Proactive Founder & Engineering Mentor")
     parser.add_argument("--no-mentor", action="store_false", dest="mentor_enabled", default=True, help="Disable proactive mentor interception")
+    parser.add_argument("--incremental", action="store_true", help="Incremental/patch mode: restore phases 1-4 from cache, re-run code gen only (skip re-planning for same goal)")
     args = parser.parse_args()
 
     import os
@@ -93,8 +97,14 @@ def main():
         sys.exit(0)
 
     if getattr(args, "gtm_publish", False):
-        from orchestrator.gtm.publish_to_channels import main as publish_main
-        publish_main()
+        from orchestrator.gtm.channels.publish_to_channels import main as publish_main
+        goal_for_publish = getattr(args, "goal", None)
+        publish_main(
+            goal=goal_for_publish,
+            linkedin_only=getattr(args, "linkedin_only", False),
+            x_only=getattr(args, "x_only", False),
+            interactive=not getattr(args, "no_prompt", False),
+        )
         sys.exit(0)
 
     if getattr(args, "mentor", False):
@@ -135,6 +145,7 @@ def main():
             initial_goal=goal,
             enable_dashboard=args.dashboard,
             port=args.port,
+            incremental=getattr(args, "incremental", False),
         )
         engine.run(auto_approve=args.auto_approve)
     except Exception as err:

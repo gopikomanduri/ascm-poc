@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .env
 .ascm_history/
+.ascm_domains/
 logs/
 *.log
 *.gguf
@@ -11,3 +12,8 @@ logs/
 !*.manifest.json
 !model_registry_pointer.json
 
+# macOS
+.DS_Store
+
+# Waitlist user emails (kept private)
+.ascm_waitlist.json

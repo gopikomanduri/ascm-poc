@@ -15,8 +15,8 @@ import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
-from orchestrator.gtm.repo_analyzer import RepoAnalyzer
-from orchestrator.gtm.gtm_strategy_selector_v2 import CompanyProfile, GTMStrategyRecommender
+from orchestrator.gtm.strategy.repo_analyzer import RepoAnalyzer
+from orchestrator.gtm.strategy.gtm_strategy_selector_v2 import CompanyProfile, GTMStrategyRecommender
 
 def banner(title: str):
     print("\n" + "═" * 80)

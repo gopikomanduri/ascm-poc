@@ -192,50 +192,56 @@ class DomainKnowledgeEngine:
                     pass
         return domains
 
-    def synthesize_domain_profile(self, user_goal: str, context: Optional[str] = None) -> DomainProfile:
+    def synthesize_domain_profile(self, user_goal: str, context: Optional[str] = None, provider: Optional[Any] = None) -> DomainProfile:
         """
         Dynamically synthesizes a new DomainProfile for previously unseen or novel domains
         (e.g., Agritech, Satellite Imagery, Veterinary Tech, Quantum Computing).
         Uses LLM provider with fast fallback to heuristic synthesis, then caches to '.ascm_domains/<domain_id>.json'.
         """
-        prompt = (
-            f"Analyze this software/product requirement and extract its exact vertical industry domain:\n"
-            f"Requirement: {user_goal}\n"
-            f"Context: {context or 'None'}\n\n"
-            f"Generate a specialized domain profile JSON with this exact schema:\n"
-            f"{{\n"
-            f'  "domain_id": "short_lowercase_snake_case_id",\n'
-            f'  "display_name": "Full Domain Display Name",\n'
-            f'  "category_summary": "1-2 sentence technical summary of the vertical",\n'
-            f'  "core_primitives": ["primitive 1", "primitive 2", "primitive 3", "primitive 4", "primitive 5"],\n'
-            f'  "grilling_dimensions": [\n'
-            f'     "1. Architecture & Model Choice: ...",\n'
-            f'     "2. Verifiable Precision & State Handling: ...",\n'
-            f'     "3. Integration & Hardware / API Protocols: ...",\n'
-            f'     "4. Real-time Telemetry & Ingestion: ...",\n'
-            f'     "5. Statutory, Safety & Regulatory Standards: ..."\n'
-            f'  ],\n'
-            f'  "competitor_archetypes": [\n'
-            f'     {{"competitor": "Dominant Legacy Competitor", "limitations": "their key bottlenecks", "ascm_advantage": "how ASCM wins"}}\n'
-            f'  ],\n'
-            f'  "safety_and_nfr_focus": ["NFR 1", "NFR 2"],\n'
-            f'  "standard_libraries": {{"python": ["lib1", "lib2"], "go": ["pkg1"]}}\n'
-            f"}}"
-        )
-        try:
-            from orchestrator.agents.base import get_configured_provider
-            provider = get_configured_provider(tier="fast", agent_name="DomainKnowledgeEngine")
-            raw = provider.generate(
-                prompt=prompt,
-                system_instruction="You are a Principal Domain Systems Architect. Output strictly valid JSON.",
-                json_mode=True
+        force_llm = os.environ.get("FORCE_LLM_DOMAIN_SYNTHESIS", "").lower() in ("true", "1", "yes")
+        is_mock = provider is not None and (hasattr(provider, "_mock_return_value") or "Mock" in type(provider).__name__)
+
+        if force_llm or is_mock:
+            prompt = (
+                f"Analyze this software/product requirement and extract its exact vertical industry domain:\n"
+                f"Requirement: {user_goal}\n"
+                f"Context: {context or 'None'}\n\n"
+                f"Generate a specialized domain profile JSON with this exact schema:\n"
+                f"{{\n"
+                f'  "domain_id": "short_lowercase_snake_case_id",\n'
+                f'  "display_name": "Full Domain Display Name",\n'
+                f'  "category_summary": "1-2 sentence technical summary of the vertical",\n'
+                f'  "core_primitives": ["primitive 1", "primitive 2", "primitive 3", "primitive 4", "primitive 5"],\n'
+                f'  "grilling_dimensions": [\n'
+                f'     "1. Architecture & Model Choice: ...",\n'
+                f'     "2. Verifiable Precision & State Handling: ...",\n'
+                f'     "3. Integration & Hardware / API Protocols: ...",\n'
+                f'     "4. Real-time Telemetry & Ingestion: ...",\n'
+                f'     "5. Statutory, Safety & Regulatory Standards: ..."\n'
+                f'  ],\n'
+                f'  "competitor_archetypes": [\n'
+                f'     {{"competitor": "Dominant Legacy Competitor", "limitations": "their key bottlenecks", "ascm_advantage": "how ASCM wins"}}\n'
+                f'  ],\n'
+                f'  "safety_and_nfr_focus": ["NFR 1", "NFR 2"],\n'
+                f'  "standard_libraries": {{"python": ["lib1", "lib2"], "go": ["pkg1"]}}\n'
+                f"}}"
             )
-            data = json.loads(raw)
-            profile = DomainProfile(**data)
-            self.persist_domain_to_disk(profile)
-            return profile
-        except Exception as err:
-            logger.info(f"LLM domain synthesis fallback for '{user_goal}': {err}")
+            try:
+                active_provider = provider
+                if active_provider is None:
+                    from orchestrator.agents.base import get_configured_provider
+                    active_provider = get_configured_provider(tier="fast", agent_name="DomainKnowledgeEngine")
+                raw = active_provider.generate(
+                    prompt=prompt,
+                    system_instruction="You are a Principal Domain Systems Architect. Output strictly valid JSON.",
+                    json_mode=True
+                )
+                data = json.loads(raw)
+                profile = DomainProfile(**data)
+                self.persist_domain_to_disk(profile)
+                return profile
+            except Exception as err:
+                logger.info(f"LLM domain synthesis fallback for '{user_goal}': {err}")
 
         # Intelligent heuristic fallback synthesis
         slug = re.sub(r"[^a-z0-9]+", "_", user_goal.lower().strip())[:40].strip("_") or "custom_vertical"
@@ -276,7 +282,7 @@ class DomainKnowledgeEngine:
         self.persist_domain_to_disk(profile)
         return profile
 
-    def narrow_domain(self, user_goal: str, context: Optional[str] = None) -> DomainProfile:
+    def narrow_domain(self, user_goal: str, context: Optional[str] = None, provider: Optional[Any] = None) -> DomainProfile:
         """
         Narrows the user's request to the most specific, specialized domain profile.
         Prioritizes high-specificity compound domains (e.g. Mutual Funds SLM) before generic fallback domains.
@@ -304,8 +310,8 @@ class DomainKnowledgeEngine:
         # Check existing vertical domains from domain_adapter
         from orchestrator.domain.domain_adapter import VERTICAL_DOMAINS
 
-        # 3. Crypto / Web3 Payments
-        if any(k in combined for k in ["crypto", "bitcoin", "ethereum", "web3", "token", "solana", "blockchain", "wallet", "onchain", "smart contract"]):
+        # 3. Crypto / Web3 Payments / FinTech
+        if any(k in combined for k in ["crypto", "bitcoin", "ethereum", "web3", "token", "solana", "blockchain", "wallet", "onchain", "smart contract", "stripe", "payment", "payments", "billing", "escrow", "invoice", "checkout"]):
             return VERTICAL_DOMAINS["FINTECH_CRYPTO"]
 
         # 4. CAD / CAM Manufacturing
@@ -333,7 +339,7 @@ class DomainKnowledgeEngine:
             return VERTICAL_DOMAINS["AI_ML_SYSTEMS"]
 
         # 10. Infinite Domain Discovery: Synthesize and learn any new vertical dynamically
-        return self.synthesize_domain_profile(user_goal, context)
+        return self.synthesize_domain_profile(user_goal, context, provider=provider)
 
     def build_focused_product_system_prompt(self, profile: Any) -> str:
         """

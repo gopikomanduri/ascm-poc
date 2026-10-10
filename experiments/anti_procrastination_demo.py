@@ -23,7 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from orchestrator.gtm.anti_procrastination_orchestrator import AntiProcrastinationOrchestrator
+from orchestrator.gtm.strategy.anti_procrastination_orchestrator import AntiProcrastinationOrchestrator
 
 
 def demo_activity_monitoring():

@@ -18,7 +18,7 @@ import json
 import logging
 import sys
 from typing import Dict, Any, Optional
-from orchestrator.gtm.gtm_strategy_selector_v2 import (
+from orchestrator.gtm.strategy.gtm_strategy_selector_v2 import (
     CompanyProfile,
     GTMStrategyRecommender,
     ProductStage,

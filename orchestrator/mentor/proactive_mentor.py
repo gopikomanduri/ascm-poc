@@ -19,8 +19,9 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 from orchestrator.agents.base import get_configured_provider, _load_dotenv
-from orchestrator.gtm.repo_analyzer import RepoAnalyzer
-from orchestrator.gtm.proactive_monitor import ProactiveGitMonitor
+from orchestrator.gtm.strategy.repo_analyzer import RepoAnalyzer
+from orchestrator.gtm.strategy.proactive_monitor import ProactiveGitMonitor
+from orchestrator.mentor.notifier import CrossPlatformNotifier
 
 _load_dotenv()
 logger = logging.getLogger("ASCMProactiveMentor")
@@ -41,38 +42,19 @@ class ASCMProactiveMentor:
         self.provider = get_configured_provider()
         self.repo_analyzer = RepoAnalyzer(str(self.repo_path))
         self.git_monitor = ProactiveGitMonitor(str(self.repo_path))
+        self._last_sell_notify = 0.0
 
     def notify(self, title: str, message: str, subtitle: str = "ASCM Proactive Mentor"):
-        """Deliver native desktop notification (macOS osascript) and log."""
-        print(f"\n💡 [MENTOR NOTIFICATION] {title}: {message}")
-        if sys.platform == "darwin":
-            try:
-                # Escape double quotes
-                safe_title = title.replace('"', '\\"')
-                safe_msg = message.replace('"', '\\"')
-                safe_sub = subtitle.replace('"', '\\"')
-                cmd = f'display notification "{safe_msg}" with title "{safe_title}" subtitle "{safe_sub}"'
-                subprocess.run(["osascript", "-e", cmd], capture_output=True, timeout=2)
-            except Exception:
-                pass
+        """Deliver native desktop notification cross-platform (macOS/Linux/Windows) and log."""
+        CrossPlatformNotifier.notify(title, message, app_name=subtitle)
 
     def prompt_dialog(self, prompt_text: str, default_text: str = "") -> Optional[str]:
-        """Prompt user via macOS GUI dialog or terminal fallback."""
-        if sys.platform == "darwin" and os.environ.get("TERM_PROGRAM"):
-            try:
-                apple_script = f'''
-                display dialog "{prompt_text}" default answer "{default_text}" with title "ASCM Mentor: What are you building?" buttons {{"Cancel", "Confirm"}} default button "Confirm"
-                '''
-                res = subprocess.run(["osascript", "-e", apple_script], capture_output=True, text=True, timeout=30)
-                if res.returncode == 0 and "text returned:" in res.stdout:
-                    return res.stdout.split("text returned:")[-1].strip()
-            except Exception:
-                pass
-        # Terminal fallback
-        try:
-            return input(f"\n💡 [ASCM MENTOR] {prompt_text} [{default_text}]: ").strip() or default_text
-        except (EOFError, KeyboardInterrupt):
-            return default_text
+        """Pop up an interactive input dialog on any OS (macOS/Linux/Windows) with terminal fallback."""
+        return CrossPlatformNotifier.prompt_dialog(
+            prompt_text,
+            default_text=default_text,
+            title="ASCM Mentor: What are you building?",
+        )
 
     def clarify_goal_and_pre_validate(self, raw_input: str) -> Dict[str, Any]:
         """
@@ -109,7 +91,7 @@ class ASCMProactiveMentor:
         try:
             from google import genai
             client = genai.Client()
-            model_name = os.getenv("GEMINI_MODEL") or os.getenv("LLM_MODEL") or "gemini-2.5-flash-lite"
+            model_name = os.getenv("GEMINI_MODEL") or os.getenv("LLM_MODEL") or "gemini-3.5-flash-lite"
             resp = client.models.generate_content(
                 model=model_name,
                 contents=f"{system_instruction}\n\nUser Goal: {prompt}",
@@ -167,7 +149,11 @@ class ASCMProactiveMentor:
                 f"but haven't done any outreach in {activity.days_since_last_gtm_action:.1f} days! "
                 "Stop refining code. Launch your LinkedIn/X campaign and 10 CTO outreach emails right now!"
             )
-            self.notify("ASCM Mentor: Time to Sell!", advice["recommendation"])
+            # Throttle: evaluate runs every daemon poll, so notify at most once per 4 hours.
+            now = time.time()
+            if now - self._last_sell_notify > 14400:
+                self._last_sell_notify = now
+                self.notify("ASCM Mentor: Time to Sell!", advice["recommendation"])
         elif code_ready_threshold:
             advice["recommendation"] = "Code milestone reached. Consider generating a changelog and technical release post."
         else:
@@ -241,13 +227,20 @@ def main(override_goal: Optional[str] = None):
     mentor.notify("ASCM Mentor Insights", f"Validated '{user_goal[:40]}'. Check terminal for pre-build validation steps!")
 
     print("\n" + "=" * 70)
-    print("Would you like to test Market Demand first (Generate Pre-Build Outreach Copy)? [Y/n]")
+    print("Would you like to test Market Demand first (Generate Pre-Build Outreach Copy)?")
+    print("  [1] Publish / Teaser on LinkedIn & X.com (Milestone 1 Social Dispatch)")
+    print("  [2] Run Full Zero-Setup GTM (Medium Ranking + CTO Outbound Relay)")
+    print("  [3] Skip validation and start coding directly")
     try:
-        choice = input("Enter choice (Y/n): ").strip().lower()
+        choice = input("Enter choice [1/2/3] (default: 1): ").strip()
     except (EOFError, KeyboardInterrupt):
-        choice = "y"
+        choice = "1"
 
-    if choice != "n":
+    if choice in ("1", ""):
+        print("\n🚀 Launching ASCM Milestone 1 Social Publisher...")
+        from orchestrator.gtm.channels.publish_to_channels import main as publish_main
+        publish_main(goal=user_goal, interactive=True)
+    elif choice == "2":
         print("\n🚀 Launching ASCM Zero-Setup Demand Validation...")
         subprocess.run([sys.executable, "main.py", "--gtm-zero-setup"])
 

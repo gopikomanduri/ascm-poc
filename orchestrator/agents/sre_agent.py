@@ -7,15 +7,36 @@ from .base import BaseAgent
 class SREAgent(BaseAgent):
     """Site Reliability Engineer: Production deployment and infrastructure."""
 
-    def __init__(self, model: Optional[str] = None):
-        super().__init__(model=model, tier="primary")
+    def __init__(
+        self,
+        system_instruction: Optional[str] = None,
+        provider: Optional[Any] = None,
+        tier: str = "primary",
+        model: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            system_instruction=system_instruction or "You are an SRE Agent.",
+            provider=provider,
+            tier=tier,
+            model=model,
+        )
+
+    def run(self, domain: str = "general", requirements: str = "", **kwargs) -> Dict[str, Any]:
+        """Unified entrypoint for deployment architecture and IaC generation."""
+        reqs = requirements or kwargs.get("prd", "") or kwargs.get("goal", "")
+        return self.design_deployment(domain=domain, requirements=reqs)
 
     def design_deployment(self, domain: str, requirements: str) -> Dict[str, Any]:
         """Design deployment architecture."""
         prompt = f"Design deployment for {domain}: {requirements[:500]}. Output JSON."
         response = self.call_llm(prompt)
         try:
-            return json.loads(response)
+            res = json.loads(response)
+            if isinstance(res, dict):
+                res.setdefault("domain", domain)
+                return res
+            return {"domain": domain, "strategy": res}
         except:
             return {"domain": domain, "raw_response": response}
 

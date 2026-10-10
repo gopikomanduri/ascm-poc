@@ -16,6 +16,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 from orchestrator.auth.user_manager import USER_MANAGER
 from orchestrator.budget.token_forecaster import GLOBAL_TOKEN_FORECASTER, PROVIDER_RATES
 from orchestrator.knowledge.blueprint_engine import GLOBAL_BLUEPRINT_ENGINE
+from orchestrator.waitlist_manager import WAITLIST_MANAGER
 
 HISTORY_DIR = Path.cwd() / ".ascm_history"
 
@@ -850,7 +851,20 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
                 "code_feedback": snap.get("code_feedback", []),
             })
 
+        elif path == "/api/waitlist":
+            stats = WAITLIST_MANAGER.get_stats()
+            self._send_json({"status": "ok", **stats})
+
         elif path == "/" or path == "/index.html":
+            if (STATIC_DIR / "index.html").exists():
+                self._serve_static_file("index.html")
+            else:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(HTML_DASHBOARD_PAGE.encode("utf-8"))
+
+        elif path in ("/dashboard", "/dashboard.html", "/admin", "/ascm"):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
@@ -941,6 +955,18 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/auth/logout":
             USER_MANAGER.logout()
             self._send_json({"status": "ok", "message": "Logged out successfully"})
+        elif path == "/api/waitlist":
+            email = payload.get("email", "").strip()
+            tier = payload.get("tier", "alpha")
+            res = WAITLIST_MANAGER.add_entry(
+                email,
+                tier=tier,
+                metadata={
+                    "user_agent": self.headers.get("User-Agent", ""),
+                    "source": payload.get("source", "landing_page"),
+                }
+            )
+            self._send_json(res)
         elif path == "/api/apps/create":
             res = USER_MANAGER.add_user_app(payload)
             self._send_json(res)

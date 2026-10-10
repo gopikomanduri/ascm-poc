@@ -21,6 +21,7 @@ from pathlib import Path
 
 from orchestrator.mentor.notifier import CrossPlatformNotifier
 from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
+from orchestrator.mentor.file_watcher import ActivityAwareMonitor
 
 logger = logging.getLogger("ASCMDaemon")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -29,13 +30,34 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 class UniversalASCMDaemon:
     """Universal cross-platform daemon for ASCM Proactive Mentor."""
 
-    def __init__(self, repo_path: str = ".", poll_interval_sec: int = 30):
+    def __init__(self, repo_path: str = ".", poll_interval_sec: int = 30, assist: bool = False):
         self.repo_path = Path(repo_path).resolve()
         self.poll_interval_sec = poll_interval_sec
         self.mentor = ASCMProactiveMentor(repo_path=str(self.repo_path))
         self.history_dir = self.repo_path / ".ascm_history"
         self.history_dir.mkdir(parents=True, exist_ok=True)
         self.pid_file = self.history_dir / "ascm_daemon.pid"
+        # Cross-IDE activity monitor (filesystem + git combined)
+        self.activity_monitor = ActivityAwareMonitor(repo_path=str(self.repo_path))
+
+        # Optional helping-hand: unprompted, consent-gated code suggestions
+        self.suggester = None
+        if assist:
+            from orchestrator.mentor.assistant.consent import ConsentGate
+            from orchestrator.mentor.assistant.llm import AssistantLLM
+            from orchestrator.mentor.assistant.suggester import CodeSuggester
+            gate = ConsentGate(str(self.history_dir / "assistant_consent.json"))
+            self.suggester = CodeSuggester(
+                str(self.repo_path), AssistantLLM(gate),
+                notify=lambda t, m: CrossPlatformNotifier.notify(t, m, app_name="ASCM Assistant"),
+            )
+            watcher = self.activity_monitor.file_watcher
+            base_cb = watcher.on_change
+
+            def _on_change(path, _base=base_cb, _s=self.suggester):
+                _base(path)
+                _s.on_file_changed(path)
+            watcher.on_change = _on_change
 
     def run_daemon_loop(self):
         """Infinite monitoring loop running quietly in the background."""
@@ -49,17 +71,49 @@ class UniversalASCMDaemon:
         with open(self.pid_file, "w") as f:
             f.write(str(os.getpid()))
 
+        # Start cross-IDE filesystem watcher (catches Cursor, Replit, Jupyter edits too)
+        self.activity_monitor.start()
+        logger.info("[Daemon] Cross-IDE file watcher active (watchdog/polling).")
+
         last_gtm_prompt_time = 0
+        last_edit_nudge_time = 0
 
         try:
             while True:
                 time.sleep(self.poll_interval_sec)
 
-                # Check repo readiness and code vs GTM activity
+                # Full activity summary: filesystem + git combined
+                activity = self.activity_monitor.get_activity_summary()
+                fs = activity["filesystem_activity"]
+                git = activity["git_activity"]
+                combined = activity["combined_signal"]
+
+                # Check GTM readiness from mentor
                 advice = self.mentor.evaluate_code_progress_and_advise()
 
                 current_time = time.time()
-                # If code is ready for sales and hasn't been nudged in the last 4 hours
+
+                if self.suggester:
+                    try:
+                        self.suggester.tick()
+                    except Exception as e:  # a suggestion failure must never stop the mentor
+                        logger.warning(f"[Daemon] Suggester error (continuing): {e}")
+
+                # 1. If dev is actively editing (any IDE) but hasn't done GTM in days — nudge
+                if combined["actively_coding_now"] and git["days_since_gtm"] > 3:
+                    if current_time - last_edit_nudge_time > 7200:  # max once per 2 hours
+                        last_edit_nudge_time = current_time
+                        CrossPlatformNotifier.notify(
+                            "💡 ASCM Mentor: You're coding, but...",
+                            f"Active in editor. {git['days_since_gtm']:.0f} days since last GTM action. Consider talking to a customer!",
+                            app_name="ASCM Mentor",
+                        )
+
+                # 2. Editing without committing — remind to checkpoint
+                if combined["editing_without_committing"]:
+                    logger.info("[Daemon] Dev editing without committing. Reminder queued.")
+
+                # 3. Code milestone + no GTM — force the sales trigger
                 if advice.get("should_trigger_gtm") and (current_time - last_gtm_prompt_time > 14400):
                     last_gtm_prompt_time = current_time
                     CrossPlatformNotifier.notify(
@@ -71,6 +125,7 @@ class UniversalASCMDaemon:
         except KeyboardInterrupt:
             logger.info("Daemon terminated by user.")
         finally:
+            self.activity_monitor.stop()
             if self.pid_file.exists():
                 self.pid_file.unlink()
 
@@ -158,10 +213,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ASCM Universal Daemon & Mentor Service")
     parser.add_argument("--repo", default=".", help="Repository path to monitor")
     parser.add_argument("--interval", type=int, default=30, help="Poll interval in seconds")
+    parser.add_argument("--assist", action="store_true", help="Enable consent-gated code suggestions while you work")
     parser.add_argument("--install", action="store_true", help="Install into OS autostart service (launchd/systemd/Windows)")
     args = parser.parse_args()
 
-    daemon = UniversalASCMDaemon(repo_path=args.repo, poll_interval_sec=args.interval)
+    daemon = UniversalASCMDaemon(repo_path=args.repo, poll_interval_sec=args.interval, assist=args.assist)
 
     if args.install:
         msg = daemon.install_autostart_service()

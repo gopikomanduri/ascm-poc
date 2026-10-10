@@ -1,5 +1,6 @@
 """Compliance Agent: Regulatory framework validation (PCI-DSS, GDPR, HIPAA, DPDP, AML/KYC)."""
 from typing import Dict, Any, Optional, List
+import json
 from .base import BaseAgent
 
 
@@ -48,9 +49,21 @@ Output JSON:
 }
 """
 
-    def __init__(self, model: Optional[str] = None):
-        super().__init__(model=model, tier="primary")
-        self.system_instruction = self.SYSTEM_INSTRUCTION
+    def __init__(
+        self,
+        system_instruction: Optional[str] = None,
+        provider: Optional[Any] = None,
+        tier: str = "primary",
+        model: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            system_instruction=system_instruction or self.SYSTEM_INSTRUCTION,
+            provider=provider,
+            tier=tier,
+            model=model,
+        )
+        self.system_instruction = system_instruction or self.SYSTEM_INSTRUCTION
         self.framework_checks = [
             "pci_dss",
             "gdpr",
@@ -58,6 +71,17 @@ Output JSON:
             "dpdp",
             "aml_kyc",
         ]
+
+    def run(self, files: Optional[Dict[str, str]] = None, domain: str = "general", **kwargs) -> Dict[str, Any]:
+        """Unified entrypoint for compliance validation."""
+        code_files = files or kwargs.get("code_files", {})
+        test_files = kwargs.get("test_files", {})
+        if code_files or test_files:
+            return self.validate_code(domain=domain, code_files=code_files, test_files=test_files)
+        hld = kwargs.get("hld", "")
+        lld = kwargs.get("lld", "")
+        data_flows = kwargs.get("data_flows", [])
+        return self.validate_architecture(domain=domain, hld=hld, lld=lld, data_flows=data_flows)
 
     def validate_architecture(
         self,
@@ -91,7 +115,6 @@ Output JSON:
         response = self.call_llm(prompt)
 
         try:
-            import json
             result = json.loads(response)
         except:
             result = {
@@ -132,13 +155,18 @@ Output JSON:
         response = self.call_llm(prompt)
 
         try:
-            import json
             result = json.loads(response)
+            if isinstance(result, dict):
+                findings = result.get("findings", result.get("violations", []))
+                result.setdefault("findings", findings)
+                result.setdefault("violations", findings)
+                return result
         except:
             result = {
                 "domain": domain,
                 "raw_response": response,
                 "findings": [],
+                "violations": [],
             }
 
         return result
@@ -170,7 +198,6 @@ Output JSON:
         response = self.call_llm(prompt)
 
         try:
-            import json
             result = json.loads(response)
         except:
             result = {

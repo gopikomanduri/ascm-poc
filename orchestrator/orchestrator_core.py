@@ -28,16 +28,26 @@ from orchestrator.state import SharedBlackboard, TaskItem
 
 
 class OrchestratorEngine:
-    def __init__(self, repo_paths: List[str], initial_goal: str, enable_dashboard: bool = True, port: int = 8080):
+    INCREMENTAL_CACHE_FILE = ".ascm_history/incremental_state.json"
+
+    def __init__(
+        self,
+        repo_paths: List[str],
+        initial_goal: str,
+        enable_dashboard: bool = True,
+        port: int = 8080,
+        incremental: bool = False,
+    ):
         GLOBAL_DASHBOARD_STATE.new_session(initial_goal)
         try:
             self.valid_repos = self._validate_repositories(repo_paths)
             self.state = SharedBlackboard(user_goal=initial_goal, target_repos=self.valid_repos)
+            self.incremental = incremental
             AUDIT_LOGGER.log_event(
                 event_type="SESSION_START",
                 agent="ORCHESTRATOR",
                 action="INITIALIZE",
-                details={"goal": initial_goal, "repositories": self.valid_repos},
+                details={"goal": initial_goal, "repositories": self.valid_repos, "incremental": incremental},
             )
             self.dashboard_server: Optional[DashboardServer] = None
             if enable_dashboard:
@@ -51,6 +61,29 @@ class OrchestratorEngine:
 
     def run(self, auto_approve: bool = False) -> None:
         try:
+            # ── Incremental / Patch Mode ───────────────────────────────────────
+            # If --incremental is set and a previous session cache exists, restore
+            # phases 1-4 from disk and jump straight to code generation (phase 5).
+            if self.incremental and self._try_restore_incremental_cache():
+                self._notify_phase("[INCREMENTAL] Restoring phases 1-4 from cache — skipping re-planning")
+                self._log(f"[+] Incremental mode: restored topology, PRD, strategy, and architecture from cache.")
+                self._log(f"[+] Incremental mode: re-running Phase 5 (code gen) and Phase 6 (commit) only.")
+
+                providers = self.state.incremental_providers or self.valid_repos
+                consumers = self.state.incremental_consumers or []
+
+                self._notify_phase("Phase 5 (incremental): Task Execution & Code Generation")
+                pending_changes = self._run_task_execution(providers, consumers, auto_approve=auto_approve)
+
+                if not pending_changes:
+                    self._log("No audited changes ready for writing (incremental run).")
+                    return
+
+                self._notify_phase("Phase 6 (incremental): Human Approval & Local Git Commit")
+                self._run_verification_and_commit(pending_changes, auto_approve=auto_approve)
+                return
+
+            # ── Full 6-Phase Pipeline ──────────────────────────────────────────
             self._notify_phase("Phase 1: Ingesting Repository Contracts")
             for repo in self.valid_repos:
                 contract = parse_skill_contract(repo)
@@ -67,6 +100,9 @@ class OrchestratorEngine:
             providers = [p for p in topology.get("providers", []) if p in self.state.contracts]
             consumers = [p for p in topology.get("consumers", []) if p in self.state.contracts]
             self.state.discovery_summary = topology.get("analysis", "")
+            # Cache providers/consumers for incremental mode
+            self.state.incremental_providers = providers
+            self.state.incremental_consumers = consumers
             self._log(f"[+] Identified Providers: {[Path(p).name for p in providers]}")
             self._log(f"[+] Identified Consumers: {[Path(p).name for p in consumers]}")
 
@@ -83,6 +119,9 @@ class OrchestratorEngine:
             self._notify_phase("Phase 4: Architecture (HLD/LLD), Task Decomposition & Architecture Review")
             self._run_architecture_and_design(providers, auto_approve=auto_approve)
 
+            # Save phases 1-4 state to cache for future --incremental runs
+            self._save_incremental_cache(providers, consumers)
+
             self._notify_phase("Phase 5: Dynamic Task Execution, Code Generation & Critic Code Review")
             pending_changes = self._run_task_execution(providers, consumers, auto_approve=auto_approve)
 
@@ -95,6 +134,68 @@ class OrchestratorEngine:
         except Exception as err:
             GLOBAL_DASHBOARD_STATE.record_crash(err)
             raise
+
+    def _save_incremental_cache(self, providers: List[str], consumers: List[str]) -> None:
+        """Persist phases 1-4 outputs to disk for future --incremental runs."""
+        import json as _json
+        cache = {
+            "goal": self.state.user_goal,
+            "clarified_prd": getattr(self.state, 'clarified_prd', ""),
+            "discovery_summary": getattr(self.state, 'discovery_summary', ""),
+            "business_strategy": getattr(self.state, 'business_strategy', {}),
+            "revenue_analysis": getattr(self.state, 'revenue_analysis', {}),
+            "architecture_plan": getattr(self.state, 'architecture_plan', {}),
+            "pending_tasks": [t.model_dump() if hasattr(t, 'model_dump') else vars(t) for t in getattr(self.state, 'pending_tasks', [])],
+            "providers": providers,
+            "consumers": consumers,
+        }
+        # Write to first repo's .ascm_history
+        if self.valid_repos:
+            cache_path = Path(self.valid_repos[0]) / self.INCREMENTAL_CACHE_FILE
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(_json.dumps(cache, indent=2))
+            self._log(f"[+] Incremental cache saved to {cache_path}")
+
+    def _try_restore_incremental_cache(self) -> bool:
+        """Attempt to restore phases 1-4 from disk cache. Returns True if successful."""
+        import json as _json
+        if not self.valid_repos:
+            return False
+        cache_path = Path(self.valid_repos[0]) / self.INCREMENTAL_CACHE_FILE
+        if not cache_path.exists():
+            self._log("[Incremental] No cache found — running full pipeline.")
+            return False
+        try:
+            cache = _json.loads(cache_path.read_text())
+            # Only restore if goal matches
+            if cache.get("goal", "").strip() != self.state.user_goal.strip():
+                self._log(f"[Incremental] Goal mismatch vs cached goal. Running full pipeline.")
+                return False
+
+            self.state.clarified_prd = cache.get("clarified_prd", "")
+            self.state.discovery_summary = cache.get("discovery_summary", "")
+            self.state.business_strategy = cache.get("business_strategy", {})
+            self.state.revenue_analysis = cache.get("revenue_analysis", {})
+            self.state.architecture_plan = cache.get("architecture_plan", {})
+            self.state.incremental_providers = cache.get("providers", [])
+            self.state.incremental_consumers = cache.get("consumers", [])
+
+            # Restore pending tasks
+            from orchestrator.state import TaskItem
+            raw_tasks = cache.get("pending_tasks", [])
+            self.state.pending_tasks = [TaskItem(**t) for t in raw_tasks if isinstance(t, dict)]
+
+            # Populate contracts from disk for restored providers
+            for repo in self.state.incremental_providers:
+                if repo not in self.state.contracts:
+                    contract = parse_skill_contract(repo)
+                    self.state.contracts[repo] = contract
+
+            self._log(f"[Incremental] ✅ Restored {len(self.state.pending_tasks)} tasks from cache.")
+            return True
+        except Exception as e:
+            self._log(f"[Incremental] Cache restore failed ({e}). Running full pipeline.")
+            return False
 
     def _resolve_task_files(self, repo_path: str, task: TaskItem, contract) -> Tuple[str, str, str]:
         """

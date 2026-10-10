@@ -34,7 +34,7 @@ class ProductAgent(BaseAgent):
 
     def run(self, user_input: str, conversation_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
         from orchestrator.domain.domain_knowledge_engine import GLOBAL_DOMAIN_KNOWLEDGE_ENGINE
-        domain = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.narrow_domain(user_input)
+        domain = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.narrow_domain(user_input, provider=self.provider)
 
         # Dynamically inject laser-focused system prompt for this specific domain (zero cross-domain clutter)
         self.system_instruction = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.build_focused_product_system_prompt(domain)
@@ -265,7 +265,7 @@ class BusinessStrategyAgent(BaseAgent):
 
     def run(self, user_goal: str, clarified_prd: str, contracts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         from orchestrator.domain.domain_knowledge_engine import GLOBAL_DOMAIN_KNOWLEDGE_ENGINE
-        domain = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.narrow_domain(f"{user_goal} {clarified_prd}")
+        domain = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.narrow_domain(f"{user_goal} {clarified_prd}", provider=self.provider)
 
         # Dynamically inject focused GTM and competitor battlecards for this domain
         self.system_instruction = GLOBAL_DOMAIN_KNOWLEDGE_ENGINE.build_focused_business_system_prompt(domain)
@@ -463,10 +463,10 @@ from .oncall_agent import OnCallAgent
 # ============================================================================
 # GTM AGENTS (v4.0 - Independent Commercial Agents)
 # ============================================================================
-from ..gtm.sales_agent import SalesAgent
-from ..gtm.marketing_agent import MarketingAgent
-from ..gtm.ad_agent import AdAgent
-from ..gtm.seo_agent import SEOAgent
+from ..gtm.agents.sales_agent import SalesAgent
+from ..gtm.agents.marketing_agent import MarketingAgent
+from ..gtm.agents.ad_agent import AdAgent
+from ..gtm.agents.seo_agent import SEOAgent
 
 
 __all__ = [

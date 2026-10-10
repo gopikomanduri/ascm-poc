@@ -28,9 +28,44 @@ def _load_dotenv():
 _load_dotenv()
 
 
+def parse_json_lenient(raw: str):
+    """json.loads that tolerates what LLMs often emit: code fences, trailing commas, text around the object."""
+    import re
+    text = raw.strip()
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as err:
+        last_err = err
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", text)          # trailing commas
+    try:
+        return json.loads(cleaned, strict=False)          # strict=False: raw newlines/tabs inside strings
+    except json.JSONDecodeError as err:
+        last_err = err
+    m = re.search(r"\{.*\}", cleaned, re.S)               # object embedded in prose
+    if m:
+        try:
+            return json.loads(m.group(0), strict=False)
+        except json.JSONDecodeError as err:
+            last_err = err
+    # Last resort: repair unquoted keys (e.g. unquoted identifiers at line start)
+    repaired = re.sub(r'(?m)^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:', r'\1"\2":', cleaned)
+    repaired = re.sub(r'(?m)^(\s*)([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'\1"\2":', repaired)
+    try:
+        return json.loads(repaired, strict=False)
+    except json.JSONDecodeError as err:
+        last_err = err
+    m2 = re.search(r"\{.*\}", repaired, re.S)
+    if m2:
+        return json.loads(m2.group(0), strict=False)
+    raise last_err
+
+
 class BaseLLMProvider(ABC):
     @abstractmethod
-    def generate(self, prompt: str, system_instruction: str, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, system_instruction: str, json_mode: bool = False,
+                 temperature: Optional[float] = None) -> str:
+        """temperature=None means the provider default (0.1: deterministic, right for code)."""
         pass
 
 
@@ -38,20 +73,21 @@ class GeminiProvider(BaseLLMProvider):
     def __init__(self, api_key: str, model: Optional[str] = None):
         from google import genai
         from google.genai.errors import ServerError
-        self.client = genai.Client(api_key=api_key)
+        self.client = genai.Client(api_key=api_key, http_options={"timeout": int(float(os.environ.get("GEMINI_TIMEOUT_SEC", "120")) * 1000)})
         self.ServerError = ServerError
-        preferred = model or os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-2.5-flash")
-        valid_defaults = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-pro", "gemini-pro-latest"]
+        preferred = model or os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-3.5-flash-lite")
+        valid_defaults = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-flash-latest", "gemini-pro-latest"]
         self.candidate_models = list(dict.fromkeys([preferred] + valid_defaults))
 
         self.provider_name = "gemini"
         self.model = preferred
 
-    def generate(self, prompt: str, system_instruction: str, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, system_instruction: str, json_mode: bool = False,
+                 temperature: Optional[float] = None) -> str:
         from google.genai import types
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,
-            temperature=0.1,
+            temperature=0.1 if temperature is None else temperature,
             response_mime_type="application/json" if json_mode else "text/plain",
         )
         last_exception = None
@@ -70,6 +106,8 @@ class GeminiProvider(BaseLLMProvider):
                 except Exception as err:
                     last_exception = err
                     break
+            if last_exception and any(k in str(last_exception).lower() for k in ["401", "403", "api_key_invalid", "permission_denied"]):
+                break
         raise RuntimeError(f"All candidate Gemini models failed. Last error: {last_exception}") from last_exception
 
 
@@ -87,7 +125,8 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             gen_m = None
         self.model = model or os.environ.get("OPENAI_MODEL") or gen_m or "gpt-4o"
 
-    def generate(self, prompt: str, system_instruction: str, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, system_instruction: str, json_mode: bool = False,
+                 temperature: Optional[float] = None) -> str:
         url = f"{self.base_url}/chat/completions"
         headers = {
             "Content-Type": "application/json",
@@ -100,7 +139,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         payload = {
             "model": self.model,
             "messages": messages,
-            "temperature": 0.1,
+            "temperature": 0.1 if temperature is None else temperature,
         }
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
@@ -132,7 +171,8 @@ class AnthropicProvider(BaseLLMProvider):
             gen_m = None
         self.model = model or os.environ.get("ANTHROPIC_MODEL") or gen_m or "claude-3-5-sonnet-20241022"
 
-    def generate(self, prompt: str, system_instruction: str, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, system_instruction: str, json_mode: bool = False,
+                 temperature: Optional[float] = None) -> str:
         url = "https://api.anthropic.com/v1/messages"
         headers = {
             "Content-Type": "application/json",
@@ -150,7 +190,7 @@ class AnthropicProvider(BaseLLMProvider):
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.1,
+            "temperature": 0.1 if temperature is None else temperature,
         }
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
@@ -179,7 +219,8 @@ class OllamaProvider(BaseLLMProvider):
         self.host = (host or os.environ.get("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
         self.model = model or os.environ.get("OLLAMA_MODEL") or os.environ.get("LLM_MODEL", "qwen2.5-coder:latest")
 
-    def generate(self, prompt: str, system_instruction: str, json_mode: bool = False) -> str:
+    def generate(self, prompt: str, system_instruction: str, json_mode: bool = False,
+                 temperature: Optional[float] = None) -> str:
         url = f"{self.host}/api/chat"
         headers = {"Content-Type": "application/json"}
         payload = {
@@ -189,7 +230,7 @@ class OllamaProvider(BaseLLMProvider):
                 {"role": "user", "content": prompt},
             ],
             "stream": False,
-            "options": {"temperature": 0.1},
+            "options": {"temperature": 0.1 if temperature is None else temperature},
         }
         if json_mode:
             payload["format"] = "json"
@@ -294,9 +335,9 @@ def get_configured_provider(
         if fast_m and ("gpt" in fast_m.lower() or "claude" in fast_m.lower()):
             fast_m = None
         default_gemini = (
-            "gemini-1.5-pro" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent")
-            else (fast_m or "gemini-1.5-flash") if tier == "fast"
-            else os.environ.get("GEMINI_MODEL") or gen_m or "gemini-2.5-flash"
+            "gemini-pro-latest" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent")
+            else (fast_m or "gemini-3.5-flash-lite") if tier == "fast"
+            else os.environ.get("GEMINI_MODEL") or gen_m or "gemini-3.5-flash-lite"
         )
         if resolved_model and ("gpt" in resolved_model.lower() or "claude" in resolved_model.lower()):
             resolved_model = None
@@ -362,9 +403,9 @@ def get_configured_provider(
         if fast_m and ("gpt" in fast_m.lower() or "claude" in fast_m.lower()):
             fast_m = None
         default_gemini = (
-            "gemini-1.5-pro" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent")
-            else (fast_m or "gemini-1.5-flash") if tier == "fast"
-            else os.environ.get("GEMINI_MODEL") or gen_m or "gemini-2.5-flash"
+            "gemini-pro-latest" if agent_name in ("ArchitectureReviewAgent", "BusinessStrategyAgent")
+            else (fast_m or "gemini-3.5-flash-lite") if tier == "fast"
+            else os.environ.get("GEMINI_MODEL") or gen_m or "gemini-3.5-flash-lite"
         )
         if resolved_model and ("gpt" in resolved_model.lower() or "claude" in resolved_model.lower()):
             resolved_model = None
@@ -432,14 +473,18 @@ def get_configured_provider(
 class BaseAgent:
     def __init__(
         self,
-        system_instruction: str,
+        system_instruction: str = "",
         provider: Optional[BaseLLMProvider] = None,
         tier: str = "primary",
+        model: Optional[str] = None,
     ):
-        self.system_instruction = system_instruction
+        self.system_instruction = system_instruction or (
+            "You are an ASCM specialist agent. Follow the caller's task instructions "
+            "and return concise, structured output."
+        )
         self.tier = tier
         agent_name = self.__class__.__name__
-        self.provider = provider or get_configured_provider(tier=self.tier, agent_name=agent_name)
+        self.provider = provider or get_configured_provider(tier=self.tier, agent_name=agent_name, model=model)
         self.provider_name = str(getattr(self.provider, "provider_name", "unknown"))
         raw_m = getattr(self.provider, "model", "default")
         self.model_name = "mock-model" if (hasattr(raw_m, "_mock_return_value") or "Mock" in type(raw_m).__name__) else str(raw_m)
@@ -455,11 +500,12 @@ class BaseAgent:
         start_time = time.time()
         agent_name = self.__class__.__name__
         try:
-            response = self.provider.generate(
-                prompt=sanitized_prompt,
-                system_instruction=self.system_instruction,
-                json_mode=json_mode,
-            )
+            gen_kwargs = dict(prompt=sanitized_prompt, system_instruction=self.system_instruction, json_mode=json_mode)
+            temp = getattr(self, "temperature", None)   # set by creative agents; None = provider default (0.1)
+            try:
+                response = self.provider.generate(**gen_kwargs, **({"temperature": temp} if temp is not None else {}))
+            except TypeError:   # custom/mocked provider without a temperature parameter
+                response = self.provider.generate(**gen_kwargs)
             elapsed_ms = (time.time() - start_time) * 1000
             provider_type = self.provider.__class__.__name__
             raw_m = getattr(self.provider, "model", "default")
@@ -494,6 +540,10 @@ class BaseAgent:
                 )
                 return _synthesize_fallback_response(agent_name, prompt, json_mode)
             raise
+
+    def call_llm(self, prompt: str, json_mode: bool = True) -> str:
+        """Backward-compatible alias used by newer scaffolded agents."""
+        return self.call(prompt, json_mode=json_mode)
 
 
 def _synthesize_fallback_response(agent_name: str, prompt: str, json_mode: bool) -> str:
@@ -767,6 +817,5 @@ def _synthesize_fallback_response(agent_name: str, prompt: str, json_mode: bool)
     if json_mode:
         return "{}"
     return "ASCM fallback response generated successfully."
-
 
 

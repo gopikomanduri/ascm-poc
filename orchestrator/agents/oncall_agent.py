@@ -7,8 +7,33 @@ from .base import BaseAgent
 class OnCallAgent(BaseAgent):
     """Incident Response: APM alerts -> RCA -> Fix proposal."""
 
-    def __init__(self, model: Optional[str] = None):
-        super().__init__(model=model, tier="fast")
+    def __init__(
+        self,
+        system_instruction: Optional[str] = None,
+        provider: Optional[Any] = None,
+        tier: str = "fast",
+        model: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            system_instruction=system_instruction or "You are an On-Call Incident Response Agent.",
+            provider=provider,
+            tier=tier,
+            model=model,
+        )
+
+    def run(self, alert: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        """Unified entrypoint for alert handling and incident analysis."""
+        active_alert = alert or kwargs.get("alert_data", {"id": "alert-default", "severity": "WARNING"})
+        received = self.receive_alert(active_alert)
+        logs = kwargs.get("logs", ["Incident triggered by system alert"])
+        rca = self.analyze_logs(received.get("alert_id", "alert-default"), logs)
+        fix = self.propose_fix(rca["root_causes"][0], rca["affected_services"])
+        return {
+            "received": received,
+            "root_cause_analysis": rca,
+            "proposed_fix": fix,
+        }
 
     def receive_alert(self, alert: Dict[str, Any]) -> Dict[str, Any]:
         """Receive APM alert."""

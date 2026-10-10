@@ -7,8 +7,25 @@ from .base import BaseAgent
 class APMAgent(BaseAgent):
     """Application Performance Monitoring: SLOs, alerting, instrumentation."""
 
-    def __init__(self, model: Optional[str] = None):
-        super().__init__(model=model, tier="primary")
+    def __init__(
+        self,
+        system_instruction: Optional[str] = None,
+        provider: Optional[Any] = None,
+        tier: str = "primary",
+        model: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            system_instruction=system_instruction or "You are an APM Agent.",
+            provider=provider,
+            tier=tier,
+            model=model,
+        )
+
+    def run(self, domain: str = "general", requirements: str = "", **kwargs) -> Dict[str, Any]:
+        """Unified entrypoint for SLO definition and alerting."""
+        reqs = requirements or kwargs.get("prd", "") or kwargs.get("goal", "")
+        return self.define_slos(domain=domain, requirements=reqs)
 
     def define_slos(self, domain: str, requirements: str) -> Dict[str, Any]:
         """Define SLOs (Service Level Objectives)."""
