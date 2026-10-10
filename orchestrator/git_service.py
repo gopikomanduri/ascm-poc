@@ -81,8 +81,7 @@ class GitService:
             "- [x] Static analysis / compile diagnostics verified",
             "- [x] Peer code review and architectural specification approved",
             "",
-            "---",
-            "*Generated autonomously by [ASCM](https://github.com/gopikomanduri/ascm-poc)*",
+            "*Generated autonomously by Outcode*",
         ])
         return "\n".join(lines)
 

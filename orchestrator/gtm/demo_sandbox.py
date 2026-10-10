@@ -85,7 +85,7 @@ class DemoSandboxService:
                 "show_hn": {
                     "headline": "Hacker News (Show HN)",
                     "copy": "Show HN: Outcode – Git daemon that prevents over-engineering & turns diffs into launches\n\nHey HN! We're building Outcode to solve the #1 cause of developer burnout: spending months writing pristine code that nobody ever hears about. Runs 100% locally with zero cloud vendor lock-in.",
-                    "cta": "https://github.com/gopikomanduri/ascm-poc"
+                    "cta": "https://outcode.ai"
                 }
             },
             "paypulse_fraud": {
@@ -125,7 +125,7 @@ class DemoSandboxService:
                 "show_hn": {
                     "headline": "Hacker News (Show HN)",
                     "copy": "Show HN: AST Verifier – Instant cross-repo breaking contract detection at commit time\n\nParses TypeScript and Go ASTs in git staging hooks to detect breaking schema mutations before you push.",
-                    "cta": "https://github.com/ast-verifier"
+                    "cta": "https://ast-verifier.dev"
                 }
             }
         },
