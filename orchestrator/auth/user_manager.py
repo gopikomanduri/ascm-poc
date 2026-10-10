@@ -6,7 +6,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from orchestrator.security.audit_logger import AUDIT_LOGGER
 from orchestrator.security.pii_scrubber import PIIScrubber
