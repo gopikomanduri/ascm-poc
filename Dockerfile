@@ -5,9 +5,8 @@ WORKDIR /app
 # Copy repo files
 COPY . /app
 
-# Dashboard server uses Python standard library for zero-latency startup.
-# Dependencies for validation and optional GCP Firestore sync
-RUN pip install --no-cache-dir pydantic google-cloud-firestore || true
+# Install dependencies: official Google GenAI SDK (google-genai), pydantic, and optional firestore
+RUN pip install --no-cache-dir google-genai pydantic google-cloud-firestore || true
 
 ENV PORT=8080
 EXPOSE 8080
