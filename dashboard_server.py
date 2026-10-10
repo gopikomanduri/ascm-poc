@@ -3,7 +3,10 @@ import argparse
 import os
 import sys
 import time
+from orchestrator.agents.base import _load_dotenv
 from orchestrator.dashboard import DashboardServer
+
+_load_dotenv()
 
 
 def main():
