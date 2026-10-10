@@ -70,13 +70,33 @@ class BaseLLMProvider(ABC):
 
 
 class GeminiProvider(BaseLLMProvider):
-    def __init__(self, api_key: str, model: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         from google import genai
         from google.genai.errors import ServerError
-        self.client = genai.Client(api_key=api_key, http_options={"timeout": int(float(os.environ.get("GEMINI_TIMEOUT_SEC", "120")) * 1000)})
+
+        timeout_ms = int(float(os.environ.get("GEMINI_TIMEOUT_SEC", "120")) * 1000)
+        use_vertex = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() in ("true", "1", "yes")
+        gcp_project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT")
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+        # When running on Google Cloud with Vertex AI or when project is set without API key
+        if use_vertex or (not api_key and gcp_project):
+            self.client = genai.Client(
+                vertexai=True,
+                project=gcp_project,
+                location=location,
+                http_options={"timeout": timeout_ms}
+            )
+        else:
+            effective_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            self.client = genai.Client(
+                api_key=effective_key,
+                http_options={"timeout": timeout_ms}
+            )
+
         self.ServerError = ServerError
         preferred = model or os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-3.5-flash-lite")
-        valid_defaults = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-flash-latest", "gemini-pro-latest"]
+        valid_defaults = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-pro-latest"]
         self.candidate_models = list(dict.fromkeys([preferred] + valid_defaults))
 
         self.provider_name = "gemini"
@@ -288,7 +308,13 @@ def get_configured_provider(
         resolved_model = os.environ.get("FAST_MODEL") or os.environ.get("FAST_LLM_MODEL")
 
     # Available keys detection
-    has_gemini = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+    has_gemini = bool(
+        os.environ.get("GEMINI_API_KEY")
+        or os.environ.get("GOOGLE_API_KEY")
+        or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        or os.environ.get("GCP_PROJECT")
+        or os.environ.get("GOOGLE_GENAI_USE_VERTEXAI")
+    )
     has_openai = bool(os.environ.get("OPENAI_API_KEY"))
     has_anthropic = bool(os.environ.get("ANTHROPIC_API_KEY"))
     has_ollama = bool(os.environ.get("OLLAMA_HOST") or os.environ.get("OLLAMA_MODEL"))
@@ -326,8 +352,10 @@ def get_configured_provider(
     # 1. Explicit provider selection
     if name == "gemini":
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        if not key:
-            raise RuntimeError("GEMINI_API_KEY is required for 'gemini' provider.")
+        gcp_project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT")
+        use_vertex = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() in ("true", "1", "yes")
+        if not key and not gcp_project and not use_vertex:
+            raise RuntimeError("GEMINI_API_KEY or GOOGLE_CLOUD_PROJECT is required for Google GenAI / Vertex AI models.")
         gen_m = os.environ.get("LLM_MODEL")
         if gen_m and ("gpt" in gen_m.lower() or "claude" in gen_m.lower()):
             gen_m = None

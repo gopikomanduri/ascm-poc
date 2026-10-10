@@ -185,6 +185,17 @@ class DemoSandboxService:
     }
 
     @staticmethod
+    def _get_gemini_client():
+        from google import genai
+        use_vertex = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() in ("true", "1", "yes")
+        gcp_project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT")
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
+        timeout_ms = int(float(os.environ.get("GEMINI_TIMEOUT_SEC", "120")) * 1000)
+        if use_vertex or gcp_project:
+            return genai.Client(vertexai=True, project=gcp_project, location=location, http_options={"timeout": timeout_ms})
+        return genai.Client(http_options={"timeout": timeout_ms})
+
+    @staticmethod
     def run_agent_demo(
         agent_type: str,
         scenario: str = "database_refactor",
@@ -193,8 +204,32 @@ class DemoSandboxService:
     ) -> Dict[str, Any]:
         agent_type = (agent_type or "mentor").lower().strip()
         scenario_key = (scenario or "").lower().strip()
+        user_prompt = (custom_input or "").strip()
 
-        # If a curated scenario is matched, return curated static masterpiece immediately
+        # If custom prompt is provided, run live through Google Models SDK
+        if user_prompt:
+            try:
+                client = DemoSandboxService._get_gemini_client()
+                model = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+                if agent_type == "mentor":
+                    prompt = f"Analyze developer isolation risk for: '{user_prompt}'. Return JSON with keys: risk_score (int), risk_level, headline, analysis, tough_love_quote, validation_actions (list)."
+                elif agent_type == "marketing":
+                    prompt = f"Generate developer launch copy for: '{user_prompt}'. Return JSON with keys: x_post (headline, copy, cta), linkedin_post (headline, copy, cta), show_hn (headline, copy, cta)."
+                else:
+                    prompt = f"Generate B2B cold outbound for: '{user_prompt}'. Return JSON with keys: target_persona, cold_email (subject, body, word_count), discovery_questions (list), cal_booking_flow."
+                
+                resp = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config={"response_mime_type": "application/json"}
+                )
+                if resp and resp.text:
+                    parsed = json.loads(resp.text)
+                    return {"status": "ok", "agent": agent_type.capitalize() + "Agent", "live_google_models_sdk": True, **parsed}
+            except Exception as e:
+                logger.warning(f"Live Google Models SDK execution failed, falling back to curated: {e}")
+
+        # If a curated scenario is matched, return curated static benchmark immediately
         agent_scenarios = DemoSandboxService.CURATED_DATA.get(agent_type, {})
         if scenario_key in agent_scenarios:
             return agent_scenarios[scenario_key]
