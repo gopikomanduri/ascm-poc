@@ -130,6 +130,23 @@ class WaitlistSyncAgent:
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="WaitlistSyncAgent: Auto-sync Cloud Run waitlist into Google Cloud")
+    parser.add_argument("--daemon", "--watch", action="store_true", help="Run continuously in background auto-sync loop")
+    parser.add_argument("--interval", type=int, default=15, help="Interval in seconds between syncs (default: 15)")
+    args = parser.parse_args()
+
     agent = WaitlistSyncAgent()
-    res = agent.sync_once()
-    print(json.dumps(res, indent=2))
+    if args.daemon:
+        print(f"[+] 🛰️ SalesAgent Auto-Syncer running in Google Cloud — polling every {args.interval}s")
+        print(f"[+] Local destination: {agent.local_file}")
+        print("[+] Press Ctrl+C to stop.\n")
+        while True:
+            try:
+                agent.sync_once()
+            except Exception as err:
+                print(f"[!] Sync error: {err}")
+            time.sleep(args.interval)
+    else:
+        res = agent.sync_once()
+        print(json.dumps(res, indent=2))
