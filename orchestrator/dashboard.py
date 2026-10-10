@@ -865,10 +865,10 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(HTML_DASHBOARD_PAGE.encode("utf-8"))
 
         elif path in ("/dashboard", "/dashboard.html", "/admin", "/ascm"):
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            # V1: Private Alpha - redirect external visitors to waitlist
+            self.send_response(302)
+            self.send_header("Location", "/#waitlist-box")
             self.end_headers()
-            self.wfile.write(HTML_DASHBOARD_PAGE.encode("utf-8"))
 
         elif path in ("/landing", "/landing.html"):
             self._serve_static_file("landing.html")
