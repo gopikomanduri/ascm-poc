@@ -967,6 +967,19 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
                 }
             )
             self._send_json(res)
+        elif path == "/api/demo/agent":
+            from orchestrator.gtm.demo_sandbox import DemoSandboxService
+            agent_type = payload.get("agent_type", "mentor")
+            scenario = payload.get("scenario", "database_refactor")
+            custom_input = payload.get("custom_input", "")
+            domain = payload.get("domain", "devtools")
+            res = DemoSandboxService.run_agent_demo(
+                agent_type=agent_type,
+                scenario=scenario,
+                custom_input=custom_input,
+                domain=domain,
+            )
+            self._send_json(res)
         elif path == "/api/apps/create":
             res = USER_MANAGER.add_user_app(payload)
             self._send_json(res)
