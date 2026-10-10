@@ -450,7 +450,7 @@
       font-family: 'JetBrains Mono', monospace; color: var(--cyan);
     }
 
-    /* ── Live Agent Playground ── */
+    /* ── Live Agent Playground (Curated Showcase) ── */
     .playground-box {
       background: var(--bg-card);
       border: 1px solid rgba(0, 240, 255, 0.3);
@@ -471,35 +471,34 @@
       background: rgba(0, 240, 255, 0.12); border-color: var(--cyan); color: var(--cyan);
       box-shadow: 0 0 15px rgba(0, 240, 255, 0.25);
     }
-    .presets-label {
-      font-size: 12px; color: var(--text-dim); margin-bottom: 10px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace;
+    .scenario-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px; margin-bottom: 24px;
     }
-    .presets-row {
-      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px;
+    .scenario-card {
+      background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: all 0.2s;
+      text-align: left;
     }
-    .preset-chip {
-      background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1);
-      color: #cbd5e1; font-size: 12.5px; padding: 6px 14px; border-radius: 8px;
-      cursor: pointer; transition: all 0.2s;
+    .scenario-card:hover {
+      background: rgba(255, 255, 255, 0.06); border-color: rgba(0, 240, 255, 0.4);
+      transform: translateY(-2px);
     }
-    .preset-chip:hover {
-      background: rgba(255, 255, 255, 0.1); border-color: var(--cyan); color: #fff;
+    .scenario-card.active {
+      background: rgba(0, 240, 255, 0.08); border-color: var(--cyan);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.18);
     }
-    .playground-input {
-      width: 100%; background: #060914; border: 1px solid var(--border);
-      border-radius: 12px; padding: 14px 18px; color: #fff; font-size: 14px;
-      font-family: 'Plus Jakarta Sans', sans-serif; resize: vertical; min-height: 70px;
-      margin-bottom: 18px; outline: none; transition: border-color 0.2s; box-sizing: border-box;
+    .scenario-card-title {
+      font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 4px;
+      display: flex; align-items: center; justify-content: space-between;
     }
-    .playground-input:focus { border-color: var(--cyan); box-shadow: 0 0 15px rgba(0, 240, 255, 0.2); }
-    .action-row {
-      display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;
-      flex-wrap: wrap; gap: 12px;
+    .scenario-card-desc {
+      font-size: 11.5px; color: var(--text-dim); line-height: 1.4;
     }
     .play-result-card {
       background: #060914; border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px; padding: 26px 28px; position: relative; min-height: 180px;
+      border-radius: 16px; padding: 26px 28px; position: relative; min-height: 200px;
+      margin-bottom: 24px;
     }
     .copy-btn {
       position: absolute; top: 20px; right: 20px;
@@ -508,6 +507,49 @@
       cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: all 0.2s;
     }
     .copy-btn:hover { background: rgba(0, 240, 255, 0.15); color: var(--cyan); border-color: var(--cyan); }
+
+    /* ── Rolling Access Roadmap ── */
+    .rolling-release-box {
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.06) 0%, rgba(6, 9, 20, 0.7) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 16px; padding: 24px 28px;
+    }
+    .rolling-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
+      flex-wrap: wrap; gap: 10px;
+    }
+    .cohort-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #10b981; font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+      font-weight: 700; padding: 4px 10px; border-radius: 999px;
+    }
+    .cohort-timeline {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px; margin-bottom: 20px;
+    }
+    .cohort-step {
+      background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px; padding: 14px 16px;
+    }
+    .cohort-step.current {
+      border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.06);
+    }
+    .cohort-step-header {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+      color: var(--cyan); text-transform: uppercase; margin-bottom: 6px;
+    }
+    .cohort-step.current .cohort-step-header { color: #10b981; }
+    .cohort-step-title {
+      font-size: 13.5px; font-weight: 700; color: #fff; margin-bottom: 4px;
+    }
+    .cohort-step-desc {
+      font-size: 12px; color: var(--text-dim); line-height: 1.4;
+    }
+    .cohort-footer {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 12px; border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 16px;
+    }
   </style>
 </head>
 <body>
@@ -589,12 +631,12 @@
     </div>
   </section>
 
-  <!-- Live AI Agent Studio / Cloud Playground -->
+  <!-- Live Curated Agent Showcase / V1 Sandbox -->
   <section class="section-wrap" id="playground" style="padding-top:40px;">
     <div class="section-header">
-      <p class="section-label">Interactive Cloud Sandbox</p>
-      <h2 class="section-title">Test The Agents Live In Your Browser</h2>
-      <p class="section-desc">Zero terminal setup. Test how MentorAgent stops over-engineering, and how MarketingAgent & SalesAgent turn code diffs into real customer demand.</p>
+      <p class="section-label">V1 Curated Agent Showcase</p>
+      <h2 class="section-title">Experience Autonomous Market Pressure</h2>
+      <p class="section-desc">Select any real-world coding scenario below to inspect how MentorAgent, MarketingAgent, and SalesAgent intercept developer isolation and generate authentic customer demand.</p>
     </div>
 
     <div class="playground-box">
@@ -605,30 +647,54 @@
         <button class="agent-pill" id="pill-sales" onclick="setDemoAgent('sales')">🎯 3. SalesAgent (Cold Outbound)</button>
       </div>
 
-      <!-- Quick Preset Scenarios -->
-      <div class="presets-label">Choose a Scenario or Type Your Own:</div>
-      <div class="presets-row" id="presets-container">
-        <!-- Dynamically populated based on active agent -->
-      </div>
-
-      <!-- Custom Input Field -->
-      <textarea id="demo-custom-input" class="playground-input" placeholder="Describe your coding activity or product feature..."></textarea>
-
-      <!-- Action Row -->
-      <div class="action-row">
-        <div style="font-size:13px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">
-          ⚡ Powered by <span style="color:var(--cyan);font-weight:700;">Google Gemini & Outcode Engine</span>
-        </div>
-        <button class="btn btn-primary" id="demo-run-btn" onclick="executeAgentDemo()" style="padding:12px 28px;font-size:14px;">
-          Run Agent Live ⚡
-        </button>
+      <!-- Curated Scenario Selector Cards -->
+      <div class="presets-label">Select Curated Scenario:</div>
+      <div class="scenario-grid" id="scenarios-container">
+        <!-- Dynamically rendered based on active agent -->
       </div>
 
       <!-- Result Display Card -->
       <div class="play-result-card" id="demo-result-card">
         <button class="copy-btn" id="demo-copy-btn" onclick="copyDemoOutput()">📋 Copy Output</button>
         <div id="demo-output-content">
-          <!-- Populated by JavaScript -->
+          <!-- Populated instantly by JavaScript -->
+        </div>
+      </div>
+
+      <!-- Rolling Access Roadmap / 10-Day & 20-Day Cohort Schedule -->
+      <div class="rolling-release-box">
+        <div class="rolling-header">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span class="cohort-badge">🚀 Rolling Access Schedule</span>
+            <span style="font-size:13.5px;color:#fff;font-weight:700;">Want to test your own private git repo or custom diffs?</span>
+          </div>
+        </div>
+
+        <div class="cohort-timeline">
+          <div class="cohort-step current">
+            <div class="cohort-step-header">Phase 1 · Live Today (V1)</div>
+            <div class="cohort-step-title">Curated Scenario Sandbox</div>
+            <div class="cohort-step-desc">Zero-setup showcase demonstrating how Outcode intercepts isolation and generates demand.</div>
+          </div>
+          <div class="cohort-step">
+            <div class="cohort-step-header" style="color:#f59e0b;">Phase 2 · Day 10 Release</div>
+            <div class="cohort-step-title">Custom Diff Sandbox</div>
+            <div class="cohort-step-desc">Waitlist subscribers receive unlock links to paste custom commit diffs and inspect agent reasoning.</div>
+          </div>
+          <div class="cohort-step">
+            <div class="cohort-step-header" style="color:#a855f7;">Phase 3 · Day 20 Access</div>
+            <div class="cohort-step-title">CLI Terminal Daemon</div>
+            <div class="cohort-step-desc">Selected technical founders receive private invitations to install <code>outcode watch</code> locally.</div>
+          </div>
+        </div>
+
+        <div class="cohort-footer">
+          <div style="font-size:13px;color:var(--text-dim);">
+            Join the priority waitlist to unlock <strong style="color:#fff;">Day 10 custom playground access</strong>.
+          </div>
+          <a href="#waitlist-box" class="btn btn-primary" onclick="focusWaitlistEmail()" style="padding:10px 22px;font-size:13.5px;">
+            Request Cohort Access →
+          </a>
         </div>
       </div>
     </div>
@@ -989,26 +1055,204 @@
       }
     }
 
-    /* ── Live Playground Logic ── */
+    /* ── V1 Curated Scenario Showcase Logic (Static-First) ── */
     let currentDemoAgent = 'mentor';
+    let currentActiveScenario = 'database_refactor';
     let currentRawDemoOutput = '';
 
-    const demoPresets = {
-      mentor: [
-        { label: "⚡ 3-week schema refactor (142 files, 0 user talks)", text: "Refactoring Postgres schema and edge cases for 3 weeks (142 files, 0 customer conversations)" },
-        { label: "⚡ Polishing CSS shadows & buttons for 6 days", text: "Polishing dark-mode CSS shadows and custom buttons for 6 days straight (no landing page live)" },
-        { label: "⚡ Built OAuth2 & Redis rate limiting (0 users)", text: "Built full OAuth2, Redis token caching, and rate limiting microservice (0 paying users)" }
-      ],
-      marketing: [
-        { label: "⚡ Outcode: Local git daemon & auto-GTM story generator", text: "Outcode: A local-first git daemon that stops over-engineering & turns diffs into launches" },
-        { label: "⚡ PayPulse: Real-time fraud detection pipeline for fintech", text: "PayPulse: Real-time fraud detection pipeline with instant webhook triggers and settlement audits" },
-        { label: "⚡ AST Multi-Repo Contract Verifier for microservices", text: "Autonomous multi-repo AST contract verifier that prevents breaking changes across client SDKs" }
-      ],
-      sales: [
-        { label: "⚡ Target: VP Eng at Series A-B B2B SaaS", text: "Automated multi-repo AST contract verifier for fast-growing engineering teams" },
-        { label: "⚡ Target: CTOs at HealthTech & FinTech startups", text: "Enterprise SOC-2 tamper-proof audit logger and PII scrubber for cloud microservices" },
-        { label: "⚡ Target: Head of Payments & Operations", text: "Real-time cross-border payment gateway with zero transaction volatility" }
-      ]
+    const curatedScenarios = {
+      mentor: {
+        database_refactor: {
+          key: "database_refactor",
+          title: "⚡ 3-Week Schema Refactor",
+          subtitle: "142 files committed · 0 customer calls",
+          data: {
+            agent: "MentorAgent",
+            risk_score: 92,
+            risk_level: "CRITICAL ISOLATION ALERT",
+            headline: "🚨 You are hiding behind your compiler.",
+            analysis: "You have spent 21 straight days refactoring Postgres schema tables, edge cases, and migrations without speaking to a single paying customer. Code written in a vacuum has zero market value until validated by user behavior.",
+            tough_love_quote: "Stop optimizing database architecture nobody asked for. Put down the keyboard, step away from the compiler, and put 3 customer discovery calls on your calendar today.",
+            validation_actions: [
+              "Draft a 1-page architecture breakdown on LinkedIn/X asking: 'How do you handle this migration in prod?'",
+              "Send 5 direct messages to target engineering managers before writing another line of SQL.",
+              "Lock in 2 design partner validation interviews before merging this PR."
+            ],
+            next_step: "👉 Run MarketingAgent above to turn this diff into authentic developer launch content."
+          }
+        },
+        css_polishing: {
+          key: "css_polishing",
+          title: "🎨 6 Days CSS Shadows & Hover Effects",
+          subtitle: "Dark-mode perfection · 0 landing page traffic",
+          data: {
+            agent: "MentorAgent",
+            risk_score: 86,
+            risk_level: "HIGH PROCRASTINATION RISK",
+            headline: "🛑 The Pixel-Perfection Coping Mechanism.",
+            analysis: "Spending 6 consecutive days adjusting border-radii, glassmorphism blur, and button hovers when your core value proposition has zero traffic is emotional avoidance of customer rejection.",
+            tough_love_quote: "Ugly products that solve hair-on-fire problems generate millions. Beautiful products nobody needs go to the startup graveyard. Ship it raw and talk to users.",
+            validation_actions: [
+              "Deploy the current unpolished UI to production immediately.",
+              "Post a 90-second raw Loom walkthrough on Twitter/X demonstrating the core utility.",
+              "Ask 3 beta developers to click through the user flow while screen-sharing."
+            ],
+            next_step: "👉 Run MarketingAgent above to generate your raw 'building in public' launch story."
+          }
+        },
+        complex_auth: {
+          key: "complex_auth",
+          title: "⚙️ Premature OAuth2 & Redis Microservice",
+          subtitle: "Enterprise architecture · 0 active users",
+          data: {
+            agent: "MentorAgent",
+            risk_score: 95,
+            risk_level: "CRITICAL OVER-ENGINEERING RISK",
+            headline: "⚠️ Premature Scale on an Empty Product.",
+            analysis: "You architected enterprise-grade multi-tenant JWT rotation, distributed Redis rate limiters, and split services into Docker containers for exactly zero active users.",
+            tough_love_quote: "You are building infrastructure for 100,000 concurrent requests when you can't even get 1 person to sign up. Replace the microservice with a monolith in 1 repo and get your first user.",
+            validation_actions: [
+              "Collapse the microservices back into a single fast monolith executable.",
+              "Manually onboard your first 3 users via a shared spreadsheet if needed.",
+              "Validate payment willingness with a Stripe checkout link before configuring Redis clusters."
+            ],
+            next_step: "👉 Run SalesAgent above to draft a cold outreach email to test willingness to pay."
+          }
+        }
+      },
+      marketing: {
+        git_daemon: {
+          key: "git_daemon",
+          title: "🚀 Outcode Git Daemon & Auto-GTM",
+          subtitle: "Developer tool · Over-engineering interception",
+          data: {
+            agent: "MarketingAgent",
+            x_post: {
+              headline: "𝕏 / Twitter Viral Launch Thread",
+              copy: "Most technical founders don't fail because they can't code.\n\nThey fail because they build in isolation for 6 months without ever telling the world.\n\nWe built Outcode: a local git daemon that lives in your terminal, catches you when you over-engineer in a vacuum, and auto-generates your social launches directly from your git diffs.\n\nYour terminal just hired a 24/7 GTM team. Stop coding in the dark ⚡👇",
+              cta: "Join the Public Alpha: outcode.ai"
+            },
+            linkedin_post: {
+              headline: "LinkedIn Technical Founder Story",
+              copy: "Last week, I almost wasted another 2 weeks over-engineering a database cache nobody asked for.\n\nWhy? Because fixing code feels comfortable. Talking to customers feels vulnerable.\n\nTechnical co-founders fall into this trap constantly: we hide behind our compilers.\n\nThat's why we built Outcode. It runs locally as a git daemon. Every time you commit, it checks your isolation risk, reminds you to talk to users, and drafts your developer launch posts and outbound emails directly from code changes.\n\nEngineers: what feature did you waste the most runway building before speaking to a customer?",
+              cta: "Link to free early access in comments 🚀"
+            },
+            show_hn: {
+              headline: "Hacker News (Show HN)",
+              copy: "Show HN: Outcode – Git daemon that prevents over-engineering & turns diffs into launches\n\nHey HN! We're building Outcode to solve the #1 cause of developer burnout: spending months writing pristine code that nobody ever hears about. Runs 100% locally with zero cloud vendor lock-in.",
+              cta: "https://github.com/gopikomanduri/ascm-poc"
+            }
+          }
+        },
+        paypulse_fraud: {
+          key: "paypulse_fraud",
+          title: "💳 PayPulse FinTech Fraud Pipeline",
+          subtitle: "<40ms anomaly scoring · Webhook reconciliation",
+          data: {
+            agent: "MarketingAgent",
+            x_post: {
+              headline: "𝕏 / Twitter Viral Launch Thread",
+              copy: "Card fraud costs merchants $38B every year.\n\nLegacy rule engines take 800ms per checkout. We built PayPulse: sub-40ms anomaly scoring with instant Webhook reconciliation.\n\nHere's how we reduced false declines by 64% using real-time streaming graph analysis 🧵👇",
+              cta: "Read the engineering benchmark: paypulse.dev/speed"
+            },
+            linkedin_post: {
+              headline: "LinkedIn Technical Founder Story",
+              copy: "Most fraud engines penalize your best customers. When a false positive blocks a legitimate checkout, you lose lifetime value.\n\nWe just shipped PayPulse v1: a high-throughput transaction evaluation pipeline processing 10,000 tx/sec with zero latency overhead.\n\nTo the FinTech builders out there: what's your biggest headache with legacy fraud APIs?",
+              cta: "Live benchmark & API playground in the comments 👇"
+            },
+            show_hn: {
+              headline: "Hacker News (Show HN)",
+              copy: "Show HN: PayPulse – Open-source streaming fraud scoring engine (<40ms latency)\n\nBuilt in Go and Rust to eliminate false positives in cross-border checkout flows without slowing down user authorization.",
+              cta: "https://paypulse.dev"
+            }
+          }
+        },
+        ast_verifier: {
+          key: "ast_verifier",
+          title: "🔍 Autonomous AST Contract Verifier",
+          subtitle: "Git hook schema verifier · Microservices",
+          data: {
+            agent: "MarketingAgent",
+            x_post: {
+              headline: "𝕏 / Twitter Viral Launch Thread",
+              copy: "Breaking changes in private microservice APIs are a nightmare.\n\nWe just shipped AST Verifier: intercepts pull requests, parses downstream client ASTs, and blocks breaking schema changes before CI runs.\n\nStop debugging runtime type mismatches in production ⚡",
+              cta: "Try the CLI: npm i -g @ast/verifier"
+            },
+            linkedin_post: {
+              headline: "LinkedIn Technical Founder Story",
+              copy: "If your engineering team has ever broken a production client SDK because of an undocumented REST field rename, you know the pain.\n\nWe automated cross-repo AST inspection into git commit hooks. Catch semantic contract breaks in 200ms without spinning up Docker containers.\n\nEngineering managers: how do you prevent breaking schema changes across repositories today?",
+              cta: "Open-source repo linked below 👇"
+            },
+            show_hn: {
+              headline: "Hacker News (Show HN)",
+              copy: "Show HN: AST Verifier – Instant cross-repo breaking contract detection at commit time\n\nParses TypeScript and Go ASTs in git staging hooks to detect breaking schema mutations before you push.",
+              cta: "https://github.com/ast-verifier"
+            }
+          }
+        }
+      },
+      sales: {
+        vp_eng_saas: {
+          key: "vp_eng_saas",
+          title: "🎯 Target: VP Engineering at Series A SaaS",
+          subtitle: "Engineering velocity · 25-100 developer team",
+          data: {
+            agent: "SalesAgent",
+            target_persona: "VP of Engineering / Head of Tech (Series A-B SaaS, 25-100 devs)",
+            cold_email: {
+              subject: "quick question on engineering sprint velocity",
+              body: "Hey Alex,\n\nNoticed your engineering team has doubled this quarter. Most growing squads burn ~20% of dev bandwidth over-engineering features before customer validation.\n\nWe built an autonomous daemon that flags isolation risk directly from git diffs.\n\nOpen to a 5-minute teardown this Thursday?",
+              word_count: 39
+            },
+            discovery_questions: [
+              "How do your tech leads currently identify PRs that are over-engineered before they get merged?",
+              "How many developer hours per sprint get spent refactoring modules that end up with near-zero user engagement?",
+              "If a background daemon automatically drafted customer discovery questions for new PRs, would your team test it?"
+            ],
+            cal_booking_flow: "Warm reply detected → Auto-dispatches Cal.com 15-min discovery link with founder calendar."
+          }
+        },
+        cto_healthtech: {
+          key: "cto_healthtech",
+          title: "🛡️ Target: CTOs at HealthTech & FinTech",
+          subtitle: "SOC-2 Type II audit trail · Compliance burden",
+          data: {
+            agent: "SalesAgent",
+            target_persona: "CTO / Chief Information Security Officer (HealthTech & FinTech)",
+            cold_email: {
+              subject: "audit trail overhead on your latest release",
+              body: "Hey Sarah,\n\nSaw your recent SOC-2 Type II announcement. Usually that compliance workload pulls 2-3 senior devs off product features for months.\n\nWe built an automated terminal daemon that generates tamper-evident audit logs directly from commit diffs.\n\nWorth a quick 5-min look?",
+              word_count: 41
+            },
+            discovery_questions: [
+              "What's the current engineering burden of compiling release evidence for external security audits?",
+              "How often do code changes bypass your compliance checklist during emergency hotfixes?",
+              "Would automating commit verification into your git workflow save your team at least 10 hours a week?"
+            ],
+            cal_booking_flow: "Direct routing into priority compliance pilot queue."
+          }
+        },
+        head_payments: {
+          key: "head_payments",
+          title: "🌐 Target: Head of Payments & Ops",
+          subtitle: "Cross-border settlement · Slippage monitoring",
+          data: {
+            agent: "SalesAgent",
+            target_persona: "Head of Payments / Director of Financial Infrastructure",
+            cold_email: {
+              subject: "handling cross-border settlement volatility",
+              body: "Hey Marcus,\n\nQuick note — seen your cross-border volume growing in LATAM. Most payment ops teams lose 1-2% on hidden FX slippage during weekend batches.\n\nWe built a real-time ledger verification tool that catches settlement discrepancies instantly.\n\nFree for a brief 7-minute intro next week?",
+              word_count: 38
+            },
+            discovery_questions: [
+              "What is your current reconciliation delay between transaction authorization and bank settlement?",
+              "How do you handle automated dispute detection before chargeback penalties kick in?",
+              "Would real-time settlement monitoring allow your team to expand into new currency corridors faster?"
+            ],
+            cal_booking_flow: "Direct calendar invite with payment engineering lead."
+          }
+        }
+      }
     };
 
     function setDemoAgent(agent) {
@@ -1017,56 +1261,41 @@
       const activePill = document.getElementById(`pill-${agent}`);
       if (activePill) activePill.classList.add('active');
 
-      const container = document.getElementById('presets-container');
-      const presets = demoPresets[agent] || [];
-      container.innerHTML = presets.map((p, idx) => 
-        `<button class="preset-chip" onclick="applyPreset('${p.text.replace(/'/g, "\\'")}')">${p.label}</button>`
-      ).join('');
+      const container = document.getElementById('scenarios-container');
+      const agentScenarios = curatedScenarios[agent] || {};
+      const scenarioKeys = Object.keys(agentScenarios);
 
-      const input = document.getElementById('demo-custom-input');
-      const placeholders = {
-        mentor: "Describe what you've been coding in isolation (e.g. Spent 2 weeks perfecting database index caches...)",
-        marketing: "Enter your product feature or git diff (e.g. Built automated webhook retry engine with exponential backoff...)",
-        sales: "Describe your product to generate B2B cold outreach & discovery questions..."
-      };
-      input.placeholder = placeholders[agent] || "";
-      input.value = presets[0] ? presets[0].text : "";
+      container.innerHTML = scenarioKeys.map((key, idx) => {
+        const s = agentScenarios[key];
+        const isActive = idx === 0 ? 'active' : '';
+        return `
+          <button class="scenario-card ${isActive}" id="scenario-btn-${key}" onclick="selectCuratedScenario('${agent}', '${key}')">
+            <div class="scenario-card-title">
+              <span>${s.title}</span>
+              <span style="font-size:11px;color:var(--cyan);font-family:'JetBrains Mono',monospace;">V1 Benchmark</span>
+            </div>
+            <div class="scenario-card-desc">${s.subtitle}</div>
+          </button>
+        `;
+      }).join('');
 
-      executeAgentDemo();
+      if (scenarioKeys.length > 0) {
+        selectCuratedScenario(agent, scenarioKeys[0]);
+      }
     }
 
-    function applyPreset(text) {
-      document.getElementById('demo-custom-input').value = text;
-      executeAgentDemo();
-    }
+    function selectCuratedScenario(agent, key) {
+      currentDemoAgent = agent;
+      currentActiveScenario = key;
 
-    async function executeAgentDemo() {
-      const btn = document.getElementById('demo-run-btn');
-      const outputDiv = document.getElementById('demo-output-content');
-      const customInput = document.getElementById('demo-custom-input').value.trim();
+      // Update active card styling
+      document.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('active'));
+      const card = document.getElementById(`scenario-btn-${key}`);
+      if (card) card.classList.add('active');
 
-      btn.disabled = true;
-      btn.textContent = 'Agent Reasoning with Gemini... ⚡';
-      outputDiv.innerHTML = '<div style="color:var(--cyan);font-family:\'JetBrains Mono\',monospace;padding:20px 0;">⚡ Calling Outcode AI Agent Daemon on Google Cloud...</div>';
-
-      try {
-        const resp = await fetch('/api/demo/agent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agent_type: currentDemoAgent,
-            custom_input: customInput,
-            scenario: 'custom'
-          })
-        });
-
-        const data = await resp.json();
-        renderDemoOutput(data);
-      } catch (err) {
-        outputDiv.innerHTML = '<div style="color:#ef4444;">Network error running agent demo. Please try again.</div>';
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Run Agent Live ⚡';
+      const scenarioObj = curatedScenarios[agent]?.[key];
+      if (scenarioObj && scenarioObj.data) {
+        renderDemoOutput(scenarioObj.data);
       }
     }
 
@@ -1157,7 +1386,15 @@
       }
     }
 
-    // Initialize playground on load
+    function focusWaitlistEmail() {
+      const emailInput = document.getElementById('waitlist-email-input');
+      if (emailInput) {
+        emailInput.focus();
+        emailInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    // Initialize curated showcase on load
     window.addEventListener('DOMContentLoaded', () => {
       setDemoAgent('mentor');
     });

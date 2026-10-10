@@ -11,10 +11,178 @@ logger = logging.getLogger("DemoSandbox")
 
 class DemoSandboxService:
     """
-    Executes live browser demos of MentorAgent, MarketingAgent, and SalesAgent.
-    Works seamlessly on Google Cloud Run with Gemini API when available,
-    and provides instant high-fidelity domain responses when offline.
+    Curated Scenario Showcase for MentorAgent, MarketingAgent, and SalesAgent.
+    Provides instant, zero-latency, high-fidelity agent outputs for V1.
     """
+
+    # Static Curated Scenario Data for V1
+    CURATED_DATA = {
+        "mentor": {
+            "database_refactor": {
+                "status": "ok",
+                "agent": "MentorAgent",
+                "scenario_title": "3-Week Schema Refactor (142 files, 0 customer calls)",
+                "risk_score": 92,
+                "risk_level": "CRITICAL ISOLATION ALERT",
+                "headline": "🚨 You are hiding behind your compiler.",
+                "analysis": "You have spent 21 straight days refactoring Postgres schema tables, edge cases, and migrations without speaking to a single paying customer. Code written in a vacuum has zero market value until validated by user behavior.",
+                "tough_love_quote": "Stop optimizing database architecture nobody asked for. Put down the keyboard, step away from the compiler, and put 3 customer discovery calls on your calendar today.",
+                "validation_actions": [
+                    "Draft a 1-page architecture breakdown on LinkedIn/X asking: 'How do you handle this migration in prod?'",
+                    "Send 5 direct messages to target engineering managers before writing another line of SQL.",
+                    "Lock in 2 design partner validation interviews before merging this PR."
+                ],
+                "next_step": "👉 Run MarketingAgent above to turn this diff into authentic developer launch content."
+            },
+            "css_polishing": {
+                "status": "ok",
+                "agent": "MentorAgent",
+                "scenario_title": "6 Days Polishing Custom CSS Shadows & Dark Mode",
+                "risk_score": 86,
+                "risk_level": "HIGH PROCRASTINATION RISK",
+                "headline": "🛑 The Pixel-Perfection Coping Mechanism.",
+                "analysis": "Spending 6 consecutive days adjusting border-radii, glassmorphism blur, and button hovers when your core value proposition has zero traffic is emotional avoidance of customer rejection.",
+                "tough_love_quote": "Ugly products that solve hair-on-fire problems generate millions. Beautiful products nobody needs go to the startup graveyard. Ship it raw and talk to users.",
+                "validation_actions": [
+                    "Deploy the current unpolished UI to production immediately.",
+                    "Post a 90-second raw Loom walkthrough on Twitter/X demonstrating the core utility.",
+                    "Ask 3 beta developers to click through the user flow while screen-sharing."
+                ],
+                "next_step": "👉 Run MarketingAgent above to generate your raw 'building in public' launch story."
+            },
+            "complex_auth": {
+                "status": "ok",
+                "agent": "MentorAgent",
+                "scenario_title": "Premature OAuth2, Redis Caching & Microservice Split",
+                "risk_score": 95,
+                "risk_level": "CRITICAL OVER-ENGINEERING RISK",
+                "headline": "⚠️ Premature Scale on an Empty Product.",
+                "analysis": "You architected enterprise-grade multi-tenant JWT rotation, distributed Redis rate limiters, and split services into Docker containers for exactly zero active users.",
+                "tough_love_quote": "You are building infrastructure for 100,000 concurrent requests when you can't even get 1 person to sign up. Replace the microservice with a monolith in 1 repo and get your first user.",
+                "validation_actions": [
+                    "Collapse the microservices back into a single fast monolith executable.",
+                    "Manually onboard your first 3 users via a shared spreadsheet if needed.",
+                    "Validate payment willingness with a Stripe checkout link before configuring Redis clusters."
+                ],
+                "next_step": "👉 Run SalesAgent above to draft a cold outreach email to test willingness to pay."
+            }
+        },
+        "marketing": {
+            "git_daemon": {
+                "status": "ok",
+                "agent": "MarketingAgent",
+                "scenario_title": "Outcode: Local Git Daemon & Auto-GTM Launch Stories",
+                "x_post": {
+                    "headline": "𝕏 / Twitter Viral Launch Thread",
+                    "copy": "Most technical founders don't fail because they can't code.\n\nThey fail because they build in isolation for 6 months without ever telling the world.\n\nWe built Outcode: a local git daemon that lives in your terminal, catches you when you over-engineer in a vacuum, and auto-generates your social launches directly from your git diffs.\n\nYour terminal just hired a 24/7 GTM team. Stop coding in the dark ⚡👇",
+                    "cta": "Join the Public Alpha: outcode.ai"
+                },
+                "linkedin_post": {
+                    "headline": "LinkedIn Technical Founder Story",
+                    "copy": "Last week, I almost wasted another 2 weeks over-engineering a database cache nobody asked for.\n\nWhy? Because fixing code feels comfortable. Talking to customers feels vulnerable.\n\nTechnical co-founders fall into this trap constantly: we hide behind our compilers.\n\nThat's why we built Outcode. It runs locally as a git daemon. Every time you commit, it checks your isolation risk, reminds you to talk to users, and drafts your developer launch posts and outbound emails directly from code changes.\n\nEngineers: what feature did you waste the most runway building before speaking to a customer?",
+                    "cta": "Link to free early access in comments 🚀"
+                },
+                "show_hn": {
+                    "headline": "Hacker News (Show HN)",
+                    "copy": "Show HN: Outcode – Git daemon that prevents over-engineering & turns diffs into launches\n\nHey HN! We're building Outcode to solve the #1 cause of developer burnout: spending months writing pristine code that nobody ever hears about. Runs 100% locally with zero cloud vendor lock-in.",
+                    "cta": "https://github.com/gopikomanduri/ascm-poc"
+                }
+            },
+            "paypulse_fraud": {
+                "status": "ok",
+                "agent": "MarketingAgent",
+                "scenario_title": "PayPulse: Real-Time FinTech Fraud Pipeline",
+                "x_post": {
+                    "headline": "𝕏 / Twitter Viral Launch Thread",
+                    "copy": "Card fraud costs merchants $38B every year.\n\nLegacy rule engines take 800ms per checkout. We built PayPulse: sub-40ms anomaly scoring with instant Webhook reconciliation.\n\nHere's how we reduced false declines by 64% using real-time streaming graph analysis 🧵👇",
+                    "cta": "Read the engineering benchmark: paypulse.dev/speed"
+                },
+                "linkedin_post": {
+                    "headline": "LinkedIn Technical Founder Story",
+                    "copy": "Most fraud engines penalize your best customers. When a false positive blocks a legitimate checkout, you lose lifetime value.\n\nWe just shipped PayPulse v1: a high-throughput transaction evaluation pipeline processing 10,000 tx/sec with zero latency overhead.\n\nTo the FinTech builders out there: what's your biggest headache with legacy fraud APIs?",
+                    "cta": "Live benchmark & API playground in the comments 👇"
+                },
+                "show_hn": {
+                    "headline": "Hacker News (Show HN)",
+                    "copy": "Show HN: PayPulse – Open-source streaming fraud scoring engine (<40ms latency)\n\nBuilt in Go and Rust to eliminate false positives in cross-border checkout flows without slowing down user authorization.",
+                    "cta": "https://paypulse.dev"
+                }
+            },
+            "ast_verifier": {
+                "status": "ok",
+                "agent": "MarketingAgent",
+                "scenario_title": "Autonomous AST Multi-Repo Contract Verifier",
+                "x_post": {
+                    "headline": "𝕏 / Twitter Viral Launch Thread",
+                    "copy": "Breaking changes in private microservice APIs are a nightmare.\n\nWe just shipped AST Verifier: intercepts pull requests, parses downstream client ASTs, and blocks breaking schema changes before CI runs.\n\nStop debugging runtime type mismatches in production ⚡",
+                    "cta": "Try the CLI: npm i -g @ast/verifier"
+                },
+                "linkedin_post": {
+                    "headline": "LinkedIn Technical Founder Story",
+                    "copy": "If your engineering team has ever broken a production client SDK because of an undocumented REST field rename, you know the pain.\n\nWe automated cross-repo AST inspection into git commit hooks. Catch semantic contract breaks in 200ms without spinning up Docker containers.\n\nEngineering managers: how do you prevent breaking schema changes across repositories today?",
+                    "cta": "Open-source repo linked below 👇"
+                },
+                "show_hn": {
+                    "headline": "Hacker News (Show HN)",
+                    "copy": "Show HN: AST Verifier – Instant cross-repo breaking contract detection at commit time\n\nParses TypeScript and Go ASTs in git staging hooks to detect breaking schema mutations before you push.",
+                    "cta": "https://github.com/ast-verifier"
+                }
+            }
+        },
+        "sales": {
+            "vp_eng_saas": {
+                "status": "ok",
+                "agent": "SalesAgent",
+                "scenario_title": "Target: VP of Engineering at Series A-B B2B SaaS",
+                "target_persona": "VP of Engineering / Head of Tech (Series A-B SaaS, 25-100 devs)",
+                "cold_email": {
+                    "subject": "quick question on engineering sprint velocity",
+                    "body": "Hey Alex,\n\nNoticed your engineering team has doubled this quarter. Most growing squads burn ~20% of dev bandwidth over-engineering features before customer validation.\n\nWe built an autonomous daemon that flags isolation risk directly from git diffs.\n\nOpen to a 5-minute teardown this Thursday?",
+                    "word_count": 39
+                },
+                "discovery_questions": [
+                    "How do your tech leads currently identify PRs that are over-engineered before they get merged?",
+                    "How many developer hours per sprint get spent refactoring modules that end up with near-zero user engagement?",
+                    "If a background daemon automatically drafted customer discovery questions for new PRs, would your team test it?"
+                ],
+                "cal_booking_flow": "Warm reply detected → Auto-dispatches Cal.com 15-min discovery link with founder calendar."
+            },
+            "cto_healthtech": {
+                "status": "ok",
+                "agent": "SalesAgent",
+                "scenario_title": "Target: CTOs at High-Compliance FinTech / HealthTech",
+                "target_persona": "CTO / Chief Information Security Officer (HealthTech & FinTech)",
+                "cold_email": {
+                    "subject": "audit trail overhead on your latest release",
+                    "body": "Hey Sarah,\n\nSaw your recent SOC-2 Type II announcement. Usually that compliance workload pulls 2-3 senior devs off product features for months.\n\nWe built an automated terminal daemon that generates tamper-evident audit logs directly from commit diffs.\n\nWorth a quick 5-min look?",
+                    "word_count": 41
+                },
+                "discovery_questions": [
+                    "What's the current engineering burden of compiling release evidence for external security audits?",
+                    "How often do code changes bypass your compliance checklist during emergency hotfixes?",
+                    "Would automating commit verification into your git workflow save your team at least 10 hours a week?"
+                ],
+                "cal_booking_flow": "Direct routing into priority compliance pilot queue."
+            },
+            "head_payments": {
+                "status": "ok",
+                "agent": "SalesAgent",
+                "scenario_title": "Target: Head of Payments & Operations",
+                "target_persona": "Head of Payments / Director of Financial Infrastructure",
+                "cold_email": {
+                    "subject": "handling cross-border settlement volatility",
+                    "body": "Hey Marcus,\n\nQuick note — seen your cross-border volume growing in LATAM. Most payment ops teams lose 1-2% on hidden FX slippage during weekend batches.\n\nWe built a real-time ledger verification tool that catches settlement discrepancies instantly.\n\nFree for a brief 7-minute intro next week?",
+                    "word_count": 38
+                },
+                "discovery_questions": [
+                    "What is your current reconciliation delay between transaction authorization and bank settlement?",
+                    "How do you handle automated dispute detection before chargeback penalties kick in?",
+                    "Would real-time settlement monitoring allow your team to expand into new currency corridors faster?"
+                ],
+                "cal_booking_flow": "Direct calendar invite with payment engineering lead."
+            }
+        }
+    }
 
     @staticmethod
     def run_agent_demo(
@@ -24,160 +192,16 @@ class DemoSandboxService:
         domain: str = "devtools",
     ) -> Dict[str, Any]:
         agent_type = (agent_type or "mentor").lower().strip()
-        user_prompt = (custom_input or "").strip()
+        scenario_key = (scenario or "").lower().strip()
 
-        # Preset descriptions
-        presets = {
-            "database_refactor": "Refactoring Postgres schema and edge cases for 3 weeks (142 files, 0 customer conversations)",
-            "css_polishing": "Polishing dark-mode CSS shadows and custom buttons for 6 days straight (no landing page live)",
-            "complex_auth": "Built full OAuth2, Redis token caching, and rate limiting microservice (0 paying users)",
-        }
-        active_scenario = user_prompt if user_prompt else presets.get(scenario, presets["database_refactor"])
+        # If a curated scenario is matched, return curated static masterpiece immediately
+        agent_scenarios = DemoSandboxService.CURATED_DATA.get(agent_type, {})
+        if scenario_key in agent_scenarios:
+            return agent_scenarios[scenario_key]
 
-        if agent_type == "mentor":
-            return DemoSandboxService._run_mentor_demo(active_scenario, domain)
-        elif agent_type == "marketing":
-            return DemoSandboxService._run_marketing_demo(active_scenario, domain)
-        elif agent_type == "sales":
-            return DemoSandboxService._run_sales_demo(active_scenario, domain)
-        else:
-            return {"status": "error", "message": f"Unknown agent type: {agent_type}"}
+        # Default fallback to first scenario in category
+        if agent_scenarios:
+            first_key = list(agent_scenarios.keys())[0]
+            return agent_scenarios[first_key]
 
-    @staticmethod
-    def _generate_with_gemini(prompt: str) -> Optional[Dict[str, Any]]:
-        candidate_models = [
-            os.getenv("GEMINI_MODEL"),
-            "gemini-3.5-flash-lite",
-            "gemini-3.8-flash",
-        ]
-        candidate_models = [m for m in candidate_models if m]
-        try:
-            from google import genai
-            client = genai.Client()
-            for model in candidate_models:
-                try:
-                    resp = client.models.generate_content(
-                        model=model,
-                        contents=prompt,
-                        config={"response_mime_type": "application/json"}
-                    )
-                    if resp and resp.text:
-                        return json.loads(resp.text)
-                except Exception as e:
-                    logger.warning(f"Attempt with model {model} failed: {e}")
-        except Exception as e:
-            logger.warning(f"Gemini client setup error: {e}")
-        return None
-
-    @staticmethod
-    def _run_mentor_demo(scenario_text: str, domain: str) -> Dict[str, Any]:
-        prompt = (
-            "You are the Outcode Proactive Founder Mentor, a tough-love YC partner.\n"
-            f"A technical founder commits the following coding activity:\n"
-            f"'{scenario_text}'\n"
-            "Analyze the isolation risk, sound the intervention alarm, and provide tough-love advice.\n"
-            "Respond strictly in JSON with keys:\n"
-            "{\n"
-            '  "risk_score": int (between 40 and 98),\n'
-            '  "risk_level": "CRITICAL ISOLATION ALERT" or "HIGH OVER-ENGINEERING RISK",\n'
-            '  "headline": "punchy 1-sentence intervention callout",\n'
-            '  "analysis": "2-3 sentences explaining why this code has 0 market value until validated",\n'
-            '  "tough_love_quote": "memorable YC-partner style quote telling founder to put down the keyboard",\n'
-            '  "validation_actions": ["action 1", "action 2", "action 3"]\n'
-            "}"
-        )
-        ai_data = DemoSandboxService._generate_with_gemini(prompt)
-        if ai_data and "headline" in ai_data:
-            return {"status": "ok", "agent": "MentorAgent", "scenario": scenario_text, "live_gemini": True, **ai_data}
-
-        # Dynamic template fallback based on user's exact words
-        risk = 88 if any(w in scenario_text.lower() for w in ["week", "month", "100", "refactor"]) else 72
-        return {
-            "status": "ok",
-            "agent": "MentorAgent",
-            "scenario": scenario_text,
-            "risk_score": risk,
-            "risk_level": "CRITICAL ISOLATION ALERT",
-            "headline": "🚨 You are hiding behind your compiler.",
-            "analysis": f"You are spending valuable runway building '{scenario_text}' without speaking to users. Code written in a vacuum has zero market value until real users validate demand.",
-            "tough_love_quote": "Stop optimizing architecture nobody asked for. Put down the keyboard and get 3 target customer discovery calls on your calendar today.",
-            "validation_actions": [
-                f"Draft a 1-page architecture breakdown on LinkedIn/X highlighting the exact bottleneck in '{scenario_text[:40]}...'",
-                "Send 5 direct messages to engineering leaders asking: 'How do you currently handle this in production?'",
-                "Lock in 2 design partner interviews before writing any further backend code."
-            ],
-            "next_step": "Auto-generate your launch story and outreach sequence now with Marketing & Sales Agents."
-        }
-
-    @staticmethod
-    def _run_marketing_demo(scenario_text: str, domain: str) -> Dict[str, Any]:
-        prompt = (
-            "You are the Outcode MarketingAgent. A technical founder just built or worked on:\n"
-            f"'{scenario_text}'\n"
-            "Generate authentic developer marketing copy that engineers respect (no corporate buzzwords).\n"
-            "Respond strictly in JSON with keys:\n"
-            "{\n"
-            '  "x_post": {"headline": "𝕏 / Twitter Viral Launch Thread", "copy": "3-4 lines with hook, founder pain, solution, call to action", "cta": "link"},\n'
-            '  "linkedin_post": {"headline": "LinkedIn Technical Founder Story", "copy": "founder-to-founder vulnerable story about over-engineering vs shipping", "cta": "link"},\n'
-            '  "show_hn": {"headline": "Hacker News (Show HN)", "copy": "Show HN: title and concise tech breakdown", "cta": "repo link"}\n'
-            "}"
-        )
-        ai_data = DemoSandboxService._generate_with_gemini(prompt)
-        if ai_data and "x_post" in ai_data:
-            return {"status": "ok", "agent": "MarketingAgent", "feature": scenario_text, "live_gemini": True, **ai_data}
-
-        return {
-            "status": "ok",
-            "agent": "MarketingAgent",
-            "feature": scenario_text,
-            "x_post": {
-                "headline": "𝕏 / Twitter Viral Launch Thread",
-                "copy": f"Most technical founders don't fail because they can't code.\n\nThey fail because they build things like '{scenario_text[:50]}' in isolation without talking to users.\n\nOutcode intercepts your git commits, sounds the alarm when you over-engineer, and auto-generates your social launches right from diffs.\n\nStop coding in the dark ⚡👇",
-                "cta": "Join the Public Alpha: outcode.ai"
-            },
-            "linkedin_post": {
-                "headline": "LinkedIn Technical Founder Story",
-                "copy": f"Last week, I almost wasted another 2 weeks over-engineering '{scenario_text[:45]}...'\n\nWhy? Because fixing code feels comfortable. Talking to customers feels vulnerable.\n\nThat's why we built Outcode. It watches your git repo, stops you when you build in a vacuum, and auto-generates your social launches and sales outreach from your diffs.\n\nTechnical founders: what feature did you waste the most time on before customer validation?",
-                "cta": "Link to free public alpha in comments 🚀"
-            },
-            "show_hn": {
-                "headline": "Hacker News (Show HN)",
-                "copy": f"Show HN: Outcode – Git daemon that stops over-engineering & turns diffs into launches\n\nHey HN! We built Outcode to help builders avoid coding in a vacuum on features like {scenario_text[:40]}. Runs 100% locally with BYOK (Gemini, Claude, Ollama).",
-                "cta": "https://github.com/gopikomanduri/ascm-poc"
-            }
-        }
-
-    @staticmethod
-    def _run_sales_demo(scenario_text: str, domain: str) -> Dict[str, Any]:
-        prompt = (
-            "You are the Outcode SalesAgent. A technical founder built:\n"
-            f"'{scenario_text}'\n"
-            "Generate a high-converting 35-word cold outreach email targeting engineering leaders, and 3 customer discovery questions.\n"
-            "Respond strictly in JSON with keys:\n"
-            "{\n"
-            '  "target_persona": "title and company type",\n'
-            '  "cold_email": {"subject": "lowercase 4-word subject", "body": "35-word punchy, non-salesy email addressing the pain point", "word_count": int},\n'
-            '  "discovery_questions": ["question 1", "question 2", "question 3"],\n'
-            '  "cal_booking_flow": "one sentence explaining meeting booking routing"\n'
-            "}"
-        )
-        ai_data = DemoSandboxService._generate_with_gemini(prompt)
-        if ai_data and "cold_email" in ai_data:
-            return {"status": "ok", "agent": "SalesAgent", "feature": scenario_text, "live_gemini": True, **ai_data}
-
-        return {
-            "status": "ok",
-            "agent": "SalesAgent",
-            "target_persona": "VP of Engineering / Technical Co-Founders at Series A-B B2B SaaS",
-            "cold_email": {
-                "subject": "quick question on your engineering sprint cadence",
-                "body": f"Hey Alex,\n\nNoticed your team is scaling fast. Most engineering squads burn ~20% of bandwidth over-engineering features like '{scenario_text[:35]}...' before validating demand.\n\nWe built an autonomous daemon that validates sprint value directly from diffs.\n\nOpen to a 5-minute teardown this Thursday?",
-                "word_count": 39
-            },
-            "discovery_questions": [
-                f"How does your team currently validate whether '{scenario_text[:35]}...' is actually needed by customers?",
-                "How many engineering hours per sprint get burned refactoring features that end up underused?",
-                "If an autonomous tool flagged over-engineered PRs before merge, would your team pilot it?"
-            ],
-            "cal_booking_flow": "Warm reply detected → Auto-dispatches Cal.com 15-min discovery link with founder calendar."
-        }
+        return {"status": "error", "message": f"Unknown agent type: {agent_type}"}
