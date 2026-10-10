@@ -44,11 +44,15 @@ class WaitlistSyncAgent:
         """
         Pulls latest waitlist from Google Cloud Run and updates local .ascm_waitlist.json.
         """
-        api_url = f"{self.remote_url}/api/waitlist"
+        admin_key = os.environ.get("ADMIN_KEY") or os.environ.get("WAITLIST_ADMIN_KEY", "outcode-secret-2026")
+        api_url = f"{self.remote_url}/api/waitlist?key={admin_key}"
         try:
             req = urllib.request.Request(
                 api_url,
-                headers={"User-Agent": "Outcode-SalesAgent-Sync/1.0"}
+                headers={
+                    "User-Agent": "Outcode-SalesAgent-Sync/1.0",
+                    "X-Admin-Key": admin_key
+                }
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 remote_data = json.loads(resp.read().decode("utf-8"))

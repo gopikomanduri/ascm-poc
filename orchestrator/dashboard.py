@@ -852,7 +852,12 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             })
 
         elif path == "/api/waitlist":
-            stats = WAITLIST_MANAGER.get_stats()
+            from urllib.parse import parse_qs
+            admin_key = os.environ.get("ADMIN_KEY") or os.environ.get("WAITLIST_ADMIN_KEY", "outcode-secret-2026")
+            query = parse_qs(parsed_url.query)
+            provided_key = self.headers.get("X-Admin-Key") or (query.get("key", [None])[0])
+            is_admin = bool(provided_key and provided_key == admin_key)
+            stats = WAITLIST_MANAGER.get_stats(include_emails=is_admin)
             self._send_json({"status": "ok", **stats})
 
         elif path == "/" or path == "/index.html":

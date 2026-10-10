@@ -134,18 +134,20 @@ class WaitlistManager:
         with self.lock:
             return list(self.entries)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self, include_emails: bool = False) -> Dict[str, Any]:
         with self.lock:
             tiers: Dict[str, int] = {}
             for e in self.entries:
                 t = e.get("tier", "alpha")
                 tiers[t] = tiers.get(t, 0) + 1
-            return {
+            res = {
                 "total_count": len(self.entries),
-                "store_path": str(self.store_path),
                 "tiers": tiers,
-                "recent": self.entries[-5:] if self.entries else [],
             }
+            if include_emails:
+                res["entries"] = list(self.entries)
+                res["recent"] = self.entries[-10:] if self.entries else []
+            return res
 
 
 WAITLIST_MANAGER = WaitlistManager()
