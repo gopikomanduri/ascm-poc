@@ -14,3 +14,6 @@ logs/
 
 # macOS
 .DS_Store
+
+# Generated artifacts
+artifacts/

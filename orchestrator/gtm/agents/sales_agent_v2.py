@@ -64,7 +64,7 @@ class SalesAgentV2(BaseAgent):
         daily_quota: int = 25,
         known_leads: Optional[List[Dict[str, Any]]] = None,
         verified_facts: Optional[str] = None,
-        sender_name: str = "Gopi",
+        sender_name: str = "Outcode Team",
     ) -> Dict[str, Any]:
         """Generate specific leads + detailed emails with full audit trail"""
         cal_com_link = cal_com_booking_link
@@ -209,3 +209,116 @@ OUTPUT JSON:
         """Export all emails to file for review"""
         # Implementation for email export
         pass
+
+    def evaluate_signals_and_triage_leads(
+        self,
+        leads: List[Dict[str, Any]],
+        project_thesis: str = "Outcode: Stop coding in isolation. Your terminal just hired a GTM team."
+    ) -> Dict[str, Any]:
+        """
+        Implements modern 'Signal-Based Selling' and 'Product-Qualified Lead (PQL)' triage:
+        - Replaces blind outbound with signal detection (domain intent, requested tier, velocity).
+        - Segments leads into:
+          * PQL_TIER_1: High-fit venture/tech founder (receives custom Challenger Value-First Audit).
+          * PQL_TIER_2: Pro builder (receives Day 10 Interactive Sandbox invitation).
+          * PQL_TIER_3: Community alpha (receives CLI binary token & changelog updates).
+        """
+        self.log_action("SIGNAL_TRIAGE_START", {"lead_count": len(leads)})
+
+        enriched_leads = []
+        for lead in leads:
+            email = lead.get("email", "")
+            domain = email.split("@")[-1].lower() if "@" in email else ""
+            requested_tier = lead.get("tier", "alpha")
+
+            # Detect domain & intent signals
+            if any(k in domain for k in ["ycombinator.com", "deeptech.ai", "sequoia", "a16z", "techstars"]):
+                pql_category = "PQL_TIER_1_VENTURE_FOUNDER"
+                signal = "High-Authority Venture / Ecosystem Domain"
+                action_recommended = "Bespoke Challenger GTM Audit"
+            elif domain and domain not in ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "test.com", "a.com", "b.com"]:
+                pql_category = "PQL_TIER_1_TECH_FOUNDER" if requested_tier == "pro_early_bird" else "PQL_TIER_2_PRO_BUILDER"
+                signal = f"Custom Corporate/Startup Domain ({domain})"
+                action_recommended = "Personalized Diff Sandbox Invitation"
+            elif requested_tier == "pro_early_bird":
+                pql_category = "PQL_TIER_2_PRO_BUILDER"
+                signal = "Explicit High-Intent Pro Tier Selection"
+                action_recommended = "Fast-track Sandbox Cohort Invite"
+            else:
+                pql_category = "PQL_TIER_3_COMMUNITY_ALPHA"
+                signal = "Standard Community Waitlist Signup"
+                action_recommended = "Public Alpha Changelog & Binary Access"
+
+            enriched = dict(lead)
+            enriched["domain"] = domain
+            enriched["pql_category"] = pql_category
+            enriched["buying_signal"] = signal
+            enriched["recommended_action"] = action_recommended
+            enriched_leads.append(enriched)
+
+        triage_summary = {
+            "tier_1_count": sum(1 for l in enriched_leads if "TIER_1" in l["pql_category"]),
+            "tier_2_count": sum(1 for l in enriched_leads if "TIER_2" in l["pql_category"]),
+            "tier_3_count": sum(1 for l in enriched_leads if "TIER_3" in l["pql_category"]),
+            "enriched_leads": enriched_leads
+        }
+
+        self.log_action("SIGNAL_TRIAGE_COMPLETE", {
+            "tier_1": triage_summary["tier_1_count"],
+            "tier_2": triage_summary["tier_2_count"],
+            "tier_3": triage_summary["tier_3_count"]
+        })
+        return triage_summary
+
+    def generate_challenger_value_audit(
+        self,
+        lead: Dict[str, Any],
+        project_thesis: str = "Outcode: Stop coding in isolation. Your terminal just hired a GTM team.",
+        sender_name: str = "Outcode Team",
+    ) -> Dict[str, Any]:
+        """
+        Implements 'The Challenger Sale' (Value-First Consultation):
+        Instead of asking 'Can I have 15 minutes of your time?', delivers surprising,
+        actionable perspective on why solo/small dev teams burn runway in isolation.
+        """
+        lead_email = lead.get("email", "builder@company.com")
+        lead_domain = lead.get("domain") or (lead_email.split("@")[-1] if "@" in lead_email else "tech")
+        tier = lead.get("tier", "alpha")
+
+        prompt = f"""
+You are an expert Enterprise B2B Solutions Consultant executing a "Challenger Sale" (Value-First Consultation).
+
+LEAD INFORMATION:
+Email: {lead_email}
+Domain/Company: {lead_domain}
+Requested Tier: {tier}
+
+OUR PRODUCT:
+{project_thesis}
+
+GOAL:
+Craft a hyper-personalized, value-first teardown for this founder/leader.
+DO NOT sound like a typical SDR sending template spam.
+DO NOT say "I hope this email finds you well" or "Can I pick your brain?".
+Teach them something surprising about the risk of engineering in isolation and offer an immediate value gift.
+
+OUTPUT JSON SCHEMA:
+{{
+  "prospect_diagnostic": {{
+    "persona_inferred": "string (e.g. Early-stage AI Founder / High-velocity Builder)",
+    "likely_isolation_trap": "string (the hidden trap founders in their category face)",
+    "surprising_insight": "string (a counter-intuitive observation on code velocity vs market traction)"
+  }},
+  "value_first_email": {{
+    "subject": "string (lowercase, casual, high open-rate)",
+    "opening_hook": "string (references their domain or builder reality)",
+    "the_diagnostic_teardown": "string (2-3 sentences teaching them something useful)",
+    "zero_pressure_offer": "string (e.g. Free diff audit or private sandbox access, no sales call required)",
+    "signoff": "{sender_name}"
+  }},
+  "recommended_followup_trigger": "string (e.g. Trigger email only if they test sandbox or open link)"
+}}
+"""
+        raw = self.call(prompt, json_mode=True)
+        return parse_json_lenient(raw)
+

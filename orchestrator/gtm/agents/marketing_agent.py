@@ -222,3 +222,87 @@ Output comprehensive JSON with all above fields + competitive advantage matrix.
 """
         raw = self.call(prompt, json_mode=True)
         return parse_json_lenient(raw)
+
+    def generate_engineering_as_marketing_playbook(
+        self,
+        diff_summary: str,
+        milestone_name: str = "Milestone 1",
+        product_thesis: str = "Outcode: Stop coding in isolation. Your terminal just hired a GTM team.",
+        facts: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Implements modern 'Engineering as Marketing' + 'Category Design' frameworks:
+        1. Translates raw git diffs into public developer education and micro-tools.
+        2. Names the Villain ('The Dark Room Trap' / Over-engineering in isolation).
+        3. Embeds viral self-reinforcing Growth Loops into launch artifacts.
+        """
+        citable_facts = facts if facts is not None else load_citable_facts()
+        prompt = f"""
+You are an elite Developer-Led Growth (PLG) and Category Design Strategist.
+
+PRODUCT THESIS:
+{product_thesis}
+
+CODE MILESTONE / RECENT GIT DIFF SUMMARY:
+{diff_summary}
+
+MILESTONE NAME:
+{milestone_name}
+
+{facts_block(citable_facts)}
+
+Your goal is to build an "Engineering as Marketing" Playbook that turns this concrete code progress into inbound distribution.
+
+FRAMEWORK PRINCIPLES:
+1. "Engineering as Marketing": Developers hate generic marketing copy. Give them real code, architectural insights, or free interactive micro-tools.
+2. Category Design: Fight the villain ("The Dark Room Trap" — months of silent coding before user validation).
+3. Compounding Growth Loops: Every release artifact must carry a subtle viral attribution badge.
+4. Tone: Technical, humble, transparent builder voice. Zero hype, zero corporate jargon.
+
+OUTPUT JSON SCHEMA:
+{{
+  "villain_narrative": {{
+    "villain_name": "string (e.g. The Dark Room Trap / The Infinite Polishing Coping Mechanism)",
+    "core_frustration": "string (1-2 sentences on why solo engineers/founders get trapped here)",
+    "the_paradigm_shift": "string (From coding in isolation to real-time GTM interception)"
+  }},
+  "engineering_micro_tool_concept": {{
+    "tool_name": "string (e.g. Free Git Diff Isolation Radar)",
+    "description": "string (how a developer uses this 1-click tool to get immediate value without buying)",
+    "viral_hook": "string (what makes them share their result on X/LinkedIn/Reddit)"
+  }},
+  "growth_loop_footer": "string (e.g. ⚡ Distilled from git diff via Outcode)",
+  "release_artifacts": {{
+    "show_hn": {{
+      "title": "string (Show HN format)",
+      "body": "string (under 200 words, explains the problem, architecture, zero-BS)",
+      "technical_highlight": "string (what specific engineering decision we made)"
+    }},
+    "reddit_builder_post": {{
+      "subreddit": "r/SideProject",
+      "title": "string",
+      "story": "string (authentic builder journey with lessons learned from this milestone)"
+    }},
+    "x_thread": [
+      "tweet 1: hook + problem",
+      "tweet 2: what we built / diff insight",
+      "tweet 3: the unexpected lesson",
+      "tweet 4: CTA / try live"
+    ],
+    "linkedin_post": {{
+      "hook": "string",
+      "body": "string (formatted with clean line breaks)",
+      "question_cta": "string"
+    }},
+    "customer_facing_changelog": {{
+      "headline": "string",
+      "key_improvements": ["improvement 1", "improvement 2", "improvement 3"],
+      "why_it_matters_to_users": "string"
+    }}
+  }}
+}}
+"""
+        raw = self.call(prompt, json_mode=True)
+        data = parse_json_lenient(raw)
+        return data
+
