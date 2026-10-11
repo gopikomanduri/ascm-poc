@@ -15,6 +15,7 @@ from typing import Dict, Any, List, Optional
 
 from orchestrator.gtm.agents.marketing_agent import MarketingAgent
 from orchestrator.gtm.agents.sales_agent_v2 import SalesAgentV2
+from orchestrator.gtm.intent_radar import IntentRadar
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 WAITLIST_FILE = PROJECT_ROOT / ".ascm_waitlist.json"
@@ -25,13 +26,15 @@ class ContinuousGTMEngine:
     """
     Continuous GTM Orchestrator:
     Dogfoods Outcode on the active repository, translating code diffs into
-    authentic developer marketing and triaging incoming waitlist signals.
+    authentic developer marketing, harvesting live buying signals across 4 channels,
+    and triaging incoming waitlist signups.
     """
 
     def __init__(self, project_path: Optional[Path] = None):
         self.project_path = project_path or PROJECT_ROOT
         self.marketing_agent = MarketingAgent()
         self.sales_agent = SalesAgentV2()
+        self.intent_radar = IntentRadar()
 
     def get_latest_git_diff_summary(self) -> Dict[str, str]:
         """Inspects local git repository to extract recent milestone/diff context."""
@@ -95,7 +98,21 @@ class ContinuousGTMEngine:
             product_thesis="Outcode: Stop coding in isolation. Your terminal just hired a GTM team."
         )
 
-        # Step 3: SalesAgentV2 (Signal-Based Selling & PQL Triage)
+        # Step 3: IntentRadar (Multi-Channel Live Signal Harvester)
+        print("\n[IntentRadar 🛰️] Scanning 4 live channels (HN, Dev.to, GitHub, Tech Feeds)...")
+        raw_signals = self.intent_radar.scan_all_channels(
+            domain_keywords=["overengineering", "solo founder", "developer tools"],
+            limit_per_channel=3
+        )
+        print(f"[IntentRadar 🛰️] Evaluating {len(raw_signals)} live signals for domain relevance & buy-ready intent...")
+        radar_results = self.intent_radar.evaluate_signals_for_domain(
+            signals=raw_signals,
+            project_thesis="Outcode: Stop coding in isolation. Your terminal just hired a GTM team.",
+            icp_description="Solo founders, technical co-founders, CTOs, and indie hackers writing code in isolation without marketing."
+        )
+        print(f"[IntentRadar 🛰️] Detected {radar_results.get('high_intent_leads_count', 0)} high-intent external leads!")
+
+        # Step 4: SalesAgentV2 (Signal-Based Selling & PQL Triage)
         leads = self.load_waitlist_leads()
         print(f"\n[SalesAgent 🎯] Analyzing {len(leads)} waitlist leads for buying signals...")
         triage_results = self.sales_agent.evaluate_signals_and_triage_leads(leads)
@@ -118,6 +135,7 @@ class ContinuousGTMEngine:
             "timestamp": timestamp,
             "git_context": git_info,
             "marketing_playbook": marketing_playbook,
+            "radar_results": radar_results,
             "sales_triage": triage_results,
             "tier_1_audits": tier_1_audits,
         }
@@ -206,6 +224,31 @@ class ContinuousGTMEngine:
                 f"- **Email Body:**\n> {email.get('the_diagnostic_teardown')}\n>\n> {email.get('zero_pressure_offer')}",
                 ""
             ])
+
+        rr = data.get("radar_results", {})
+        top_radar = rr.get("top_leads", [])
+        lines.extend([
+            "---",
+            "## 5. Live Multi-Channel Intent Radar (External Buy-Ready Leads)",
+            f"- **Total Live Signals Scanned:** {rr.get('total_scanned', 0)} across 4 channels (HN, Dev.to, GitHub, Tech Feeds)",
+            f"- **High-Intent Leads Detected:** {rr.get('high_intent_leads_count', 0)}",
+            "",
+            "### Top Qualified External Opportunities:",
+        ])
+
+        for s in top_radar:
+            lines.extend([
+                f"#### ⚡ [{s.get('channel')}] {s.get('title')} (by @{s.get('author')})",
+                f"- **URL:** {s.get('url')}",
+                f"- **Domain Relevance:** `{s.get('domain_relevance')}/100` | **Buy-Ready Intent:** `{s.get('buy_ready_intent')}/100`",
+                f"- **Pain Category:** `{s.get('pain_category')}`",
+                f"- **Why Buy-Ready:** {s.get('why_buy_ready')}",
+            ])
+            if s.get("value_first_outreach"):
+                lines.extend([
+                    f"- **Value-First Draft:**\n> {s.get('value_first_outreach')}",
+                ])
+            lines.append("")
 
         path.write_text("\n".join(lines), encoding="utf-8")
 
