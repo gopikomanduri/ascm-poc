@@ -74,6 +74,7 @@ class WaitlistSyncAgent:
 
         local_emails = {entry.get("email"): entry for entry in local_entries if entry.get("email")}
 
+        changed = False
         new_leads_detected = []
         for r_entry in remote_entries:
             email = r_entry.get("email")
@@ -83,9 +84,21 @@ class WaitlistSyncAgent:
                 local_entries.append(r_entry)
                 local_emails[email] = r_entry
                 new_leads_detected.append(email)
+                changed = True
             else:
                 # Update existing if remote has newer request count or metadata
-                local_emails[email].update(r_entry)
+                for k, v in r_entry.items():
+                    if local_emails[email].get(k) != v:
+                        local_emails[email][k] = v
+                        changed = True
+
+        if not changed and self.local_file.exists():
+            return {
+                "status": "ok",
+                "total_count": len(local_entries),
+                "new_leads": [],
+                "remote_url": self.remote_url
+            }
 
         # Write merged file atomically
         payload = {
