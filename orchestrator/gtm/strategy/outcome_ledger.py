@@ -4,6 +4,7 @@ This JSON-backed implementation is suitable for a single local process. Use a tr
 database before enabling concurrent writers or multi-user deployments.
 """
 import json
+import math
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,13 @@ class OutcomeLedger:
         "email_sent", "customer_reply", "meeting_booked", "qualified_opportunity",
         "conversion", "experiment_reviewed", "experiment_stopped",
     }
+    SOURCES = {"operator", "sales_agent", "publisher", "system", "api", "test"}
+    METRIC_KEYS = {
+        "sentiment", "reply_count", "meeting_count", "qualified_opportunity_count",
+        "conversion_count", "revenue_amount", "currency", "channel",
+        "days_to_reply", "response_time_hours", "source_system",
+    }
+    SENTIMENTS = {"interested", "not_interested", "neutral", "positive", "negative", "unknown"}
 
     def __init__(self, project_path: Path):
         self.history_dir = Path(project_path) / ".ascm_history"
@@ -33,15 +41,45 @@ class OutcomeLedger:
                source: str = "operator", notify: bool = False) -> Dict[str, Any]:
         if event_type not in self.EVENT_TYPES:
             raise ValueError(f"Unsupported outcome event type: {event_type}")
+        if not isinstance(source, str) or source not in self.SOURCES:
+            raise ValueError("source must be one of the supported source labels")
+        if experiment_id is not None and (
+            not isinstance(experiment_id, str) or not experiment_id.strip()
+            or len(experiment_id) > 128 or "\\n" in experiment_id or "\\r" in experiment_id
+        ):
+            raise ValueError("experiment_id must be a short identifier, not free-form text")
         if metrics is not None and not isinstance(metrics, dict):
             raise ValueError("metrics must be a dictionary")
+        safe_metrics = {}
+        for key, value in (metrics or {}).items():
+            if key not in self.METRIC_KEYS:
+                raise ValueError(f"Unsupported metric key: {key}")
+            if key == "sentiment":
+                if not isinstance(value, str) or value.strip().lower() not in self.SENTIMENTS:
+                    raise ValueError("sentiment must be a supported coarse label")
+                safe_metrics[key] = value.strip().lower()
+            elif key in {"currency", "channel", "source_system"}:
+                if not isinstance(value, str) or not value.strip() or len(value.strip()) > 64:
+                    raise ValueError(f"{key} must be a short categorical label")
+                safe_metrics[key] = value.strip()
+            else:
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                    raise ValueError(f"{key} must be a finite numeric metric")
+                safe_metrics[key] = value
+        timestamp = occurred_at or datetime.now(timezone.utc).isoformat()
+        try:
+            parsed_timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            if parsed_timestamp.tzinfo is None:
+                raise ValueError
+        except (ValueError, AttributeError):
+            raise ValueError("occurred_at must be an offset-aware ISO timestamp") from None
         event = {
             "event_id": str(uuid.uuid4()),
             "event_type": event_type,
-            "experiment_id": experiment_id,
-            "occurred_at": occurred_at or datetime.now(timezone.utc).isoformat(),
+            "experiment_id": experiment_id.strip() if experiment_id else None,
+            "occurred_at": parsed_timestamp.astimezone(timezone.utc).isoformat(),
             "source": source,
-            "metrics": metrics or {},
+            "metrics": safe_metrics,
         }
         self.history_dir.mkdir(parents=True, exist_ok=True)
         try:
