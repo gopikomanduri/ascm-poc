@@ -183,7 +183,11 @@ def main():
             if response:
                 ledger.record(
                     "experiment_reviewed", experiment_id=args.experiment_id,
-                    metrics={"review_note": response[:500], "reviewed_event": args.event},
+                    metrics={
+                        "review_note_recorded": bool(response.strip()),
+                        "review_note_length": len(response.strip()),
+                        "reviewed_event": args.event,
+                    },
                     source="founder_prompt",
                 )
     except (ValueError, json.JSONDecodeError) as exc:
