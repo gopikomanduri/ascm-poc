@@ -127,6 +127,7 @@ class EvidenceSourceConnector:
         # Conservative explicit evidence threshold; not a statistical PMF claim.
         explicit_strong = any(
             str((event.get("metrics") or {}).get("demand_signal", "")).lower() == "strong"
+            or str((event.get("metrics") or {}).get("willingness_to_pay", "")).lower() == "confirmed"
             for event in recent
         )
         commitments = counts["pilot_commitment"] + counts["waitlist_signup"]
