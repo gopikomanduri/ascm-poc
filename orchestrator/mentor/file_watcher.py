@@ -291,7 +291,9 @@ if __name__ == "__main__":
             print(f"   Last edit     : {fs['minutes_since_last_edit']} min ago" if fs['minutes_since_last_edit'] else "   Last edit     : (none recorded yet)")
             print(f"   Recent files  : {fs['recently_edited_files']}")
             print(f"   Git commits/7d: {git['commits_7d']} | Today: {git['commits_today']}")
-            print(f"   GTM risk      : {git['risk_level']} (days since GTM: {git['days_since_gtm']:.0f})")
+            gtm_days = git["days_since_gtm"]
+            gtm_age = f"{gtm_days:.0f} days" if gtm_days is not None else "unknown"
+            print(f"   GTM risk      : {git['risk_level']} (days since GTM: {gtm_age})")
             print(f"   Actively coding now: {combined['actively_coding_now']}")
             print(f"   Editing w/o commit: {combined['editing_without_committing']}")
     except KeyboardInterrupt:
