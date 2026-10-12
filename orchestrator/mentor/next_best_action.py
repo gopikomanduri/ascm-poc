@@ -61,6 +61,7 @@ class FounderContextStore:
         self,
         *,
         current_goal: Optional[str] = None,
+        current_task: Optional[str] = None,
         target_customer: Optional[str] = None,
         next_milestone: Optional[str] = None,
         constraints: Optional[Iterable[str]] = None,
@@ -69,6 +70,7 @@ class FounderContextStore:
         state = self.load()
         for key, value in (
             ("current_goal", current_goal),
+            ("current_task", current_task),
             ("target_customer", target_customer),
             ("next_milestone", next_milestone),
         ):
