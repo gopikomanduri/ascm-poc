@@ -57,6 +57,11 @@ class ActivityAdapterTests(unittest.TestCase):
             self.assertEqual(context["task_hypothesis"], "Investigating a failed test run")
             self.assertFalse(context["is_confirmed"])
 
+    def test_active_window_adapter_can_be_disabled(self):
+        adapter = ActiveWindowAdapter(enabled=False)
+        self.assertIsNone(adapter.current_app())
+        self.assertIsNone(adapter.poll())
+
     def test_active_window_adapter_returns_none_when_no_platform_api(self):
         adapter = ActiveWindowAdapter()
         # Platform-specific OS APIs are best effort; this test asserts the API is callable.
