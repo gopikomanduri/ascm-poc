@@ -22,6 +22,7 @@ from pathlib import Path
 from orchestrator.mentor.notifier import CrossPlatformNotifier
 from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
 from orchestrator.mentor.file_watcher import ActivityAwareMonitor
+from orchestrator.mentor.context_fusion import ContextFusionEngine
 
 logger = logging.getLogger("ASCMDaemon")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -39,6 +40,20 @@ class UniversalASCMDaemon:
         self.pid_file = self.history_dir / "ascm_daemon.pid"
         # Cross-IDE activity monitor (filesystem + git combined)
         self.activity_monitor = ActivityAwareMonitor(repo_path=str(self.repo_path))
+        self.context_fusion = ContextFusionEngine(workspace_path=self.repo_path)
+        watcher = self.activity_monitor.file_watcher
+        base_activity_callback = watcher.on_change
+
+        def _record_project_activity(path):
+            # Preserve the watcher's existing activity counters and record only metadata.
+            base_activity_callback(path)
+            try:
+                self.context_fusion.record_file_change(path)
+                self.context_fusion.infer_context(path)
+            except Exception as exc:
+                logger.debug("[Daemon] Context fusion skipped an event: %s", exc)
+
+        watcher.on_change = _record_project_activity
 
         # Optional helping-hand: unprompted, consent-gated code suggestions
         self.suggester = None
@@ -74,27 +89,56 @@ class UniversalASCMDaemon:
         temp.replace(path)
 
     def _prompt_for_founder_context(self, activity, state, current_time):
-        """Proactively ask in a desktop dialog; never wait for the founder to run a CLI command."""
+        """Infer task context silently; clarify only when a missing goal blocks useful guidance."""
+        context = self.mentor.founder_context.load()
+        goal = context.get("current_goal")
+
+        if goal:
+            # Do not ask the founder to restate a task on every project/window switch.
+            # Only offer a recommendation when multiple signals support a useful hypothesis.
+            inferred = self.context_fusion.infer_context(self.repo_path)
+            if not isinstance(inferred, dict):
+                return
+            confidence = float(inferred.get("confidence", 0.0) or 0.0)
+            task = inferred.get("task_hypothesis")
+            if not task or confidence < 0.60:
+                return
+            last_recommendation = float(state.get("last_context_recommendation_at", 0) or 0)
+            if current_time - last_recommendation < 14400:
+                return
+            state["last_context_recommendation_at"] = current_time
+            self._save_daemon_state(state)
+            recommendation = self.mentor.recommend_next_action(
+                "code_activity",
+                {
+                    "task_description": task,
+                    "context_confidence": confidence,
+                    "evidence_event_ids": inferred.get("evidence_event_ids", []),
+                    "inference_rationale": inferred.get("rationale", ""),
+                },
+            )
+            actions = recommendation.get("actions", [])
+            if actions:
+                first = actions[0]
+                CrossPlatformNotifier.notify(
+                    "ASCM Mentor: Suggested next step",
+                    f"I infer you're working on: {task} (confidence {confidence:.0%}). "
+                    f"{first['title']}. {first['rationale'][:240]}",
+                    app_name="ASCM Mentor",
+                )
+            return
+
+        # A missing goal changes every recommendation, so this is a worthwhile clarification.
         last_prompt = float(state.get("last_founder_context_prompt_at", 0) or 0)
         if current_time - last_prompt < 14400:
             return
         recent_files = activity.get("filesystem_activity", {}).get("recently_edited_files", [])
         file_names = ", ".join(Path(item).name for item in recent_files[-3:]) or "recent code files"
-        context = self.mentor.founder_context.load()
-        goal = context.get("current_goal")
-        if not goal:
-            title = "ASCM Mentor: What outcome are you pursuing?"
-            question = (
-                f"I noticed code edits in {file_names}. What outcome are you trying to achieve? "
-                "I'll remember your goal and help you choose the smallest useful next step."
-            )
-        else:
-            title = "ASCM Mentor: What are you working on?"
-            question = (
-                f"I noticed code edits in {file_names}. Your current goal is: {goal[:180]}. "
-                "What specific task are these edits intended to achieve? I'll compare reuse, a minimal build, "
-                "and validation before recommending more implementation."
-            )
+        title = "ASCM Mentor: What outcome are you pursuing?"
+        question = (
+            f"I noticed code edits in {file_names}, but I don't yet know the outcome you're pursuing. "
+            "What meaningful result should this work achieve? I'll use that goal to guide next-step recommendations."
+        )
 
         # Persist before showing the dialog so restarts or a failed desktop integration do not spam.
         state["last_founder_context_prompt_at"] = current_time
@@ -115,35 +159,14 @@ class UniversalASCMDaemon:
             return
 
         response = response.strip()[:1000]
-        if not goal:
-            insights = self.mentor.clarify_goal_and_pre_validate(response)
-            plan = insights.get("pre_build_validation_plan", [])
-            next_step = plan[0] if plan else insights.get("mentor_advice", "Validate the problem before expanding scope.")
-            CrossPlatformNotifier.notify(
-                "ASCM Mentor: Goal captured",
-                f"I'll use this goal for future recommendations. Suggested first step: {next_step[:350]}",
-                app_name="ASCM Mentor",
-            )
-        else:
-            self.mentor.founder_context.update(current_task=response)
-            recommendation = self.mentor.recommend_next_action(
-                "code_activity",
-                {"task_description": response},
-            )
-            actions = recommendation.get("actions", [])
-            if actions:
-                first = actions[0]
-                CrossPlatformNotifier.notify(
-                    "ASCM Mentor: Recommended next step",
-                    f"{first['title']}. {first['rationale'][:300]}",
-                    app_name="ASCM Mentor",
-                )
-            else:
-                CrossPlatformNotifier.notify(
-                    "ASCM Mentor: Task captured",
-                    "I've saved the task and will use it in subsequent recommendations.",
-                    app_name="ASCM Mentor",
-                )
+        insights = self.mentor.clarify_goal_and_pre_validate(response)
+        plan = insights.get("pre_build_validation_plan", [])
+        next_step = plan[0] if plan else insights.get("mentor_advice", "Validate the problem before expanding scope.")
+        CrossPlatformNotifier.notify(
+            "ASCM Mentor: Goal captured",
+            f"I'll use this goal for future recommendations. Suggested first step: {next_step[:350]}",
+            app_name="ASCM Mentor",
+        )
 
     def run_daemon_loop(self):
         """Infinite monitoring loop running quietly in the background."""
