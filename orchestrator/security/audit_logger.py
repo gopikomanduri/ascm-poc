@@ -2,6 +2,8 @@ import datetime
 import json
 import logging
 import os
+import stat
+import threading
 import uuid
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -12,9 +14,10 @@ from orchestrator.security.pii_scrubber import PIIScrubber
 
 class AuditLogger:
     """
-    Enterprise SOC2 / ISO-27001 compliant structured audit logger.
-    Guarantees that all interactions, LLM prompts, model responses, code diffs,
-    and governance approvals are logged with automatic PII & credential scrubbing.
+    Structured local audit logger with PII/credential scrubbing and bounded storage.
+    It supports audit evidence collection but does not by itself guarantee SOC 2
+    or ISO 27001 compliance. Callers should log decisions and outcomes without
+    placing secrets, source contents, or raw customer communications in details.
     Produces both human-readable text logs (.log) and structured NDJSON (.jsonl)
     ready for open-source and commercial log aggregators (ELK, Datadog, Loki, Splunk).
     """
@@ -24,6 +27,11 @@ class AuditLogger:
         base_dir = log_dir or os.environ.get("ASCM_LOG_DIR") or "logs"
         self.log_path = Path(base_dir).resolve()
         self.log_path.mkdir(parents=True, exist_ok=True)
+        self._jsonl_lock = threading.Lock()
+        try:
+            self.log_path.chmod(0o700)
+        except OSError:
+            pass
 
         self.text_log_file = self.log_path / "ascm_audit.log"
         self.jsonl_log_file = self.log_path / "ascm_audit.jsonl"
@@ -47,16 +55,45 @@ class AuditLogger:
             )
             file_handler.setFormatter(formatter)
             self.logger.addHandler(file_handler)
+            try:
+                self.text_log_file.chmod(0o600)
+            except OSError:
+                pass
+
+    def _rotate_jsonl(self) -> None:
+        """Bound local audit storage to six 10-MB files."""
+        if not self.jsonl_log_file.exists() or self.jsonl_log_file.stat().st_size < 10 * 1024 * 1024:
+            return
+        oldest = self.jsonl_log_file.with_suffix(".jsonl.5")
+        try:
+            if oldest.exists():
+                oldest.unlink()
+            for index in range(4, 0, -1):
+                src = self.jsonl_log_file.with_suffix(f".jsonl.{index}")
+                if src.exists():
+                    src.replace(self.jsonl_log_file.with_suffix(f".jsonl.{index + 1}"))
+            self.jsonl_log_file.replace(self.jsonl_log_file.with_suffix(".jsonl.1"))
+        except OSError as err:
+            self.logger.error(f"Failed rotating JSONL audit log: {type(err).__name__}")
 
     def _write_jsonl(self, record: Dict[str, Any]) -> None:
-        """Appends a sanitized, structured JSON record to the JSONL log file."""
+        """Appends a sanitized, structured JSON record to the bounded JSONL audit log."""
         try:
-            line = json.dumps(record, ensure_ascii=False)
-            with open(self.jsonl_log_file, "a", encoding="utf-8") as f:
-                f.write(line + "\n")
+            line = json.dumps(record, ensure_ascii=False) + "\n"
+            with self._jsonl_lock:
+                self._rotate_jsonl()
+                fd = os.open(str(self.jsonl_log_file), os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
+                try:
+                    os.write(fd, line.encode("utf-8"))
+                finally:
+                    os.close(fd)
+                try:
+                    self.jsonl_log_file.chmod(0o600)
+                except OSError:
+                    pass
         except Exception as err:
-            # Fallback to avoid breaking execution if logging fails
-            self.logger.error(f"Failed writing JSONL audit log: {err}")
+            # Audit failures are surfaced in logs; do not break unrelated product flows.
+            self.logger.error(f"Failed writing JSONL audit log: {type(err).__name__}")
 
     def log_event(
         self,
