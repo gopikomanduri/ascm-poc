@@ -239,6 +239,10 @@ def main(override_goal: Optional[str] = None):
     parser.add_argument("--reject-proposal", help="Record founder rejection for a previously saved proposal ID")
     parser.add_argument("--mentor", action="store_true", help="Mentor flag (ignored)")
     args, _ = parser.parse_known_args()
+    if args.approve_proposal and args.reject_proposal:
+        parser.error("choose only one of --approve-proposal or --reject-proposal")
+    if args.propose_action and not args.observe:
+        parser.error("--propose-action requires --observe")
     mentor = ASCMProactiveMentor()
 
     if args.mark_milestone:
