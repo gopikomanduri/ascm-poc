@@ -50,7 +50,8 @@ def _open_url(url: str) -> bool:
         elif sys.platform.startswith("linux"):
             subprocess.run(["xdg-open", url], check=True)
         elif sys.platform.startswith("win"):
-            subprocess.run(["start", "", url], shell=True, check=True)
+            # os.startfile delegates to the Windows shell without interpolating a command string.
+            os.startfile(url)
         else:
             logger.warning(f"Unknown OS. Open manually: {url}")
             return False
@@ -84,7 +85,7 @@ def _copy_to_clipboard(text: str) -> bool:
     # Windows
     elif sys.platform.startswith("win"):
         try:
-            p = subprocess.Popen(["clip"], stdin=subprocess.PIPE, shell=True)
+            p = subprocess.Popen(["clip"], stdin=subprocess.PIPE, shell=False)
             p.communicate(text.encode("utf-8"))
             return True
         except Exception:
