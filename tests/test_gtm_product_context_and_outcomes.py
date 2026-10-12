@@ -124,8 +124,7 @@ class OutcomeLedgerTests(unittest.TestCase):
             mentor.git_monitor.get_latest_milestone.return_value = None
             mentor.outcome_ledger = ledger
             mentor._last_outcome_notify = 0
-            with mock.patch.dict("os.environ", {"ASCM_OUTCOME_REMINDER_HOURS": "24"}), \\
-                 mock.patch.object(mentor, "notify") as notify:
+            with mock.patch.dict("os.environ", {"ASCM_OUTCOME_REMINDER_HOURS": "24"}), mock.patch.object(mentor, "notify") as notify:
                 advice = mentor.evaluate_code_progress_and_advise()
             self.assertEqual(advice["gtm_outcome_feedback"]["unattributed_cycles_due"], [])
             notify.assert_not_called()
