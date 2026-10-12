@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional
 from orchestrator.agents.base import get_configured_provider, _load_dotenv
 from orchestrator.gtm.strategy.repo_analyzer import RepoAnalyzer
 from orchestrator.gtm.strategy.proactive_monitor import ProactiveGitMonitor
+from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 from orchestrator.mentor.notifier import CrossPlatformNotifier
 
 _load_dotenv()
@@ -30,6 +31,7 @@ class ASCMProactiveMentor:
         self.provider = get_configured_provider()
         self.repo_analyzer = RepoAnalyzer(str(self.repo_path))
         self.git_monitor = ProactiveGitMonitor(str(self.repo_path))
+        self.outcome_ledger = OutcomeLedger(self.repo_path)
         self._last_sell_notify = 0.0
 
     def notify(self, title: str, message: str, subtitle: str = "ASCM Proactive Mentor"):
@@ -102,8 +104,24 @@ class ASCMProactiveMentor:
         milestone = self.git_monitor.get_latest_milestone()
         code_ready_threshold = milestone is not None
 
+        ledger = getattr(self, "outcome_ledger", None)
+        recent_events = ledger.recent_events(50) if ledger is not None else []
+        observed_outcomes = [event for event in recent_events if event.get("event_type") in {
+            "customer_reply", "meeting_booked", "qualified_opportunity", "conversion"
+        }]
+        generated_cycles = [event for event in recent_events if event.get("event_type") == "gtm_cycle_generated"]
+        outcome_feedback = {
+            "events_reviewed": len(recent_events),
+            "generated_cycles": len(generated_cycles),
+            "verified_outcomes": len(observed_outcomes),
+            "status": "outcomes_observed" if observed_outcomes else (
+                "awaiting_outcomes" if generated_cycles else "no_gtm_cycles_recorded"
+            ),
+        }
+
         advice = {
             "test_count": test_count,
+            "gtm_outcome_feedback": outcome_feedback,
             "file_count": file_count,
             "days_since_gtm": days_since_gtm,
             "risk_level": activity.risk_level,
@@ -112,6 +130,19 @@ class ASCMProactiveMentor:
             "milestone": milestone,
             "recommendation": "",
         }
+
+        if outcome_feedback["status"] == "awaiting_outcomes":
+            advice["outcome_recommendation"] = (
+                "GTM assets were generated, but no customer replies, meetings, qualified opportunities, or conversions "
+                "are recorded yet. Capture verified outcomes before judging campaign performance or changing strategy."
+            )
+        elif outcome_feedback["status"] == "outcomes_observed":
+            advice["outcome_recommendation"] = (
+                f"{len(observed_outcomes)} verified customer outcome event(s) are recorded. Review outcomes by experiment "
+                "before repeating or stopping a campaign."
+            )
+        else:
+            advice["outcome_recommendation"] = "No GTM cycle or outcome history is recorded yet; do not infer performance."
 
         if days_since_gtm is None:
             advice["recommendation"] = (
