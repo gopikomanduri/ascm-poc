@@ -15,6 +15,25 @@ The mentor's existing goal clarification flow saves the clarified goal into the 
 python -m orchestrator.mentor.proactive_mentor
 ```
 
+## Install once; let the mentor run in the background
+
+The installer now asks for one workspace path (or uses `ASCM_WATCH_PATH`) and configures the OS login service. After installation, the mentor starts with the desktop session and monitors code-file edits; routine use does not require opening the CLI.
+
+```bash
+# From the workspace you want monitored:
+curl -fsSL https://raw.githubusercontent.com/gopikomanduri/ascm-poc/main/install.sh | bash
+```
+
+To select a specific workspace non-interactively:
+
+```bash
+ASCM_WATCH_PATH="$HOME/src/my-product" bash install.sh
+```
+
+On first observed coding activity, the daemon opens a native desktop prompt for the founder's goal. Once a goal exists, it asks for the current task and sends a next-step recommendation after the answer. Responses and prompt cooldowns are saved locally, so daemon restarts do not immediately repeat the same interruption. The background process never falls back to blocking terminal input.
+
+Desktop input requires a logged-in GUI session. On Linux, the prompt uses `zenity` or `kdialog` when available; if neither is installed, ASCM continues monitoring and reports that an interactive dialog could not be shown. No whole-home-directory monitoring is enabled by default: the installer asks for one workspace to avoid unexpected filesystem surveillance.
+
 ## Ask for a next-best-action recommendation
 
 Supply an explicit observation; don't use this command to guess what the founder is doing:
@@ -47,7 +66,7 @@ A future publishing adapter must independently verify approval, show the exact c
 
 ## Limits of this MVP
 
-- The background daemon can observe code-file edits and prompt for intent, but it does not semantically infer the task from source code or automatically discover milestones.
+- The background daemon observes code-file edits and proactively asks for the goal/task, but it does not yet semantically infer task intent directly from source code or automatically discover all milestones.
 - The rules are deterministic and explainable; this is not yet a calibrated learning or planning model.
 - The approval record is local JSON, not an identity-backed authorization service. It must not be treated as a security boundary for multi-user or production deployment.
 - Proposal approval records consent but does not execute actions. Integrations must re-check status at execution time and log the result.
