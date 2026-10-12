@@ -56,4 +56,6 @@ If Coco cannot run, returns an invalid response, or lacks credentials, the secur
 - Run end-to-end tests on actual desktop environments, including headless Linux, Wayland, macOS permissions, Windows startup, shell-hook opt-out, and browser native messaging.
 - Complete product-specific legal/privacy review before collecting activity telemetry from customers or employees.
 
-The PR must remain unmerged until its latest CI run is green, Coco is configured and actually invoked, findings are triaged, and a human review approves the release.
+To remove the OS login service without deleting local history, run `python -m orchestrator.mentor.daemon --repo /absolute/path/to/workspace --uninstall`. The terminal hooks and browser extension are separately opt-in and must be removed/disabled independently.
+
+The PR must remain unmerged until its latest CI run is green, Coco is actually invoked, findings are triaged, and a human review approves the release.
