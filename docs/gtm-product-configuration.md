@@ -35,7 +35,7 @@ The JSON ledger uses atomic file replacement for basic local safety, but is not 
 
 ## Outcome notifications and review prompts
 
-When the reply classifier records a real customer reply, ASCM sends a native desktop notification with a suggested next action. Recording verified events with the outcome-ledger CLI also sends a notification by default for customer replies, meetings, qualified opportunities, and conversions.
+When the reply classifier records a real customer reply, ASCM sends a native desktop notification with a suggested next action except for negative/unsubscribe and out-of-office replies, which retain silent handling. Pass the optional `experiment_id` argument to `classify_reply_and_route` when the reply can be tied to a campaign or experiment; without it, the event is recorded as unassigned and cannot satisfy experiment-level attribution. Recording verified events with the outcome-ledger CLI also sends a notification by default for customer replies, meetings, qualified opportunities, and conversions.
 
 To open an interactive outcome-review prompt after recording a verified event:
 
