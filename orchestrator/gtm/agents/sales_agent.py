@@ -128,7 +128,8 @@ Output as JSON array of step objects.
         return parse_json_lenient(raw)
 
     def classify_reply_and_route(
-        self, raw_reply: str, prospect_name: str, prospect_email: str
+        self, raw_reply: str, prospect_name: str, prospect_email: str,
+        experiment_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Classify inbound reply sentiment and route to automation."""
         prompt = f"""
@@ -166,13 +167,16 @@ Output JSON with:
                 details={
                     "sentiment": sentiment,
                     "source": "sales_agent_reply_classifier",
+                    "experiment_id": experiment_id,
                 },
             )
             OutcomeLedger(Path(".")).record(
                 "customer_reply",
+                experiment_id=experiment_id,
                 metrics={"sentiment": sentiment},
                 source="sales_agent_reply_classifier",
-                notify=True,
+                # Preserve silent handling for negative/unsubscribe and out-of-office replies.
+                notify=sentiment not in {"NEGATIVE", "OUT_OF_OFFICE"},
             )
         except Exception as exc:
             logger.warning("Could not record customer reply telemetry: %s", exc)
