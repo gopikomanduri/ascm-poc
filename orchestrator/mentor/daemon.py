@@ -108,8 +108,8 @@ class UniversalASCMDaemon:
         if not response or not response.strip():
             CrossPlatformNotifier.notify(
                 title,
-                "I detected coding activity. When you're ready, respond to the ASCM Mentor desktop prompt; "
-                "I'll keep monitoring in the background.",
+                "I detected coding activity, but no interactive desktop dialog was available. "
+                "I'll keep monitoring quietly; enable desktop dialogs to answer in place.",
                 app_name="ASCM Mentor",
             )
             return
