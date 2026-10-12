@@ -42,7 +42,7 @@ class ActivityAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             adapter = ActivityAdapters(tmp)
             event = adapter.active_app_event(cwd=tmp, app_name="VS Code - private customer document")
-            self.assertEqual(event["app_name"], "VSCodeprivatecustomerdocument")
+            self.assertEqual(event["app_name"], "VSCode-privatecustomerdocument")
             self.assertNotIn("title", event)
 
     def test_context_fusion_infers_test_task_without_output_capture(self):
