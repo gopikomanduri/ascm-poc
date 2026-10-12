@@ -271,7 +271,7 @@ class UniversalASCMDaemon:
                 current_time = time.time()
 
                 # Proactively ask in a native desktop dialog and persist the response; no CLI interaction required.
-                if combined["actively_coding_now"]:
+                if combined["actively_coding_now"] or self.context_fusion.has_recent_terminal_activity():
                     self._prompt_for_founder_context(activity, daemon_state, current_time)
 
                 if self.suggester:
