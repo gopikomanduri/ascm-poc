@@ -113,7 +113,7 @@ This local gate is a safety layer for a single-user MVP, not an authorization bo
 
 The daemon enriches each eligible intervention from two evidence sources:
 
-- **Customer demand (local by default):** reads `.ascm_history/gtm_outcomes.json` and summarizes explicitly recorded replies, meetings, qualified opportunities, and conversions from the last 90 days. For daemon recommendations, only events explicitly tagged with a matching `metrics.feature_key` are eligible; outcomes for unrelated features and untagged legacy events are excluded. A demand signal requires at least one qualified opportunity/conversion or three positive/interested replies for that feature. This is a conservative heuristic, not product-market-fit proof. Missing events are unknown, not evidence of no demand.
+- **Customer demand (local by default):** reads `.ascm_history/gtm_outcomes.json` and summarizes explicitly recorded customer replies, interviews, feature requests, pilot commitments, waitlist signups, meetings, qualified opportunities, and conversions from the last 90 days. For daemon recommendations, only events explicitly tagged with a matching `metrics.feature_key` are eligible; outcomes for unrelated features and untagged legacy events are excluded. A demand signal requires an explicit strong signal/confirmed willingness to pay, a pilot or waitlist commitment, a qualified opportunity/conversion, or at least three positive/interested replies tied to that feature. This is a conservative heuristic, not product-market-fit proof. Missing events are unknown, not evidence of no demand.
 
 To attach evidence to a feature, include a short, non-sensitive key when recording the outcome, for example:
 
