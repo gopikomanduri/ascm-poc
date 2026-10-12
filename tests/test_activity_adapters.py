@@ -22,6 +22,10 @@ class ActivityAdapterTests(unittest.TestCase):
             normalize_domain("https://user:secret@example.com/path")
         with self.assertRaises(ValueError):
             normalize_domain("http://localhost:8000/private")
+        with self.assertRaises(ValueError):
+            normalize_domain("http://192.168.1.10/admin")
+        with self.assertRaises(ValueError):
+            normalize_domain("http://intranet/admin")
 
     def test_terminal_and_browser_events_store_only_allowlisted_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
