@@ -79,6 +79,29 @@ class ProactiveMonitorRegressionTests(unittest.TestCase):
             finally:
                 os.chdir(previous)
 
+    def test_negative_reply_is_recorded_but_does_not_notify_founder(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            previous = os.getcwd()
+            try:
+                os.chdir(tmp)
+                agent = SalesAgent.__new__(SalesAgent)
+                agent.call = lambda prompt, json_mode=True: json.dumps({
+                    "sentiment": "NEGATIVE", "next_action": "silent"
+                })
+                with mock.patch("orchestrator.mentor.notifier.CrossPlatformNotifier.notify") as notify:
+                    agent.classify_reply_and_route(
+                        "Please unsubscribe.", "Prospect", "prospect@example.com",
+                        experiment_id="exp-negative",
+                    )
+                notify.assert_not_called()
+                events = json.loads(Path(".ascm_history/gtm_outcomes.json").read_text())
+                self.assertEqual(events[-1]["experiment_id"], "exp-negative")
+                self.assertEqual(events[-1]["metrics"]["sentiment"], "NEGATIVE")
+                self.assertNotIn("Please unsubscribe", json.dumps(events))
+            finally:
+                os.chdir(previous)
+
     def test_invalid_event_type_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(ValueError):
