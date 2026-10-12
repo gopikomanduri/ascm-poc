@@ -14,6 +14,12 @@ Important limitations:
 - This layer only recommends. It does not execute code, publish campaigns, contact customers, or authorize consequential actions.
 - The daemon has not yet been proven to gather all required evidence and run this decision loop on every relevant event. Event-to-decision wiring and 30-day usefulness measurements remain release work.
 
+## Daemon-driven founder decisions
+
+When a founder-confirmed goal exists and project activity inference reaches the existing confidence threshold, the daemon now invokes the next-best-action pipeline and surfaces the founder-intelligence ranked path, the top alternatives, and missing evidence. Recommendations are audited with project identity, evidence event IDs, confidence, and ranking. New evidence can trigger a fresh evaluation before the four-hour repeat-prompt window, with a ten-minute minimum interval between genuinely new interventions. Repeated identical evidence remains subject to the longer cooldown.
+
+This is an initial event-to-decision integration, not proof of continuous perfect awareness. The daemon still depends on configured workspace activity signals and inferred task hypotheses; it does not automatically know customer evidence or open-source reuse candidates unless those facts are supplied. The notifications are advisory only and never execute the proposed path.
+
 ## Activity signals now supported
 
 | Signal | Adapter | Stored data | Default |
