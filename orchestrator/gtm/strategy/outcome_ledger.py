@@ -14,7 +14,8 @@ from typing import Any, Dict, Optional
 class OutcomeLedger:
     EVENT_TYPES = {
         "gtm_cycle_generated", "experiment_planned", "campaign_approved", "campaign_published",
-        "email_sent", "customer_reply", "meeting_booked", "qualified_opportunity",
+        "email_sent", "customer_reply", "customer_interview", "feature_request",
+        "pilot_commitment", "waitlist_signup", "meeting_booked", "qualified_opportunity",
         "conversion", "experiment_reviewed", "experiment_stopped",
     }
     SOURCES = {"operator", "sales_agent", "sales_agent_reply_classifier", "publisher", "continuous_gtm_engine", "founder_prompt", "system", "api", "test"}
@@ -23,9 +24,12 @@ class OutcomeLedger:
         "conversion_count", "revenue_amount", "currency", "channel",
         "days_to_reply", "response_time_hours", "source_system",
         "product_configured", "intent_scan_status", "reviewed_event",
-        "review_note_recorded", "review_note_length",
+        "review_note_recorded", "review_note_length", "feature_area",
+        "demand_signal", "willingness_to_pay",
     }
     SENTIMENTS = {"interested", "not_interested", "neutral", "positive", "negative", "out_of_office", "unknown"}
+    DEMAND_SIGNALS = {"strong", "weak", "negative", "unknown"}
+    WILLINGNESS_TO_PAY = {"confirmed", "unconfirmed", "no", "unknown"}
 
     def __init__(self, project_path: Path):
         self.history_dir = Path(project_path) / ".ascm_history"
@@ -64,7 +68,15 @@ class OutcomeLedger:
                 if not isinstance(value, bool):
                     raise ValueError(f"{key} must be a boolean")
                 safe_metrics[key] = value
-            elif key in {"currency", "channel", "source_system", "intent_scan_status"}:
+            elif key == "demand_signal":
+                if not isinstance(value, str) or value.strip().lower() not in self.DEMAND_SIGNALS:
+                    raise ValueError("demand_signal must be strong, weak, negative, or unknown")
+                safe_metrics[key] = value.strip().lower()
+            elif key == "willingness_to_pay":
+                if not isinstance(value, str) or value.strip().lower() not in self.WILLINGNESS_TO_PAY:
+                    raise ValueError("willingness_to_pay must be confirmed, unconfirmed, no, or unknown")
+                safe_metrics[key] = value.strip().lower()
+            elif key in {"currency", "channel", "source_system", "intent_scan_status", "feature_area"}:
                 if not isinstance(value, str) or not value.strip() or len(value.strip()) > 64:
                     raise ValueError(f"{key} must be a short categorical label")
                 safe_metrics[key] = value.strip()
