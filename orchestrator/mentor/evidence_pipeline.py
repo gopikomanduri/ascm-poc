@@ -283,7 +283,13 @@ class InterventionQualityTracker:
         self, *, session_id: str, project_id: str | None, recommendation: dict[str, Any],
         evidence_event_ids: list[str] | None = None,
         intervention_id: str | None = None,
+        evidence_summary: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # Keep only coarse evidence-source metadata. Do not copy task text, customer
+        # notes, repository descriptions, URLs, or raw evidence into this ledger.
+        evidence_summary = evidence_summary if isinstance(evidence_summary, dict) else {}
+        customer = evidence_summary.get("customer") if isinstance(evidence_summary.get("customer"), dict) else {}
+        reuse = evidence_summary.get("reuse") if isinstance(evidence_summary.get("reuse"), dict) else {}
         intervention = {
             "intervention_id": intervention_id or str(uuid.uuid4()),
             "session_id": str(session_id)[:128],
@@ -292,6 +298,12 @@ class InterventionQualityTracker:
             "recommended_path": str(recommendation.get("recommended_path", "undetermined"))[:80],
             "confidence": str(recommendation.get("confidence", "unknown"))[:24],
             "evidence_event_ids": [str(item)[:128] for item in (evidence_event_ids or [])[:50]],
+            "evidence_snapshot": {
+                "customer_event_count": max(0, min(100000, int(customer.get("event_count", 0) or 0))),
+                "customer_demand_verified": customer.get("user_demand_verified") is True,
+                "reuse_discovery_enabled": reuse.get("enabled") is True,
+                "reuse_candidate_count": max(0, min(1000, int(reuse.get("candidate_count", 0) or 0))),
+            },
             "feedback": None,
             "feedback_at": None,
             "outcome_note_length": 0,
@@ -351,6 +363,34 @@ class InterventionQualityTracker:
             rated = bucket["positive"] + bucket["negative"]
             bucket["positive_feedback_rate"] = round(bucket["positive"] / rated, 4) if rated else None
             bucket["negative_feedback_rate"] = round(bucket["negative"] / rated, 4) if rated else None
+
+        # Report how feedback varies with evidence coverage without treating a missing
+        # signal as negative demand or counting unreviewed interventions as failures.
+        by_evidence_profile: dict[str, dict[str, Any]] = {}
+        for item in events:
+            snapshot = item.get("evidence_snapshot") if isinstance(item.get("evidence_snapshot"), dict) else {}
+            customer_state = "demand_verified" if snapshot.get("customer_demand_verified") is True else (
+                "customer_events_no_threshold" if int(snapshot.get("customer_event_count", 0) or 0) > 0
+                else "demand_unknown"
+            )
+            reuse_state = "reuse_candidates_found" if int(snapshot.get("reuse_candidate_count", 0) or 0) > 0 else (
+                "reuse_search_enabled_no_candidates" if snapshot.get("reuse_discovery_enabled") is True
+                else "reuse_search_disabled_or_unavailable"
+            )
+            profile = customer_state + "|" + reuse_state
+            bucket = by_evidence_profile.setdefault(profile, {"shown": 0, "reviewed": 0, "positive": 0, "negative": 0})
+            bucket["shown"] += 1
+            if item.get("feedback") in FEEDBACK_LABELS:
+                bucket["reviewed"] += 1
+                if item.get("feedback") in {"helpful", "accepted", "acted_on"}:
+                    bucket["positive"] += 1
+                else:
+                    bucket["negative"] += 1
+        for bucket in by_evidence_profile.values():
+            rated = bucket["positive"] + bucket["negative"]
+            bucket["feedback_coverage"] = round(bucket["reviewed"] / bucket["shown"], 4) if bucket["shown"] else None
+            bucket["positive_feedback_rate"] = round(bucket["positive"] / rated, 4) if rated else None
+
         return {
             "session_id": session_id,
             "interventions_shown": len(events),
@@ -358,6 +398,8 @@ class InterventionQualityTracker:
             "unreviewed": len(events) - len(reviewed),
             "feedback_counts": counts,
             "by_recommended_path": by_path,
+            "by_evidence_profile": by_evidence_profile,
+            "feedback_coverage": round(len(reviewed) / len(events), 4) if events else None,
             "positive_feedback_rate": round(helpful / total, 4) if total else None,
             "negative_feedback_rate": round(not_helpful / total, 4) if total else None,
             "measurement_note": "Rates use only explicit reviewed feedback; unreviewed interventions are not counted as success or failure.",
