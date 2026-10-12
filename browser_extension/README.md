@@ -9,6 +9,7 @@ This extension records **hostnames only** for active tabs and navigation. It doe
 3. From the ASCM checkout, run:
 
    ```bash
+   chmod +x scripts/ascm-browser-native-host
    ASCM_WATCH_PATH=/absolute/path/to/workspace python -m orchestrator.mentor.browser_native_host --install --extension-id YOUR_EXTENSION_ID
    ```
 
