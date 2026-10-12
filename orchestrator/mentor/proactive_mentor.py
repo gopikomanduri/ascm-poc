@@ -231,6 +231,11 @@ def main(override_goal: Optional[str] = None):
         print(f"⏱️ Days since GTM Action: {days:.1f} days (Risk: {advice['risk_level']})" if days is not None
               else f"⏱️ Days since GTM Action: unknown (Risk: {advice['risk_level']})")
         print(f"\n💡 Mentor Recommendation:\n   {advice['recommendation']}")
+        print(f"\n📈 Outcome Attribution:\n   {advice.get('outcome_recommendation', 'No outcome feedback available.')}")
+        for pending in advice.get("gtm_outcome_feedback", {}).get("unattributed_cycles_due", []):
+            print(f"   [ ] Review {pending['experiment_id']} ({pending['age_hours']}h old): record a verified outcome or mark the experiment reviewed/stopped.")
+        if advice.get("gtm_outcome_feedback", {}).get("status") == "outcomes_observed":
+            print("   Prompt: What evidence explains this result, and what customer action or experiment should happen next?")
         if advice["should_trigger_gtm"]:
             print("\n🚀 Review the next GTM action and release criteria.")
         return
