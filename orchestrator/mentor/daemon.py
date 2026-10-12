@@ -293,11 +293,14 @@ class UniversalASCMDaemon:
             session_id = state.get("working_session_id") or getattr(self, "working_session_id", "daemon-session")
             # Include a concrete feedback path in the notification so quality can be
             # measured after a real work session instead of assuming usefulness.
-            message += (
-                f" Session: {session_id}. Feedback: python -m orchestrator.mentor.evidence_pipeline "
+            feedback_footer = (
+                f"Session: {session_id}. Feedback: python -m orchestrator.mentor.evidence_pipeline "
                 f"--feedback helpful --intervention-id {intervention_id}. "
                 f"Session report: python -m orchestrator.mentor.evidence_pipeline --report --session-id {session_id}"
             )
+            # Keep the actionable feedback/report commands intact even when the
+            # evidence-rich explanation needs to be shortened for desktop notifications.
+            message = message[:max(0, 990 - len(feedback_footer))] + " " + feedback_footer
             audit_details["intervention_id"] = intervention_id
             audit_details["session_id"] = session_id
             self.audit_logger.log_event(
