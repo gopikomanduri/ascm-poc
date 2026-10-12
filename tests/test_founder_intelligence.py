@@ -33,7 +33,12 @@ class FounderIntelligenceTests(unittest.TestCase):
             observation="code_activity",
             evidence={
                 "task_description": "Implement authentication",
-                "reuse_candidates": [{"name": "existing auth library"}],
+                "reuse_candidates": [{
+                    "name": "existing auth library",
+                    "license": "MIT",
+                    "archived": False,
+                    "suitability_score": 78,
+                }],
                 "milestone": "Working sign-in",
                 "customer_evidence": "Three customer interviews",
             },
