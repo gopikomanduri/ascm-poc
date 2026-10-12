@@ -15,6 +15,7 @@ from orchestrator.gtm.strategy.repo_analyzer import RepoAnalyzer
 from orchestrator.gtm.strategy.proactive_monitor import ProactiveGitMonitor
 from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 from orchestrator.mentor.notifier import CrossPlatformNotifier
+from orchestrator.mentor.next_best_action import FounderContextStore, NextBestActionEngine
 
 _load_dotenv()
 logger = logging.getLogger("ASCMProactiveMentor")
@@ -32,6 +33,8 @@ class ASCMProactiveMentor:
         self.repo_analyzer = RepoAnalyzer(str(self.repo_path))
         self.git_monitor = ProactiveGitMonitor(str(self.repo_path))
         self.outcome_ledger = OutcomeLedger(self.repo_path)
+        self.founder_context = FounderContextStore(self.repo_path)
+        self.next_best_action = NextBestActionEngine(self.repo_path)
         self._last_sell_notify = 0.0
         self._last_outcome_notify = 0.0
 
@@ -91,7 +94,21 @@ class ASCMProactiveMentor:
         data.setdefault("mentor_advice", "Validate the problem with potential users.")
         data.setdefault("ready_for_gtm_test", False)
         self._save_state({"current_goal": data, "timestamp": datetime_now_iso()})
+        # Keep the explicit founder goal available to the decision engine.
+        self.founder_context.update(
+            current_goal=data.get("clarified_goal") or raw_input,
+            target_customer=data.get("target_icp") or None,
+        )
         return data
+
+    def recommend_next_action(self, observation: str, evidence: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Build an explainable recommendation from an explicit observation."""
+        recent_events = self.outcome_ledger.recent_events(200)
+        return self.next_best_action.recommend(
+            observation=observation,
+            evidence=evidence or {},
+            recent_events=recent_events,
+        )
 
     def evaluate_code_progress_and_advise(self) -> Dict[str, Any]:
         analysis = self.repo_analyzer.analyze()
@@ -215,6 +232,8 @@ def main(override_goal: Optional[str] = None):
     parser.add_argument("--watch", action="store_true", help="Run background mentor loop")
     parser.add_argument("--check-readiness", action="store_true", help="Check GTM activity and milestones")
     parser.add_argument("--mark-milestone", help="Explicitly record a completed milestone by name")
+    parser.add_argument("--observe", choices=sorted(__import__("orchestrator.mentor.next_best_action", fromlist=["SUPPORTED_OBSERVATIONS"]).SUPPORTED_OBSERVATIONS), help="Evaluate an explicitly observed event for a next-best-action recommendation")
+    parser.add_argument("--task-description", help="Task details accompanying code_activity/coding_started")
     parser.add_argument("--mentor", action="store_true", help="Mentor flag (ignored)")
     args, _ = parser.parse_known_args()
     mentor = ASCMProactiveMentor()
@@ -222,6 +241,20 @@ def main(override_goal: Optional[str] = None):
     if args.mark_milestone:
         milestone = mentor.git_monitor.record_milestone(args.mark_milestone)
         print("Recorded milestone: {} ({})".format(milestone["name"], milestone["occurred_at"]))
+        return
+
+    if args.observe:
+        evidence = {"task_description": args.task_description} if args.task_description else {}
+        result = mentor.recommend_next_action(args.observe, evidence)
+        print("\\nASCM Next-Best-Action Recommendation")
+        print("Goal: {}".format(result.get("goal") or "not configured"))
+        for index, action in enumerate(result.get("actions", []), 1):
+            print("\\n{}. {} [{}]".format(index, action["title"], action["confidence"]))
+            print("   Why: {}".format(action["rationale"]))
+            print("   Benefit: {}".format(action["expected_benefit"]))
+            if action["requires_approval"]:
+                print("   Approval required before external execution.")
+        print("\\n{}".format(result["disclaimer"]))
         return
 
     if args.check_readiness:
