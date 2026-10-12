@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import threading
 import uuid
@@ -69,8 +70,25 @@ class ContextFusionEngine:
     def _append(self, event: Dict[str, Any]) -> Dict[str, Any]:
         self.history_dir.mkdir(parents=True, exist_ok=True)
         with self._write_lock:
-            with self.events_path.open("a", encoding="utf-8") as stream:
-                stream.write(json.dumps(event, sort_keys=True) + "\n")
+            # Keep a bounded local history; newest events remain in the active file.
+            if self.events_path.exists() and self.events_path.stat().st_size >= 5 * 1024 * 1024:
+                oldest = self.events_path.with_suffix(".jsonl.3")
+                if oldest.exists():
+                    oldest.unlink()
+                for index in (2, 1):
+                    source = self.events_path.with_suffix(f".jsonl.{index}")
+                    if source.exists():
+                        source.replace(self.events_path.with_suffix(f".jsonl.{index + 1}"))
+                self.events_path.replace(self.events_path.with_suffix(".jsonl.1"))
+            fd = os.open(str(self.events_path), os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
+            try:
+                os.write(fd, (json.dumps(event, sort_keys=True) + "\n").encode("utf-8"))
+            finally:
+                os.close(fd)
+            try:
+                self.events_path.chmod(0o600)
+            except OSError:
+                pass
         return event
 
     def record_file_change(self, path: str | Path) -> Dict[str, Any]:
@@ -192,6 +210,10 @@ class ContextFusionEngine:
         path = self.contexts_dir / f"{project_id}.json"
         temp = path.with_suffix(".tmp")
         temp.write_text(json.dumps(context, indent=2, sort_keys=True), encoding="utf-8")
+        try:
+            temp.chmod(0o600)
+        except OSError:
+            pass
         temp.replace(path)
 
     def infer_context(self, project_path: str | Path | None = None) -> Dict[str, Any]:
