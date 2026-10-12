@@ -18,7 +18,7 @@ Important limitations:
 
 When a founder-confirmed goal exists and project activity inference reaches the existing confidence threshold, the daemon now invokes the next-best-action pipeline and surfaces the founder-intelligence ranked path, the top alternatives, and missing evidence. Recommendations are audited with project identity, evidence event IDs, confidence, and ranking. New evidence can trigger a fresh evaluation before the four-hour repeat-prompt window, with a ten-minute minimum interval between genuinely new interventions. Repeated identical evidence remains subject to the longer cooldown.
 
-This is an initial event-to-decision integration, not proof of continuous perfect awareness. The daemon still depends on configured workspace activity signals and inferred task hypotheses; it does not automatically know customer evidence or open-source reuse candidates unless those facts are supplied. The notifications are advisory only and never execute the proposed path.
+This is an initial event-to-decision integration, not proof of continuous perfect awareness. The daemon now reads recorded customer outcomes from the local GTM outcome ledger and can enrich the decision with public GitHub repository candidates when remote discovery is explicitly enabled. The notifications remain advisory only and never execute the proposed path. Customer evidence is only as complete as the events recorded; GitHub search rankings and the reuse score are triage heuristics, not proof of fit, security, license compatibility, or maintainability.
 
 ## Activity signals now supported
 
@@ -107,3 +107,35 @@ ASCM_ENABLE_APPROVED_EXECUTION=1 python -m orchestrator.mentor.proactive_mentor 
 ```
 
 This local gate is a safety layer for a single-user MVP, not an authorization boundary for a multi-user or hosted commercial service. Do not enable remote execution until identity, server-side authorization, isolation, and audited approval tokens are implemented.
+
+
+## Customer-demand and open-source evidence connectors
+
+The daemon enriches each eligible intervention from two evidence sources:
+
+- **Customer demand (local by default):** reads `.ascm_history/gtm_outcomes.json` and summarizes explicitly recorded replies, meetings, qualified opportunities, and conversions from the last 90 days. It marks a demand signal as present only when there is at least one qualified opportunity/conversion or three positive/interested replies. This is a conservative heuristic, not product-market-fit proof. Missing events are unknown, not evidence of no demand.
+- **Open-source reuse (remote opt-in):** set `ASCM_ENABLE_REUSE_DISCOVERY=1` before starting the daemon to allow public GitHub repository search. Task descriptions are sent to GitHub Search, so keep this disabled for proprietary/sensitive task descriptions unless that transmission is acceptable. Without the opt-in, ASCM reports that reuse discovery is unavailable and does not infer that no alternative exists.
+
+Repository candidates include detected license metadata, stars, archived status, last push time, and a heuristic suitability score with reasons. Archived projects and missing/unknown license metadata are penalized. Before adoption, a human must check feature/API fit, license compatibility, security advisories, dependencies, release cadence, integration cost, and migration risk. ASCM does not clone, install, or integrate a candidate automatically. Search failures are recorded as unavailable rather than treated as an empty market.
+
+## Measure intervention quality in real work sessions
+
+The daemon records each intervention attempt with an intervention ID, a daemon-session ID, project ID, recommended path, confidence, and evidence event IDs. It does not store free-form feedback notes; if a note is supplied, only its character count is retained.
+
+The notification includes copyable commands. Example:
+
+```bash
+# Rate a recommendation as helpful, not helpful, accepted, dismissed, acted_on, or incorrect
+python -m orchestrator.mentor.evidence_pipeline --feedback acted_on --intervention-id INTERVENTION_ID
+
+# Review the latest unreviewed intervention
+python -m orchestrator.mentor.evidence_pipeline --feedback helpful --latest
+
+# Summarize all recorded sessions, or filter to a session ID shown in the notification
+python -m orchestrator.mentor.evidence_pipeline --report
+python -m orchestrator.mentor.evidence_pipeline --report --session-id SESSION_ID
+```
+
+Quality reports separate the number of intervention attempts from explicit feedback and report positive/negative feedback rates only over rated interventions. Unreviewed interventions are not treated as success or failure. The labels `helpful`, `accepted`, and `acted_on` count as positive feedback; `not_helpful`, `dismissed`, and `incorrect` count as negative feedback. This first version measures explicit founder feedback, not causal impact or long-term customer outcomes; review labels consistently and compare multiple sessions before tuning ranking rules.
+
+Evidence and intervention records remain local under `.ascm_history`, use restrictive file permissions where supported, and are bounded to the latest 5,000 intervention records. The tracker is a single-process JSON-backed MVP and is not a tamper-proof audit system. No remote customer CRM is queried and no customer data is scraped; connect provider event adapters only with explicit credentials, consent, and privacy review.
