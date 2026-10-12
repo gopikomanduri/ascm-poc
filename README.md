@@ -151,7 +151,7 @@ The mentor can correlate code edits, foreground application transitions, termina
 - Optional Bash hook: `source /path/to/ascm-poc/scripts/ascm-bash-hook.sh`
 - Optional Zsh hook: `source /path/to/ascm-poc/scripts/ascm-zsh-hook.sh`
 
-Security CI runs a deterministic review, Bandit on changed Python files, and a dependency vulnerability audit. A Coco review is only reported as completed when the approved Coco runner is configured in the `ASCM_COCO_AGENT_CMD` GitHub Actions secret and returns a valid result. A missing Coco integration is explicitly reported as unavailable, not passed.
+Security CI runs a deterministic review, Bandit on changed Python files, and a dependency vulnerability audit. The CICO security review is integrated into GitHub Actions and is also available locally via `python -m orchestrator.security.cico_gate`. It is only reported as completed when the configured `ASCM_CICO_AGENT_CMD` runner returns a valid structured result; otherwise the release gate fails closed. A missing CICO integration is explicitly reported as unavailable, not passed.
 
 ## Quick Start
 
