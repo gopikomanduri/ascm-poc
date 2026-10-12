@@ -12,7 +12,7 @@ This document describes the current implementation and the gates required before
 | Test result | CLI event adapter | Pass/fail and exit code only | Opt-in unless integrated by a caller |
 | Browser research | Optional Chrome MV3 extension + native messaging host | Hostname only | Opt-in |
 
-Never persist raw shell commands, terminal output, full browser URLs, query strings, tab/window titles, page contents, clipboard data, screenshots, or keystrokes. Browser signals are only available after the founder explicitly installs and enables the extension. Active-window support is best effort and does not currently identify the foreground window's project reliably on every Wayland desktop.
+Never persist raw shell commands, terminal output, full browser URLs, query strings, tab/window titles, page contents, clipboard data, screenshots, or keystrokes. Browser signals are only available after the founder explicitly installs and enables the extension. Active-window support is best effort and does not currently identify the foreground window's project reliably on every Wayland desktop. Disable foreground-app sampling with `ASCM_ACTIVE_WINDOW_MONITOR=0` before starting the daemon.
 
 ## Enable terminal signals
 
