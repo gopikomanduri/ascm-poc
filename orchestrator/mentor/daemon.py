@@ -105,8 +105,7 @@ class UniversalASCMDaemon:
         if goal:
             # Do not ask the founder to restate a task on every project/window switch.
             # Only offer a recommendation when multiple signals support a useful hypothesis.
-            recent_files = activity.get("filesystem_activity", {}).get("recently_edited_files", [])
-            inference_path = recent_files[-1] if recent_files else self.repo_path
+            inference_path = self.context_fusion.latest_project_path()
             inferred = self.context_fusion.infer_context(inference_path)
             if not isinstance(inferred, dict):
                 return
