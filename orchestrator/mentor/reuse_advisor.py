@@ -27,7 +27,9 @@ class GitHubRepositoryAdvisor:
         if not 1 <= limit <= 10:
             raise ValueError("limit must be between 1 and 10")
         query = " ".join(task_description.strip().split())[:100]
-        url = f"{self.API_URL}?q={quote(query + ' in:name,description,readme')}&sort=stars&order=desc&per_page={limit}"
+        # GitHub's default repository-search ordering is relevance-based. Preserve
+        # that signal instead of allowing popularity alone to dominate discovery.
+        url = f"{self.API_URL}?q={quote(query + ' in:name,description,readme')}&per_page={limit}"
         headers = {
             "Accept": "application/vnd.github+json",
             "User-Agent": "ASCM-Founder-Mentor",
@@ -55,6 +57,10 @@ class GitHubRepositoryAdvisor:
                 "url": item.get("html_url"),
                 "description": item.get("description"),
                 "stars": item.get("stargazers_count", 0),
+                "search_score": item.get("score", 0),
+                "forks": item.get("forks_count", 0),
+                "open_issues": item.get("open_issues_count", 0),
+                "language": item.get("language"),
                 "last_updated": item.get("pushed_at"),
                 "archived": bool(item.get("archived", False)),
                 "license": license_info.get("spdx_id") or license_info.get("name") or "Not detected",
