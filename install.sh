@@ -74,6 +74,30 @@ if grep -qE "^GEMINI_API_KEY=.+" "$INSTALL_DIR/.env" 2>/dev/null; then API_KEY_S
 if grep -qE "^OPENAI_API_KEY=.+" "$INSTALL_DIR/.env" 2>/dev/null; then API_KEY_SET=true; fi
 if grep -qE "^ANTHROPIC_API_KEY=.+" "$INSTALL_DIR/.env" 2>/dev/null; then API_KEY_SET=true; fi
 
+# ── Select the workspace to monitor ───────────────────────────────────────────
+# A one-time choice is necessary to avoid silently scanning the entire home directory.
+WATCH_DIR="${ASCM_WATCH_PATH:-}"
+if [[ -z "$WATCH_DIR" ]]; then
+    CURRENT_DIR="$(pwd -P)"
+    if git -C "$CURRENT_DIR" rev-parse --show-toplevel >/dev/null 2>&1; then
+        WATCH_DIR="$(git -C "$CURRENT_DIR" rev-parse --show-toplevel)"
+        info "Detected Git workspace: $WATCH_DIR"
+    elif [[ -r /dev/tty ]]; then
+        echo ""
+        info "ASCM can run in the background and proactively monitor one workspace."
+        info "It watches code-file activity and stores mentor context locally; it does not scan your entire home directory."
+        read -r -p "Workspace directory to monitor [$CURRENT_DIR]: " WATCH_DIR < /dev/tty || true
+        WATCH_DIR="${WATCH_DIR:-$CURRENT_DIR}"
+    else
+        WATCH_DIR="$CURRENT_DIR"
+        warn "No interactive terminal available; using current directory as workspace: $WATCH_DIR"
+        warn "To choose another workspace, set ASCM_WATCH_PATH before rerunning the installer."
+    fi
+fi
+[[ -d "$WATCH_DIR" ]] || error "Workspace directory does not exist: $WATCH_DIR"
+WATCH_DIR="$(cd "$WATCH_DIR" && pwd -P)"
+success "Workspace selected: $WATCH_DIR"
+
 # ── Create launcher script ────────────────────────────────────────────────────
 LAUNCHER="$HOME/.local/bin/ascm"
 mkdir -p "$(dirname "$LAUNCHER")"
@@ -85,6 +109,14 @@ source .venv/bin/activate
 python dashboard_server.py "\$@"
 EOF
 chmod +x "$LAUNCHER"
+
+# ── Enable proactive background mentor on login ────────────────────────────────
+info "Enabling the ASCM Proactive Mentor at login..."
+(
+    cd "$INSTALL_DIR"
+    "$VENV_PYTHON" -m orchestrator.mentor.daemon --repo "$WATCH_DIR" --install
+)
+success "Background mentor startup service configured ✓"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
@@ -103,7 +135,12 @@ if [[ "$API_KEY_SET" == "false" ]]; then
     echo ""
 fi
 
-echo -e "${BOLD}Start ASCM:${RESET}"
+echo -e "${BOLD}Proactive Mentor:${RESET}"
+echo "  The background mentor is configured to start at login and monitor:"
+echo -e "  ${CYAN}$WATCH_DIR${RESET}"
+echo "  You do not need to launch it or type commands for routine prompts."
+echo ""
+echo -e "${BOLD}Optional ASCM dashboard:${RESET}"
 echo ""
 echo -e "  ${CYAN}# Option 1 — command (if ~/.local/bin is in your PATH):${RESET}"
 echo    "  ascm"
