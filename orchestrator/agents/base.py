@@ -96,7 +96,7 @@ class GeminiProvider(BaseLLMProvider):
 
         self.ServerError = ServerError
         preferred = model or os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL", "gemini-3.5-flash-lite")
-        valid_defaults = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-pro-latest"]
+        valid_defaults = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest", "gemini-pro-latest"]
         self.candidate_models = list(dict.fromkeys([preferred] + valid_defaults))
 
         self.provider_name = "gemini"
