@@ -51,6 +51,21 @@ class ContextFusionEngineTests(unittest.TestCase):
             self.assertNotIn("content", payload)
             self.assertNotIn("terminal_output", payload)
 
+
+    def test_latest_project_path_tracks_terminal_context_across_nested_repositories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project_a = root / "service-a"
+            project_b = root / "service-b"
+            project_a.mkdir()
+            project_b.mkdir()
+            subprocess.run(["git", "init", "-q", str(project_a)], check=True)
+            subprocess.run(["git", "init", "-q", str(project_b)], check=True)
+            engine = ContextFusionEngine(root)
+            engine.record_terminal_event(cwd=project_a, command_category="build_or_run", exit_code=0)
+            engine.record_terminal_event(cwd=project_b, command_category="python_tests", exit_code=1)
+            self.assertEqual(engine.latest_project_path(), project_b.resolve())
+
     def test_rejects_files_outside_configured_workspace(self):
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
             engine = ContextFusionEngine(tmp)
