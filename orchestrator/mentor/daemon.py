@@ -238,6 +238,8 @@ class UniversalASCMDaemon:
 <dict>
     <key>Label</key>
     <string>com.ascm.mentor</string>
+    <key>WorkingDirectory</key>
+    <string>{daemon_script.parents[2]}</string>
     <key>ProgramArguments</key>
     <array>
         <string>{py_exe}</string>
@@ -272,7 +274,8 @@ Description=ASCM Proactive Founder & Engineering Mentor
 After=default.target
 
 [Service]
-ExecStart={py_exe} {daemon_script} --repo {self.repo_path}
+WorkingDirectory={daemon_script.parents[2]}
+ExecStart="{py_exe}" "{daemon_script}" --repo "{self.repo_path}"
 Restart=always
 RestartSec=30
 StandardOutput=file:{self.history_dir}/daemon_stdout.log
@@ -292,7 +295,7 @@ WantedBy=default.target
             # Generates Windows Startup batch file
             startup_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
             bat_path = startup_dir / "ascm_mentor_daemon.bat"
-            bat_content = f'@echo off\nstart /B "" "{py_exe}" "{daemon_script}" --repo "{self.repo_path}"\n'
+            bat_content = f'@echo off\ncd /d "{daemon_script.parents[2]}"\nstart /B "" "{py_exe}" "{daemon_script}" --repo "{self.repo_path}"\n'
             with open(bat_path, "w") as f:
                 f.write(bat_content)
             return f"Installed Windows Startup Agent at {bat_path}"
