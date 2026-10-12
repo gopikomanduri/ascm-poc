@@ -92,6 +92,36 @@ class ProactiveGitMonitor:
         self.gtm_events_file.write_text(json.dumps(events, indent=2), encoding="utf-8")
         return event
 
+    def record_milestone(self, name: str, source: str = "manual", occurred_at: Optional[str] = None) -> dict:
+        """Record an explicitly declared milestone; repository size is not a milestone signal."""
+        clean_name = name.strip() if isinstance(name, str) else ""
+        if not clean_name:
+            raise ValueError("Milestone name must be a non-empty string")
+        self.history_dir.mkdir(parents=True, exist_ok=True)
+        path = self.history_dir / "milestones.json"
+        try:
+            milestones = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(milestones, list):
+                milestones = []
+        except (OSError, ValueError, TypeError):
+            milestones = []
+        milestone = {"name": clean_name, "source": source, "occurred_at": occurred_at or datetime.now().astimezone().isoformat()}
+        milestones.append(milestone)
+        path.write_text(json.dumps(milestones, indent=2), encoding="utf-8")
+        return milestone
+
+    def get_latest_milestone(self) -> Optional[dict]:
+        """Return the latest valid explicitly recorded milestone, if any."""
+        path = self.history_dir / "milestones.json"
+        try:
+            milestones = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return None
+        if not isinstance(milestones, list):
+            return None
+        valid = [m for m in milestones if isinstance(m, dict) and isinstance(m.get("name"), str) and m["name"].strip() and self._parse_timestamp(m.get("occurred_at"))]
+        return max(valid, key=lambda m: self._parse_timestamp(m["occurred_at"])) if valid else None
+
     def _load_gtm_events(self) -> list:
         try:
             data = json.loads(self.gtm_events_file.read_text(encoding="utf-8"))
