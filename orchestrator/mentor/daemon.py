@@ -117,7 +117,15 @@ class UniversalASCMDaemon:
         path = self.history_dir / "daemon_state.json"
         temp = path.with_suffix(".tmp")
         temp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        try:
+            temp.chmod(0o600)
+        except OSError:
+            pass
         temp.replace(path)
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
 
     def _prompt_for_founder_context(self, activity, state, current_time):
         """Infer task context silently; clarify only when a missing goal blocks useful guidance."""
