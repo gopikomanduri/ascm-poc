@@ -44,11 +44,23 @@ class OutcomeLedger:
             "metrics": metrics or {},
         }
         self.history_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.history_dir.chmod(0o700)
+        except OSError:
+            pass
         events = self._read()
         events.append(event)
         temp_path = self.path.with_suffix(".tmp")
         temp_path.write_text(json.dumps(events, indent=2), encoding="utf-8")
+        try:
+            temp_path.chmod(0o600)
+        except OSError:
+            pass
         temp_path.replace(self.path)
+        try:
+            self.path.chmod(0o600)
+        except OSError:
+            pass
         if notify and event_type in {"customer_reply", "meeting_booked", "qualified_opportunity", "conversion"}:
             # Notification failure must never undo a successfully recorded event.
             try:
