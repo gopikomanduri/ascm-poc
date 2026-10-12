@@ -68,6 +68,16 @@ def main(argv=None) -> int:
                                 "category": category, "exit_code": args.exit_code,
                                 "project_id": event["project_id"],
                             })
+            test_categories = {"python_tests", "javascript_tests", "go_tests", "rust_tests"}
+            if category in test_categories and args.exit_code is not None:
+                test_event = adapter.fusion.record_test_result(
+                    project_path=args.cwd, passed=args.exit_code == 0, exit_code=args.exit_code
+                )
+                audit.log_event("ACTIVITY_TEST_RESULT", agent="ACTIVITY_ADAPTER",
+                                action="DERIVED_FROM_TERMINAL_STATUS", details={
+                                    "passed": args.exit_code == 0, "exit_code": args.exit_code,
+                                    "project_id": test_event["project_id"],
+                                })
         elif args.kind == "test-result":
             event = adapter.fusion.record_test_result(
                 project_path=args.cwd, passed=args.exit_code == 0, exit_code=args.exit_code
