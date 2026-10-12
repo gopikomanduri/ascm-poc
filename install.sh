@@ -115,6 +115,9 @@ if [[ -z "$ACTIVE_WINDOW_MONITOR" ]]; then
         info "Foreground app-name signals are disabled by default in non-interactive installs."
     fi
 fi
+if [[ "$ACTIVE_WINDOW_MONITOR" != "0" && "$ACTIVE_WINDOW_MONITOR" != "1" ]]; then
+    error "ASCM_ACTIVE_WINDOW_MONITOR must be 0 or 1."
+fi
 export ASCM_ACTIVE_WINDOW_MONITOR="$ACTIVE_WINDOW_MONITOR"
 if [[ "$ACTIVE_WINDOW_MONITOR" == "1" ]]; then
     success "Foreground app-name signals enabled by explicit choice."
