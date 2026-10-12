@@ -19,6 +19,7 @@ import subprocess
 import logging
 import plistlib
 import uuid
+import shlex
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -293,10 +294,15 @@ class UniversalASCMDaemon:
             session_id = state.get("working_session_id") or getattr(self, "working_session_id", "daemon-session")
             # Include a concrete feedback path in the notification so quality can be
             # measured after a real work session instead of assuming usefulness.
+            workspace_for_feedback = Path(
+                getattr(self, "repo_path", self.history_dir.parent)
+            ).resolve()
+            project_arg = f"--project-path {shlex.quote(str(workspace_for_feedback))}"
             feedback_footer = (
                 f"Session: {session_id}. Feedback: python -m orchestrator.mentor.evidence_pipeline "
-                f"--feedback helpful --intervention-id {intervention_id}. "
-                f"Session report: python -m orchestrator.mentor.evidence_pipeline --report --session-id {session_id}"
+                f"{project_arg} --feedback helpful --intervention-id {intervention_id}. "
+                f"Session report: python -m orchestrator.mentor.evidence_pipeline "
+                f"{project_arg} --report --session-id {session_id}"
             )
             # Keep the actionable feedback/report commands intact even when the
             # evidence-rich explanation needs to be shortened for desktop notifications.
