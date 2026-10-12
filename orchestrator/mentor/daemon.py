@@ -227,11 +227,33 @@ class UniversalASCMDaemon:
                     if missing else ""
                 )
                 title = "ASCM Founder Intelligence: " + recommended_path.replace("_", " ").title()
+                customer_summary = recommendation_evidence.get("customer_evidence_summary", {})
+                reuse_summary = recommendation_evidence.get("reuse_evidence_summary", {})
+                customer_signal = (
+                    customer_summary.get("customer_evidence")
+                    if isinstance(customer_summary, dict) else None
+                )
+                customer_line = (
+                    "Customer evidence: " + str(customer_signal)[:180] + "."
+                    if customer_signal else
+                    "Customer evidence: no matching feature-tagged outcomes; demand remains unknown."
+                )
+                repositories = recommendation_evidence.get("reuse_candidates", [])
+                if repositories:
+                    candidate_line = "Reuse candidates (heuristic): " + "; ".join(
+                        f"{str(item.get('name', 'unknown'))[:70]} score {item.get('suitability_score', '?')}/100"
+                        for item in repositories[:2] if isinstance(item, dict)
+                    ) + ". Human fit/license/security review required."
+                elif isinstance(reuse_summary, dict) and reuse_summary.get("enabled") is False:
+                    candidate_line = "Open-source search disabled; no conclusion that alternatives do not exist."
+                else:
+                    candidate_line = "No usable public repository candidates returned; this is not proof none exist."
                 message = (
                     f"Goal: {goal}. Current signal: {task} (activity confidence {confidence:.0%}). "
                     f"Recommended path: {recommended_path.replace('_', ' ')} "
                     f"(decision confidence: {decision_confidence}). "
-                    f"Top paths: {path_summary or 'no ranked paths'}."
+                    f"Top paths: {path_summary or 'no ranked paths'}. "
+                    f"{customer_line} {candidate_line}"
                     f"{missing_summary} This is advice only; no action was executed."
                 )
                 audit_details = {
@@ -242,6 +264,15 @@ class UniversalASCMDaemon:
                     "ranked_paths": top_paths,
                     "missing_evidence": missing,
                     "evidence_event_ids": evidence_ids,
+                    "customer_evidence_event_count": (
+                        customer_summary.get("event_count", 0)
+                        if isinstance(customer_summary, dict) else 0
+                    ),
+                    "reuse_discovery_enabled": (
+                        reuse_summary.get("enabled", False)
+                        if isinstance(reuse_summary, dict) else False
+                    ),
+                    "reuse_candidate_count": len(repositories) if isinstance(repositories, list) else 0,
                     "recommendation_title": title,
                 }
             else:
