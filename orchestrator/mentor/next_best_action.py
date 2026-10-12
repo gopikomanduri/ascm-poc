@@ -137,7 +137,7 @@ class NextBestActionEngine:
             if evidence.get("task_description"):
                 add(
                     "check_reuse_before_building", "Check whether an existing solution is better",
-                    "A coding task is observed, but the goal and task description alone do not prove that custom implementation is necessary.",
+                    "Observed task: " + str(evidence.get("task_description", "unspecified task"))[:240] + ". A task description and goal do not by themselves prove that custom implementation is necessary.",
                     "Compare build-versus-integrate options before investing more engineering time.",
                     requires_approval=False, confidence="medium",
                 )
