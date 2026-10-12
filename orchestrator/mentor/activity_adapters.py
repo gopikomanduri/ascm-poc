@@ -5,6 +5,7 @@ browser URLs/paths, window titles, page contents, clipboard data, or keystrokes.
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 import platform
 import re
@@ -53,6 +54,15 @@ def normalize_domain(url_or_domain: str) -> str:
     host = parsed.hostname.rstrip(".").lower()
     if host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
         raise ValueError("Local hostnames are not recorded as browser activity")
+    try:
+        address = ipaddress.ip_address(host)
+        if not address.is_global:
+            raise ValueError("Private or reserved IP addresses are not recorded as browser activity")
+    except ValueError as exc:
+        if "Private or reserved" in str(exc):
+            raise
+    if "." not in host and ":" not in host:
+        raise ValueError("Single-label internal hostnames are not recorded as browser activity")
     if len(host) > 253 or any(not part or len(part) > 63 for part in host.split(".")):
         raise ValueError("Invalid hostname")
     return host
