@@ -47,7 +47,7 @@ A future publishing adapter must independently verify approval, show the exact c
 
 ## Limits of this MVP
 
-- Activity is explicit input today; this is not yet continuous IDE observation or automatic milestone discovery.
+- The background daemon can observe code-file edits and prompt for intent, but it does not semantically infer the task from source code or automatically discover milestones.
 - The rules are deterministic and explainable; this is not yet a calibrated learning or planning model.
 - The approval record is local JSON, not an identity-backed authorization service. It must not be treated as a security boundary for multi-user or production deployment.
 - Proposal approval records consent but does not execute actions. Integrations must re-check status at execution time and log the result.
