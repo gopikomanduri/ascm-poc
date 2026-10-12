@@ -149,6 +149,8 @@ class AuditLogger:
         if raw_details is not None:
             findings = PIIScrubber.audit_findings(str(raw_details))
             if findings:
+                # Backward-compatible aggregate flag plus category-only evidence.
+                record["metadata"]["pii_redacted"] = True
                 record["metadata"]["pii_redacted_categories"] = sorted({
                     str(item.get("type", item.get("category", "unknown")))[:80]
                     if isinstance(item, dict) else str(item)[:80]
