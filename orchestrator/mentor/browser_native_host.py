@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import stat
 import struct
 import shlex
@@ -38,8 +39,8 @@ def _write_message(value):
 
 
 def install_native_host(workspace: Path, extension_id: str) -> Path:
-    if not extension_id or len(extension_id) > 128 or any(ch not in "abcdefghijklmnopqrstuvwxyz" for ch in extension_id):
-        raise ValueError("extension-id must be the exact lowercase Chrome extension ID")
+    if not re.fullmatch(r"[a-p]{32}", extension_id or ""):
+        raise ValueError("extension-id must be the exact 32-character Chrome extension ID")
     system = platform.system().lower()
     if system == "darwin":
         manifest_dir = Path.home() / "Library/Application Support/Google/Chrome/NativeMessagingHosts"
@@ -96,7 +97,8 @@ def main():
                 raise ValueError("Unsupported message type")
             # Deliberately accept only domain, ignore timestamp and all other browser data.
             domain = normalize_domain(str(message.get("domain", "")))
-            event = adapter.browser_domain_event(cwd=workspace, url_or_domain=domain)
+            project_path = adapter.fusion.latest_project_path()
+            event = adapter.browser_domain_event(cwd=project_path, url_or_domain=domain)
             audit.log_event("ACTIVITY_BROWSER_DOMAIN", agent="BROWSER_NATIVE_HOST",
                             action="RECORD_HOSTNAME", details={
                                 "domain": domain, "project_id": event["project_id"],
