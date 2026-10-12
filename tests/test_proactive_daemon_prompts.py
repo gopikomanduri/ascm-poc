@@ -105,15 +105,18 @@ class ProactiveDaemonPromptTests(unittest.TestCase):
             ) as notify:
                 daemon._prompt_for_founder_context(activity, state, 100000)
             prompt.assert_not_called()
-            self.assertEqual(
-                daemon.mentor.recommendations,
-                [("code_activity", {
-                    "task_description": "Investigating test failures after recent code changes",
-                    "context_confidence": 0.82,
-                    "evidence_event_ids": ["edit-1", "test-1"],
-                    "inference_rationale": "A test failure followed a code change.",
-                })],
-            )
+            self.assertEqual(len(daemon.mentor.recommendations), 1)
+            observation, evidence = daemon.mentor.recommendations[0]
+            self.assertEqual(observation, "code_activity")
+            self.assertEqual(evidence["task_description"], "Investigating test failures after recent code changes")
+            self.assertEqual(evidence["context_confidence"], 0.82)
+            self.assertEqual(evidence["evidence_event_ids"], ["edit-1", "test-1"])
+            self.assertEqual(evidence["inference_rationale"], "A test failure followed a code change.")
+            # Demand and reuse evidence are connected, while public search remains opt-in.
+            self.assertIn("customer_evidence_summary", evidence)
+            self.assertFalse(evidence["customer_evidence_summary"]["user_demand_verified"])
+            self.assertIn("reuse_evidence_summary", evidence)
+            self.assertFalse(evidence["reuse_evidence_summary"]["enabled"])
             self.assertEqual(state["last_context_recommendation_at"], 100000)
             self.assertEqual(notify.call_args.args[0], "ASCM Mentor: Suggested next step")
             self.assertIn("Check reuse first", notify.call_args.args[1])
