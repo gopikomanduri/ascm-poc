@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
 
-ALLOWED_EVENT_TYPES = {"file_changed", "test_passed", "test_failed", "active_app_changed", "browser_domain_seen", "terminal_command"}
+ALLOWED_EVENT_TYPES = {"file_changed", "test_passed", "test_failed", "active_app_changed", "project_activated", "browser_domain_seen", "terminal_command"}
 MAX_EVENTS_READ = 1000
 
 
@@ -172,6 +172,12 @@ class ContextFusionEngine:
                     raise ValueError(f"Invalid value for {key}")
             event[key] = value
         return self._append(event)
+
+    def record_project_activation(self, *, project_path: str | Path, source: str = "ide_extension") -> Dict[str, Any]:
+        """Record that an IDE activated a workspace; store project identity, never document content."""
+        return self._record_project_event(
+            project_path=project_path, event_type="project_activated", source=source,
+        )
 
     def record_active_app(self, *, cwd: str | Path, app_name: str) -> Dict[str, Any]:
         return self._record_project_event(
@@ -344,7 +350,7 @@ class ContextFusionEngine:
         events = self._read_events()
         candidates = [
             event for event in events
-            if event.get("event_type") in {"terminal_command", "test_passed", "test_failed", "file_changed"}
+            if event.get("event_type") in {"terminal_command", "test_passed", "test_failed", "file_changed", "project_activated"}
             and isinstance(event.get("project_root"), str)
             and _parse_time(event.get("timestamp")) is not None
         ]
