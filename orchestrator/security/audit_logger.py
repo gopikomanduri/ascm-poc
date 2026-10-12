@@ -123,22 +123,37 @@ class AuditLogger:
         else:
             scrubbed_details = None
 
+        # Metadata is caller-controlled too; scrub it before either log sink sees it.
+        raw_metadata = metadata or {}
+        try:
+            metadata_text = json.dumps(raw_metadata, ensure_ascii=False)
+            safe_metadata_text = PIIScrubber.scrub(metadata_text)
+            scrubbed_metadata = json.loads(safe_metadata_text)
+            if not isinstance(scrubbed_metadata, dict):
+                scrubbed_metadata = {"value": scrubbed_metadata}
+        except (TypeError, ValueError, json.JSONDecodeError):
+            scrubbed_metadata = {"metadata_omitted": "not_json_serializable"}
+
         record = {
             "timestamp": timestamp,
             "run_id": self.run_id,
-            "event_type": event_type,
+            "event_type": PIIScrubber.scrub(str(event_type))[:120],
             "level": level.upper(),
-            "agent": agent or "SYSTEM",
-            "action": action or "",
+            "agent": PIIScrubber.scrub(str(agent or "SYSTEM"))[:120],
+            "action": PIIScrubber.scrub(str(action or ""))[:160],
             "details": scrubbed_details,
-            "metadata": metadata or {},
+            "metadata": scrubbed_metadata,
         }
 
-        # Check for PII detection in raw data to record security metrics
+        # Record only the names of detected data classes, never the original values.
         if raw_details is not None:
             findings = PIIScrubber.audit_findings(str(raw_details))
             if findings:
-                record["metadata"]["pii_redacted"] = findings
+                record["metadata"]["pii_redacted_categories"] = sorted({
+                    str(item.get("type", item.get("category", "unknown")))[:80]
+                    if isinstance(item, dict) else str(item)[:80]
+                    for item in findings
+                })
 
         # 1. Output to standard text log
         msg = f"[{event_type}] agent={record['agent']} action={record['action']} details={record['details']}"
