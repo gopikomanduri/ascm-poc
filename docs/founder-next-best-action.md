@@ -27,7 +27,7 @@ python -m orchestrator.mentor.proactive_mentor \
 
 Supported observations include `coding_started`, `code_activity`, `tests_passed`, `milestone_completed`, `gtm_cycle_generated`, `campaign_published`, `customer_reply`, `meeting_booked`, `qualified_opportunity`, and `conversion`.
 
-For coding, the mentor suggests evaluating build-versus-integrate options and a small measurable milestone; it does not claim to have found or validated a specific open-source repository. A future repository-discovery adapter should compare maintenance, license, security, compatibility, and integration cost before recommending a concrete project.
+For coding, the mentor suggests evaluating build-versus-integrate options and a small measurable milestone. Add `--discover-repos` to the CLI command to search public GitHub repositories and display candidate URLs, stars, last push, archive state, and detected license. Search results are not endorsements; review maintenance, license compatibility, security, dependencies, API compatibility, and integration cost before adopting a project. A `GITHUB_TOKEN` environment variable can be supplied to raise GitHub API rate limits.
 
 For GTM, generated content is not treated as published content. The mentor recommends founder review before external distribution. Actual publishing and customer outreach must remain behind explicit authorization in the integration that performs them.
 
@@ -44,4 +44,5 @@ Run tests with:
 
 ```bash
 python -m unittest discover -s tests -p 'test_founder_next_best_action.py'
+python -m unittest discover -s tests -p 'test_reuse_advisor.py'
 ```
