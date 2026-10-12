@@ -53,14 +53,33 @@ class FounderIntelligenceEngine:
             missing.append("task_description")
         if not evidence.get("customer_evidence"):
             missing.append("customer_evidence")
-        if not evidence.get("reuse_candidates"):
+        reuse_candidates = evidence.get("reuse_candidates")
+        if not reuse_candidates:
             missing.append("reuse_candidates")
+        elif isinstance(reuse_candidates, list) and any(
+            isinstance(item, dict) and (
+                item.get("archived") is True
+                or str(item.get("license", "")).lower() in {"", "not detected", "none", "unknown"}
+                or (
+                    isinstance(item.get("suitability_score"), (int, float))
+                    and item.get("suitability_score", 0) < 65
+                )
+            )
+            for item in reuse_candidates
+        ) and not any(
+            isinstance(item, dict)
+            and item.get("archived") is not True
+            and str(item.get("license", "")).lower() not in {"", "not detected", "none", "unknown"}
+            and isinstance(item.get("suitability_score"), (int, float))
+            and item.get("suitability_score", 0) >= 65
+            for item in reuse_candidates
+        ):
+            missing.append("verified_reuse_fit_and_license")
         if not evidence.get("milestone"):
             missing.append("measurable_milestone")
 
         task = evidence.get("task_description")
         customer_evidence = evidence.get("customer_evidence")
-        reuse_candidates = evidence.get("reuse_candidates")
         milestone = evidence.get("milestone")
         tests_failed = evidence.get("tests_failed") is True
         repeated_failures = evidence.get("repeated_failures") is True
@@ -77,8 +96,30 @@ class FounderIntelligenceEngine:
             signal("build", 10, "Insufficient confirmed context to conclude that more implementation is the right move.")
 
         if reuse_candidates:
-            signal("reuse", 85, "Candidate reuse options were supplied; evaluate fit, license, maintenance, and integration cost before building.",
-                   "reuse_candidates")
+            scored = [
+                item for item in reuse_candidates
+                if isinstance(item, dict) and isinstance(item.get("suitability_score"), (int, float))
+            ] if isinstance(reuse_candidates, list) else []
+            credible = [
+                item for item in scored
+                if item.get("archived") is not True
+                and str(item.get("license", "")).lower() not in {"", "not detected", "none", "unknown"}
+                and item.get("suitability_score", 0) >= 65
+            ]
+            if credible:
+                best = max(item.get("suitability_score", 0) for item in credible)
+                score = min(80, int(best))
+                signal("reuse", score,
+                       "At least one public candidate has relatively stronger maintenance/license metadata; feature fit, security, compatibility, and total integration cost still require review.",
+                       "reuse_candidates")
+            elif scored:
+                signal("reuse", 35,
+                       "Public candidates were found, but available metadata does not establish a credible reuse option. Check feature fit, license, maintenance, and security before treating reuse as suitable.",
+                       "reuse_candidates")
+            else:
+                signal("reuse", 65,
+                       "Reuse candidates were supplied but their suitability metadata is incomplete; inspect feature fit, license, maintenance, security, and integration cost before deciding.",
+                       "reuse_candidates")
         else:
             signal("reuse", 25, "Reuse has not been evaluated; this is a check to perform, not evidence that a suitable tool exists.")
 
