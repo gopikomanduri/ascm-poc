@@ -52,7 +52,7 @@ class NextBestActionTests(unittest.TestCase):
             self.assertEqual(proposal["status"], "pending_approval")
             approved = engine.record_approval(proposal["proposal_id"], approved=True)
             self.assertEqual(approved["status"], "approved")
-            self.assertIn("does not execute", result["disclaimer"].lower())
+            self.assertIn("no code change", result["disclaimer"].lower())
 
     def test_pending_gtm_experiment_can_be_resolved_by_review_or_stop(self):
         with tempfile.TemporaryDirectory() as tmp:
