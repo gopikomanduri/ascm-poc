@@ -34,6 +34,28 @@ class ProactiveMonitorRegressionTests(unittest.TestCase):
             self.assertGreaterEqual(metrics.days_since_last_gtm_action, 0)
             self.assertNotEqual(metrics.risk_level, "UNKNOWN")
 
+    def test_explicit_milestone_is_persisted_and_read_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            monitor = ProactiveGitMonitor(tmp)
+            recorded = monitor.record_milestone("MVP beta ready", occurred_at="2026-10-11T12:00:00+00:00")
+            self.assertEqual(recorded["name"], "MVP beta ready")
+            self.assertEqual(monitor.get_latest_milestone()["name"], "MVP beta ready")
+
+    def test_mentor_triggers_only_with_explicit_milestone_and_known_gtm_age(self):
+        mentor = ASCMProactiveMentor.__new__(ASCMProactiveMentor)
+        mentor.repo_analyzer = mock.Mock()
+        mentor.repo_analyzer.analyze.return_value = {"test_count": 1, "file_count": 1}
+        metrics = mock.Mock(days_since_last_gtm_action=3.5, risk_level="HIGH")
+        mentor.git_monitor = mock.Mock()
+        mentor.git_monitor.measure_gtm_activity.return_value = metrics
+        mentor.git_monitor.get_latest_milestone.return_value = {"name": "MVP beta ready"}
+        mentor._last_sell_notify = 0
+        with mock.patch.object(mentor, "notify") as notify:
+            advice = mentor.evaluate_code_progress_and_advise()
+        self.assertTrue(advice["should_trigger_gtm"])
+        self.assertEqual(advice["milestone"]["name"], "MVP beta ready")
+        notify.assert_called_once()
+
     def test_invalid_event_type_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(ValueError):
@@ -46,6 +68,7 @@ class ProactiveMonitorRegressionTests(unittest.TestCase):
         metrics = mock.Mock(days_since_last_gtm_action=None, risk_level="UNKNOWN")
         mentor.git_monitor = mock.Mock()
         mentor.git_monitor.measure_gtm_activity.return_value = metrics
+        mentor.git_monitor.get_latest_milestone.return_value = None
         mentor._last_sell_notify = 0
         with mock.patch.object(mentor, "notify") as notify:
             advice = mentor.evaluate_code_progress_and_advise()
