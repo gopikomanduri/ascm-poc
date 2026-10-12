@@ -62,6 +62,27 @@ class EvidenceSourceConnectorTests(unittest.TestCase):
             self.assertFalse(unrelated["user_demand_verified"])
             self.assertEqual(unrelated["event_count"], 0)
 
+    def test_task_scoped_demand_ignores_unrelated_feature_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history = Path(tmp) / ".ascm_history"
+            history.mkdir()
+            now = datetime.now(timezone.utc).isoformat()
+            events = [
+                {"event_id": "auth-demand", "event_type": "feature_request",
+                 "occurred_at": now, "metrics": {"feature_key": "authentication", "demand_signal": "strong"}},
+                {"event_id": "billing-demand", "event_type": "pilot_commitment",
+                 "occurred_at": now, "metrics": {"feature_key": "billing", "demand_signal": "strong"}},
+            ]
+            (history / "gtm_outcomes.json").write_text(json.dumps(events), encoding="utf-8")
+            connector = EvidenceSourceConnector(tmp)
+            auth = connector.customer_demand_evidence(task_description="Implement authentication")
+            self.assertEqual(auth["event_count"], 1)
+            self.assertTrue(auth["user_demand_verified"])
+            self.assertEqual(auth["evidence_event_ids"], ["auth-demand"])
+            billing = connector.customer_demand_evidence(task_description="Improve invoice billing")
+            self.assertEqual(billing["event_count"], 1)
+            self.assertEqual(billing["evidence_event_ids"], ["billing-demand"])
+
     def test_remote_repo_discovery_is_opt_in(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
             "os.environ", {"ASCM_ENABLE_REUSE_DISCOVERY": "0"}, clear=False
