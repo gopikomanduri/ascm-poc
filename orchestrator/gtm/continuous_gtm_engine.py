@@ -1,8 +1,4 @@
-"""
-Continuous GTM Engine (Outcode / ASCM)
-Orchestrates MarketingAgent ('Engineering as Marketing' + Category Design)
-and SalesAgentV2 ('Signal-Based Selling' + PQL Challenger Triage) on the active client project.
-"""
+"""Continuous GTM engine configured per project; never assumes an ICP or product thesis."""
 
 import os
 import sys
@@ -16,22 +12,25 @@ from typing import Dict, Any, List, Optional
 from orchestrator.gtm.agents.marketing_agent import MarketingAgent
 from orchestrator.gtm.agents.sales_agent_v2 import SalesAgentV2
 from orchestrator.gtm.intent_radar import IntentRadar
+from orchestrator.gtm.strategy.product_context import ProductContext
+from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-WAITLIST_FILE = PROJECT_ROOT / ".ascm_waitlist.json"
-GTM_ARTIFACTS_DIR = PROJECT_ROOT / "artifacts" / "gtm_cycles"
 
 
 class ContinuousGTMEngine:
     """
-    Continuous GTM Orchestrator:
-    Dogfoods Outcode on the active repository, translating code diffs into
-    authentic developer marketing, harvesting live buying signals across 4 channels,
-    and triaging incoming waitlist signups.
+    Continuous GTM orchestrator. Product thesis, ICP, and intent keywords are
+    loaded from .ascm_product.json. Missing configuration stays explicit and
+    disables domain-specific signal scanning rather than guessing.
     """
 
     def __init__(self, project_path: Optional[Path] = None):
-        self.project_path = project_path or PROJECT_ROOT
+        self.project_path = Path(project_path or PROJECT_ROOT).resolve()
+        self.waitlist_file = self.project_path / ".ascm_waitlist.json"
+        self.artifacts_dir = self.project_path / "artifacts" / "gtm_cycles"
+        self.product = ProductContext.load(self.project_path)
+        self.outcome_ledger = OutcomeLedger(self.project_path)
         self.marketing_agent = MarketingAgent()
         self.sales_agent = SalesAgentV2()
         self.intent_radar = IntentRadar()
@@ -51,20 +50,23 @@ class ContinuousGTMEngine:
             ).strip()
             return {
                 "latest_commit": commit_log,
-                "diff_stat": diff_stat or "Recent Milestone commits (Outcode V1 Launch, Cloud Run, Vertex SDK)"
+                "diff_stat": diff_stat or "No diff summary available for the latest commit.",
+                "status": "available",
             }
-        except Exception:
+        except (subprocess.SubprocessError, OSError) as exc:
             return {
-                "latest_commit": "milestone-1: Outcode V1 launch, cloud deployment & secure waitlist engine",
-                "diff_stat": "Updated Cloud Run deployment, 3-tier scenario showcase, secure waitlist API, Google Models SDK"
+                "latest_commit": None,
+                "diff_stat": "Git context unavailable; initialize/check the repository before using code context.",
+                "status": "unknown",
+                "error": str(exc),
             }
 
     def load_waitlist_leads(self) -> List[Dict[str, Any]]:
         """Loads verified signups from .ascm_waitlist.json."""
-        if not WAITLIST_FILE.exists():
+        if not self.waitlist_file.exists():
             return []
         try:
-            data = json.loads(WAITLIST_FILE.read_text(encoding="utf-8"))
+            data = json.loads(self.waitlist_file.read_text(encoding="utf-8"))
             if isinstance(data, dict) and "entries" in data:
                 return data["entries"]
             elif isinstance(data, list):
@@ -79,10 +81,11 @@ class ContinuousGTMEngine:
         1. Marketing: Translates code diff into Engineering-as-Marketing artifacts.
         2. Sales: Triages waitlist signups with signal-based PQL scoring and Challenger audits.
         """
-        GTM_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+        self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        experiment_id = f"gtm-{timestamp}"
         print("\n" + "=" * 65)
-        print("🚀 OUTCODE CONTINUOUS GTM ENGINE — CYCLE START")
+        print(f"🚀 {self.product.product_name.upper()} GTM ENGINE — CYCLE START")
         print("=" * 65)
 
         # Step 1: Git Context
@@ -94,22 +97,33 @@ class ContinuousGTMEngine:
         print("[MarketingAgent 📣] Generating 'Engineering-as-Marketing' Playbook...")
         marketing_playbook = self.marketing_agent.generate_engineering_as_marketing_playbook(
             diff_summary=f"Commit: {git_info['latest_commit']}\nDiff:\n{git_info['diff_stat']}",
-            milestone_name="Milestone 1 (Outcode V1 Cloud Run Launch)",
-            product_thesis="Outcode: Stop coding in isolation. Your terminal just hired a GTM team."
+            milestone_name=self.product.milestone_name,
+            product_thesis=self.product.product_thesis
         )
 
         # Step 3: IntentRadar (Multi-Channel Live Signal Harvester)
         print("\n[IntentRadar 🛰️] Scanning 4 live channels (HN, Dev.to, GitHub, Tech Feeds)...")
-        raw_signals = self.intent_radar.scan_all_channels(
-            domain_keywords=["overengineering", "solo founder", "developer tools"],
-            limit_per_channel=3
-        )
-        print(f"[IntentRadar 🛰️] Evaluating {len(raw_signals)} live signals for domain relevance & buy-ready intent...")
-        radar_results = self.intent_radar.evaluate_signals_for_domain(
-            signals=raw_signals,
-            project_thesis="Outcode: Stop coding in isolation. Your terminal just hired a GTM team.",
-            icp_description="Solo founders, technical co-founders, CTOs, and indie hackers writing code in isolation without marketing."
-        )
+        if self.product.domain_keywords:
+            raw_signals = self.intent_radar.scan_all_channels(
+                domain_keywords=self.product.domain_keywords,
+                limit_per_channel=3
+            )
+            print(f"\\n[IntentRadar 🛰️] Evaluating {len(raw_signals)} signals for configured product relevance...")
+            radar_results = self.intent_radar.evaluate_signals_for_domain(
+                signals=raw_signals,
+                project_thesis=self.product.product_thesis,
+                icp_description=self.product.icp_description
+            )
+        else:
+            raw_signals = []
+            radar_results = {
+                "status": "skipped_missing_product_keywords",
+                "message": "Configure domain_keywords in .ascm_product.json before domain-specific intent scanning.",
+                "total_scanned": 0,
+                "high_intent_leads_count": 0,
+                "top_leads": [],
+            }
+            print("[IntentRadar 🛰️] Skipped: product domain_keywords are not configured.")
         print(f"[IntentRadar 🛰️] Detected {radar_results.get('high_intent_leads_count', 0)} high-intent external leads!")
 
         # Step 4: SalesAgentV2 (Signal-Based Selling & PQL Triage)
@@ -124,7 +138,7 @@ class ContinuousGTMEngine:
                 print(f"  ⚡ Generating Value-First Challenger Audit for: {lead.get('email')}...")
                 audit = self.sales_agent.generate_challenger_value_audit(
                     lead=lead,
-                    project_thesis="Outcode: Stop coding in isolation. Your terminal just hired a GTM team."
+                    project_thesis=self.product.product_thesis
                 )
                 tier_1_audits.append({
                     "lead": lead,
@@ -133,6 +147,15 @@ class ContinuousGTMEngine:
 
         cycle_result = {
             "timestamp": timestamp,
+            "experiment_id": experiment_id,
+            "product_context": {
+                "product_name": self.product.product_name,
+                "configured": self.product.product_name != "Unconfigured product"
+                    and "not configured" not in self.product.product_thesis.lower(),
+                "product_thesis": self.product.product_thesis,
+                "icp_description": self.product.icp_description,
+                "domain_keywords": self.product.domain_keywords,
+            },
             "git_context": git_info,
             "marketing_playbook": marketing_playbook,
             "radar_results": radar_results,
@@ -141,11 +164,21 @@ class ContinuousGTMEngine:
         }
 
         # Save Artifacts
-        json_path = GTM_ARTIFACTS_DIR / f"gtm_cycle_{timestamp}.json"
+        json_path = self.artifacts_dir / f"gtm_cycle_{timestamp}.json"
         json_path.write_text(json.dumps(cycle_result, indent=2), encoding="utf-8")
+        # A generated playbook is recorded as a generated cycle, never as a campaign result.
+        self.outcome_ledger.record(
+            "gtm_cycle_generated",
+            experiment_id=experiment_id,
+            source="continuous_gtm_engine",
+            metrics={
+                "product_configured": cycle_result["product_context"]["configured"],
+                "intent_scan_status": radar_results.get("status", "completed"),
+            },
+        )
 
         # Generate Human-Readable Markdown Report
-        md_path = GTM_ARTIFACTS_DIR / f"gtm_cycle_{timestamp}.md"
+        md_path = self.artifacts_dir / f"gtm_cycle_{timestamp}.md"
         self._write_markdown_report(md_path, cycle_result)
 
         print("\n" + "=" * 65)
@@ -166,8 +199,10 @@ class ContinuousGTMEngine:
         t1_audits = data.get("tier_1_audits", [])
 
         lines = [
-            "# Outcode Continuous GTM Cycle Report",
+            f"# {self.product.product_name} Continuous GTM Cycle Report",
             f"**Generated:** {data.get('timestamp')}",
+            f"**Experiment ID:** `{data.get('experiment_id', 'unknown')}`",
+            f"**Product configured:** `{data.get('product_context', {}).get('configured', False)}`",
             f"**Git Context:** `{data.get('git_context', {}).get('latest_commit')}`",
             "",
             "---",
@@ -179,7 +214,7 @@ class ContinuousGTMEngine:
             "## 2. Engineering-as-Marketing Micro-Tool",
             f"- **Tool Name:** {mt.get('tool_name', '')}",
             f"- **Concept:** {mt.get('description', '')}",
-            f"- **Growth Loop Footer:** `{mp.get('growth_loop_footer', '⚡ Distilled from git diff via Outcode')}`",
+            f"- **Growth Loop Footer:** `{mp.get('growth_loop_footer', '⚡ Generated from the configured product context')}`",
             "",
             "## 3. Developer Launch Artifacts",
             "### Hacker News (Show HN)",
