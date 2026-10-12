@@ -190,7 +190,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310 - base_url validated as HTTP(S) in provider initialization  # nosec B310 - base_url validated as HTTP(S) in provider initialization
+            with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310 - base_url validated as HTTP(S) in provider initialization
                 result = json.loads(resp.read().decode("utf-8"))
                 return result["choices"][0]["message"]["content"].strip()
         except urllib.error.HTTPError as err:
@@ -238,7 +238,7 @@ class AnthropicProvider(BaseLLMProvider):
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310 - fixed HTTPS Anthropic endpoint
                 result = json.loads(resp.read().decode("utf-8"))
                 content = result.get("content", [])
                 if content and "text" in content[0]:
