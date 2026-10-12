@@ -95,10 +95,9 @@ class ASCMProactiveMentor:
         data.setdefault("ready_for_gtm_test", False)
         self._save_state({"current_goal": data, "timestamp": datetime_now_iso()})
         # Keep the explicit founder goal available to the decision engine.
-        self.founder_context.update(
-            current_goal=data.get("clarified_goal") or raw_input,
-            target_customer=data.get("target_icp") or None,
-        )
+        # The clarified goal came from the founder; the suggested ICP may be model-generated
+        # and is not persisted as a founder-confirmed fact without explicit confirmation.
+        self.founder_context.update(current_goal=data.get("clarified_goal") or raw_input)
         return data
 
     def recommend_next_action(self, observation: str, evidence: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
