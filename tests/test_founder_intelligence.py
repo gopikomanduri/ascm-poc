@@ -176,6 +176,7 @@ class FounderIntelligenceDaemonIntegrationTests(unittest.TestCase):
             self.assertIn("Open-source search disabled", notify.call_args.args[1])
             self.assertIn("--feedback helpful --intervention-id", notify.call_args.args[1])
             self.assertIn("--report --session-id", notify.call_args.args[1])
+            self.assertIn("--project-path", notify.call_args.args[1])
 
 
 if __name__ == "__main__":
