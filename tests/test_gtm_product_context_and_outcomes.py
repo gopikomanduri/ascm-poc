@@ -44,6 +44,16 @@ class ProductContextTests(unittest.TestCase):
 
 
 class OutcomeLedgerTests(unittest.TestCase):
+    def test_outcome_ledger_rejects_free_form_customer_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = OutcomeLedger(Path(tmp))
+            with self.assertRaises(ValueError):
+                ledger.record("customer_reply", experiment_id="exp-1",
+                              metrics={"message": "customer private message"})
+            with self.assertRaises(ValueError):
+                ledger.record("customer_reply", experiment_id="exp-1",
+                              metrics={"sentiment": "customer wrote a long paragraph"})
+
     def test_records_experiment_events_and_summarizes_real_outcomes(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = OutcomeLedger(Path(tmp))
