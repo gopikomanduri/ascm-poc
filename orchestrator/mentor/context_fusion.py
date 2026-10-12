@@ -47,8 +47,16 @@ class ContextFusionEngine:
         self.contexts_dir = self.history_dir / "project_contexts"
         self._write_lock = threading.Lock()
 
-    def _project_root_for(self, path: str | Path) -> Path:
+    def _validate_workspace_path(self, path: str | Path) -> Path:
         candidate = Path(path).expanduser().resolve()
+        try:
+            candidate.relative_to(self.workspace_path)
+        except ValueError:
+            raise ValueError("Observed project must be inside the configured workspace") from None
+        return candidate
+
+    def _project_root_for(self, path: str | Path) -> Path:
+        candidate = self._validate_workspace_path(path)
         start = candidate if candidate.is_dir() else candidate.parent
         try:
             result = subprocess.run(
