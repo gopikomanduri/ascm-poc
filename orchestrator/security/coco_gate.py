@@ -134,9 +134,16 @@ def run_coco(paths: list[Path], repo_root: Path, timeout: int = 180) -> dict[str
         return {"status": "execution_error", "passed": False,
                 "issues": [f"Coco agent could not run ({type(exc).__name__})."]}
     if result.returncode != 0:
-        # Do not copy stderr/stdout into the report: they may contain provider details.
-        return {"status": "failed", "passed": False,
-                "issues": [f"Coco agent exited with status {result.returncode}."]}
+        # Redact diagnostics before recording them; never persist raw provider output.
+        try:
+            from orchestrator.security.pii_scrubber import PIIScrubber
+            diagnostic = PIIScrubber.scrub((result.stderr or result.stdout or "")[:1200])
+        except Exception:
+            diagnostic = ""
+        issue = f"Coco agent exited with status {result.returncode}."
+        if diagnostic:
+            issue += " Sanitized diagnostic: " + diagnostic[:1200]
+        return {"status": "failed", "passed": False, "issues": [issue]}
     try:
         response = json.loads(result.stdout)
     except json.JSONDecodeError:
