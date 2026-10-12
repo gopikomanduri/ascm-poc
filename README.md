@@ -145,9 +145,8 @@ python tools/mr_bench.py --run-all --publish   # Run the benchmark
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gopikomanduri/ascm-poc/main/install.sh | bash
 ```
-Then add your API key:
+During installation, choose the workspace ASCM should monitor. The Proactive Mentor is configured to start at login and will prompt you from the desktop when it detects coding activity; routine mentor prompts do not require CLI commands. Deterministic monitoring works without an LLM API key. Add a provider key in `~/ascm/.env` for richer model-assisted analysis. The dashboard remains optional:
 ```bash
-echo 'GEMINI_API_KEY=your-key' >> ~/ascm/.env
 ascm    # launches dashboard at http://localhost:8080
 ```
 
