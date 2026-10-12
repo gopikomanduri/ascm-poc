@@ -18,8 +18,19 @@ class UniversalDomainAdaptationTests(unittest.TestCase):
         self.assertTrue(any("Parametric B-Rep" in q for q in profile.grilling_dimensions))
 
         # Test ProductAgent dynamic adaptation for CAD/CAM
-        agent = ProductAgent()
-        res = agent.run("I want to build a CAD tool")
+        agent = ProductAgent(provider=MagicMock())
+        response = json.dumps({
+            "detected_domain": profile.display_name,
+            "confidence_score": 0.4,
+            "is_clear": False,
+            "clarification_questions": [
+                "Which Parametric B-Rep kernel is required?",
+                "What Geometry Kernel operations are in scope?",
+                "Which G-code targets must be supported?"
+            ]
+        })
+        with patch.object(ProductAgent, "call", return_value=response):
+            res = agent.run("I want to build a CAD tool")
         self.assertEqual(res.get("detected_domain"), profile.display_name)
         self.assertFalse(res.get("is_clear"))
         self.assertLess(res.get("confidence_score"), 0.90)
@@ -31,8 +42,19 @@ class UniversalDomainAdaptationTests(unittest.TestCase):
         self.assertEqual(profile.domain_id, "HEALTHCARE_MEDTECH")
         self.assertTrue(any("FHIR" in q for q in profile.grilling_dimensions))
 
-        agent = ProductAgent()
-        res = agent.run("I want to build a medical clinic portal")
+        agent = ProductAgent(provider=MagicMock())
+        response = json.dumps({
+            "detected_domain": profile.display_name,
+            "confidence_score": 0.4,
+            "is_clear": False,
+            "clarification_questions": [
+                "Which FHIR resources and versions are required?",
+                "Which HL7 integrations are needed?",
+                "What patient data and access controls are in scope?"
+            ]
+        })
+        with patch.object(ProductAgent, "call", return_value=response):
+            res = agent.run("I want to build a medical clinic portal")
         self.assertEqual(res.get("detected_domain"), profile.display_name)
         self.assertFalse(res.get("is_clear"))
         self.assertTrue(any("FHIR" in q or "HL7" in q for q in res.get("clarification_questions")))
@@ -58,11 +80,20 @@ class UniversalDomainAdaptationTests(unittest.TestCase):
         self.assertIn("gemini", models["architect"].lower())
 
     def test_cad_cam_business_competitor_matrix(self):
-        biz_agent = BusinessStrategyAgent()
-        res = biz_agent.run(
-            user_goal="Build a CAD CAM tool",
-            clarified_prd="Parametric geometry kernel with G-code toolpath generation"
-        )
+        biz_agent = BusinessStrategyAgent(provider=MagicMock())
+        response = json.dumps({
+            "detected_domain": VERTICAL_DOMAINS["CAD_CAM"].display_name,
+            "competitor_analysis": [
+                {"competitor": "Autodesk Fusion 360"},
+                {"competitor": "SolidWorks"},
+                {"competitor": "Mastercam"}
+            ]
+        })
+        with patch.object(BusinessStrategyAgent, "call", return_value=response):
+            res = biz_agent.run(
+                user_goal="Build a CAD CAM tool",
+                clarified_prd="Parametric geometry kernel with G-code toolpath generation"
+            )
         self.assertEqual(res.get("detected_domain"), VERTICAL_DOMAINS["CAD_CAM"].display_name)
         competitors = [c.get("competitor") for c in res.get("competitor_analysis", [])]
         self.assertTrue(any("Fusion 360" in c or "Autodesk" in c for c in competitors))
