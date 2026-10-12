@@ -18,6 +18,7 @@ import json
 import subprocess
 import logging
 import plistlib
+import uuid
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from orchestrator.mentor.context_fusion import ContextFusionEngine
 from orchestrator.mentor.activity_adapters import ActiveWindowAdapter
 from orchestrator.mentor.milestone_detector import MilestoneDetector
 from orchestrator.security.audit_logger import AuditLogger
+from orchestrator.mentor.evidence_pipeline import EvidenceSourceConnector, InterventionQualityTracker
 
 logger = logging.getLogger("ASCMDaemon")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -56,6 +58,10 @@ class UniversalASCMDaemon:
             enabled=os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "0").strip() == "1"
         )
         self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
+        self.evidence_sources = EvidenceSourceConnector(self.repo_path)
+        self.intervention_tracker = InterventionQualityTracker(self.repo_path)
+        # One daemon process approximates one working session; reports can filter by this ID.
+        self.working_session_id = uuid.uuid4().hex
         self.milestone_detector = MilestoneDetector(self.repo_path, audit_logger=self.audit_logger)
         watcher = self.activity_monitor.file_watcher
         base_activity_callback = watcher.on_change
@@ -176,6 +182,19 @@ class UniversalASCMDaemon:
                 recommendation_evidence["milestone"] = context["next_milestone"]
             if "test failure" in task.lower() or "failed test" in task.lower():
                 recommendation_evidence["tests_failed"] = True
+
+            # Connect observed customer outcomes and (optionally) public GitHub reuse
+            # candidates. Remote search is opt-in because task descriptions can be sensitive.
+            try:
+                evidence_sources = getattr(self, "evidence_sources", None)
+                if evidence_sources is None:
+                    evidence_sources = EvidenceSourceConnector(self.repo_path)
+                recommendation_evidence.update(evidence_sources.collect(task))
+            except Exception as exc:
+                # Evidence-source failure must not invent evidence or stop the daemon.
+                recommendation_evidence["evidence_source_errors"] = [type(exc).__name__]
+                logger.debug("Evidence source collection skipped: %s", type(exc).__name__)
+
             recommendation = self.mentor.recommend_next_action("code_activity", recommendation_evidence)
             decision = recommendation.get("founder_decision") or {}
             ranked_paths = decision.get("ranked_paths", [])
@@ -233,12 +252,36 @@ class UniversalASCMDaemon:
                     "recommendation_title": first.get("title", ""),
                 }
 
+            intervention_id = str(uuid.uuid4())
+            session_id = getattr(self, "working_session_id", "daemon-session")
+            # Include a concrete feedback path in the notification so quality can be
+            # measured after a real work session instead of assuming usefulness.
+            message += (
+                f" Feedback: python -m orchestrator.mentor.evidence_pipeline "
+                f"--feedback helpful|not_helpful|accepted|dismissed|acted_on|incorrect "
+                f"--intervention-id {intervention_id}"
+            )
+            audit_details["intervention_id"] = intervention_id
+            audit_details["session_id"] = session_id
             self.audit_logger.log_event(
                 "MENTOR_RECOMMENDATION", agent="PROACTIVE_MENTOR",
                 action=decision.get("recommended_path", "recommend"),
                 details=audit_details,
             )
             CrossPlatformNotifier.notify(title, message[:1000], app_name="ASCM Mentor")
+            tracker = getattr(self, "intervention_tracker", None)
+            if tracker is None:
+                tracker = InterventionQualityTracker(self.repo_path)
+            tracker.record_shown(
+                session_id=session_id,
+                project_id=inferred.get("project_id"),
+                recommendation={
+                    "recommended_path": decision.get("recommended_path", "undetermined"),
+                    "confidence": decision.get("confidence", "unknown"),
+                },
+                evidence_event_ids=evidence_ids,
+                intervention_id=intervention_id,
+            )
             return
 
         # A missing goal changes every recommendation, so this is a worthwhile clarification.
