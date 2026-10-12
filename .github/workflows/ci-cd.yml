@@ -36,19 +36,19 @@ jobs:
         run: python tools/mr_bench.py --task T01
 
   security-review:
-    name: Security Review (Static + Dependency + Coco Agent)
+    name: Security Review (Static + Dependency + CICO Agent)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Set up Node.js for Coco
+      - name: Set up Node.js for CICO
         uses: actions/setup-node@v4
         with:
           node-version: '22.22.2'
-      - name: Install pinned Coco security reviewer
-        run: npm install --global git-coco@0.91.0
+      - name: Install pinned CICO security reviewer
+        run: npm install --global git-cico@0.91.0
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
@@ -58,25 +58,21 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install bandit pip-audit
-      - name: Run ASCM deterministic security gate and Coco review
+      - name: Run ASCM deterministic security gate and CICO review
         env:
           PYTHONPATH: .
-          ASCM_COCO_AGENT_CMD: ${{ secrets.ASCM_COCO_AGENT_CMD }}
-          COCO_SERVICE_PROVIDER: ${{ secrets.COCO_SERVICE_PROVIDER || 'gemini' }}
-          COCO_SERVICE_MODEL: ${{ secrets.COCO_SERVICE_MODEL || 'gemini-2.5-flash' }}
-          COCO_SERVICE_API_KEY: ${{ secrets.COCO_SERVICE_API_KEY || secrets.GEMINI_API_KEY || secrets.GOOGLE_API_KEY }}
-          COCO_USAGE_LOG: "0"
+          ASCM_CICO_AGENT_CMD: ${{ secrets.ASCM_CICO_AGENT_CMD }}
         shell: bash
         run: |
           mkdir -p security-artifacts
           set +e
-          python -m orchestrator.security.coco_gate \
+          python -m orchestrator.security.cico_gate \
             --git-base "origin/${GITHUB_BASE_REF:-main}" \
             --report security-artifacts/ascm-security-report.json
           status=$?
           set -e
           echo "$status" > security-artifacts/ascm-security-gate-status.txt
-          echo "Coco CLI review attempted; final gate requires a successful structured response." >> "$GITHUB_STEP_SUMMARY"
+          echo "CICO CLI review attempted; final gate requires a successful structured response." >> "$GITHUB_STEP_SUMMARY"
       - name: Run Bandit against changed Python files
         shell: bash
         run: |
@@ -119,10 +115,10 @@ jobs:
           except (OSError, json.JSONDecodeError):
               report = {}
               failures.append("deterministic security report missing or invalid")
-          if report.get("coco", {}).get("status") != "completed":
-              failures.append("Coco review did not complete; configure ASCM_COCO_AGENT_CMD")
-          elif report["coco"].get("passed") is not True:
-              failures.append("Coco review reported findings or did not pass")
+          if report.get("cico", {}).get("status") != "completed":
+              failures.append("CICO review did not complete; configure the ASCM_CICO_AGENT_CMD secret")
+          elif report["cico"].get("passed") is not True:
+              failures.append("CICO review reported findings or did not pass")
           high = [f for f in report.get("deterministic_findings", []) if f.get("severity") == "HIGH"]
           if high:
               failures.append(f"{len(high)} high-severity deterministic finding(s)")
@@ -135,7 +131,7 @@ jobs:
               for failure in failures:
                   print(f"- {failure}")
               raise SystemExit(1)
-          print("Security release gates passed, including a completed Coco review.")
+          print("Security release gates passed, including a completed CICO review.")
           PY
       - name: Upload security evidence
         if: always()
