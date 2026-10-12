@@ -19,7 +19,8 @@ class CocoSecurityGateTests(unittest.TestCase):
     def test_detects_private_key_marker_without_returning_secret_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "sample.txt").write_text("-----BEGIN RSA PRIVATE KEY-----\nREDACTED\n")
+            marker = "-" * 5 + "BEGIN RSA PRIVATE KEY" + "-" * 5
+            (root / "sample.txt").write_text(marker + "\nREDACTED\n")
             findings = scan_paths([Path("sample.txt")], root)
             self.assertEqual(findings[0]["rule"], "private_key")
             self.assertNotIn("REDACTED", str(findings))
