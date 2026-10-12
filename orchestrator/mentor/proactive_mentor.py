@@ -123,7 +123,7 @@ class ASCMProactiveMentor:
         code_ready_threshold = milestone is not None
 
         ledger = getattr(self, "outcome_ledger", None)
-        recent_events = ledger.recent_events(50) if ledger is not None else []
+        recent_events = ledger.recent_events(200) if ledger is not None else []
         observed_outcomes = [event for event in recent_events if event.get("event_type") in {
             "customer_reply", "meeting_booked", "qualified_opportunity", "conversion"
         }]
@@ -156,7 +156,7 @@ class ASCMProactiveMentor:
         for event in generated_cycles:
             experiment_id = event.get("experiment_id")
             linked = [item for item in recent_events if item.get("experiment_id") == experiment_id]
-            has_outcome = any(item.get("event_type") in {"customer_reply", "meeting_booked", "qualified_opportunity", "conversion"} for item in linked)
+            has_outcome = any(item.get("event_type") in {"customer_reply", "meeting_booked", "qualified_opportunity", "conversion", "experiment_reviewed", "experiment_stopped"} for item in linked)
             try:
                 created = datetime.fromisoformat(event.get("occurred_at", "").replace("Z", "+00:00"))
                 if created.tzinfo is None:
