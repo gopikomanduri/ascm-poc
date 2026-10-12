@@ -233,6 +233,7 @@ def main(override_goal: Optional[str] = None):
     parser.add_argument("--mark-milestone", help="Explicitly record a completed milestone by name")
     parser.add_argument("--observe", choices=sorted(__import__("orchestrator.mentor.next_best_action", fromlist=["SUPPORTED_OBSERVATIONS"]).SUPPORTED_OBSERVATIONS), help="Evaluate an explicitly observed event for a next-best-action recommendation")
     parser.add_argument("--task-description", help="Task details accompanying code_activity/coding_started")
+    parser.add_argument("--discover-repos", action="store_true", help="Search public GitHub repositories for a supplied coding task")
     parser.add_argument("--mentor", action="store_true", help="Mentor flag (ignored)")
     args, _ = parser.parse_known_args()
     mentor = ASCMProactiveMentor()
@@ -253,6 +254,21 @@ def main(override_goal: Optional[str] = None):
             print("   Benefit: {}".format(action["expected_benefit"]))
             if action["requires_approval"]:
                 print("   Approval required before external execution.")
+        if args.discover_repos:
+            if not args.task_description:
+                print("\\nRepository discovery needs --task-description; no search was performed.")
+            else:
+                from orchestrator.mentor.reuse_advisor import GitHubRepositoryAdvisor
+                discovery = GitHubRepositoryAdvisor().search(args.task_description)
+                print("\\nOpen-source candidates (review before adoption):")
+                if discovery.get("error"):
+                    print("   " + discovery["error"])
+                for repo in discovery.get("repositories", []):
+                    print("   - {name} | stars: {stars} | license: {license} | pushed: {last_updated} | archived: {archived}".format(**repo))
+                    print("     {url}".format(**repo))
+                    if repo.get("description"):
+                        print("     " + repo["description"])
+                print("   " + discovery["caveat"])
         print("\\n{}".format(result["disclaimer"]))
         return
 
