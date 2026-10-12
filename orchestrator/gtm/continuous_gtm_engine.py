@@ -98,7 +98,8 @@ class ContinuousGTMEngine:
         marketing_playbook = self.marketing_agent.generate_engineering_as_marketing_playbook(
             diff_summary=f"Commit: {git_info['latest_commit']}\nDiff:\n{git_info['diff_stat']}",
             milestone_name=self.product.milestone_name,
-            product_thesis=self.product.product_thesis
+            product_thesis=self.product.product_thesis,
+            target_audience=self.product.icp_description
         )
 
         # Step 3: IntentRadar (Multi-Channel Live Signal Harvester)
