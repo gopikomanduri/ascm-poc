@@ -100,7 +100,8 @@ class UniversalASCMDaemon:
                         logger.warning(f"[Daemon] Suggester error (continuing): {e}")
 
                 # 1. If dev is actively editing (any IDE) but hasn't done GTM in days — nudge
-                if combined["actively_coding_now"] and git["days_since_gtm"] > 3:
+                if (combined["actively_coding_now"] and git["days_since_gtm"] is not None
+                        and git["days_since_gtm"] > 3):
                     if current_time - last_edit_nudge_time > 7200:  # max once per 2 hours
                         last_edit_nudge_time = current_time
                         CrossPlatformNotifier.notify(
