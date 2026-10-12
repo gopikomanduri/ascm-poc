@@ -38,10 +38,11 @@ The local JSONL files are useful audit evidence, not tamper-proof or centralized
 
 ## Security gate and Coco agent
 
-Every pull-request CI run invokes \`orchestrator.security.coco_gate\`, scans changed Python files with Bandit, audits dependencies with pip-audit, uploads machine-readable evidence, and blocks the Docker build if a blocking gate fails.
+Every pull-request CI run installs a pinned `git-coco` CLI, invokes its structured `coco agent review` interface against the current branch diff, runs deterministic ASCM checks, scans changed Python files with Bandit, audits dependencies with pip-audit, and uploads machine-readable evidence. The Docker build is blocked unless the security release gates pass.
 
-The Coco adapter uses \`ASCM_COCO_AGENT_CMD\`, a **JSON array** of executable plus arguments, never shell evaluation. The command must accept JSON on stdin with a \`task=security_review\` and a list of path/content objects; it must return JSON with boolean \`passed\` and list \`issues\`. The adapter records whether Coco actually ran and rejects invalid responses. Configure the GitHub Actions repository secret with the approved Coco runner command to require a real Coco review. If the secret is absent, CI explicitly warns that only deterministic checks ran; that must not be represented as a Coco pass. Do not point this setting at an untrusted executable.
+The Coco adapter uses the documented versioned JSON request/response interface, not scraped terminal output. It reviews the branch diff with repository-defined prompts disabled, records normalized findings, and treats Coco findings with severity 7/10 or higher as blocking. The CI job passes provider credentials only from GitHub Actions secrets. Configure `COCO_SERVICE_API_KEY` (or `GEMINI_API_KEY` / `GOOGLE_API_KEY`) and, if needed, `COCO_SERVICE_PROVIDER` / `COCO_SERVICE_MODEL`. For an approved alternative runner, `ASCM_COCO_AGENT_CMD` can be a JSON array of executable plus arguments; the adapter appends Coco's `agent review --input - --repo <repo>` arguments and never evaluates a shell command.
 
+If Coco cannot run, returns an invalid response, or lacks credentials, the security release gate fails. The security report and scanner artifacts are uploaded even when a gate fails. Local static checks alone are not represented as a Coco pass.
 ## Release gates still required for a commercial launch
 
 - Configure the approved Coco agent runner in GitHub Actions and verify a completed Coco review.
