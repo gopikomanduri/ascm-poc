@@ -292,9 +292,14 @@ class ContextFusionEngine:
             rationale = "A file changed, but there is not enough evidence to infer the underlying task."
             evidence = [latest_edit["event_id"]]
         elif latest_terminal and latest_terminal.get("command_category") in {"python_tests", "javascript_tests", "go_tests", "rust_tests"}:
-            task = "Running and evaluating the project test suite"
-            confidence = 0.58
-            rationale = "A test command category was observed; no command text or output was retained."
+            if latest_terminal.get("exit_code") not in (None, 0):
+                task = "Investigating a failed test run"
+                confidence = 0.72
+                rationale = "A test command returned a non-zero exit code; command text and output were not retained."
+            else:
+                task = "Verifying project changes with tests"
+                confidence = 0.64
+                rationale = "A test command completed; command text and output were not retained."
             evidence = [latest_terminal["event_id"]]
         elif active_apps:
             latest_app = max(active_apps, key=lambda e: e["timestamp"])
@@ -322,6 +327,17 @@ class ContextFusionEngine:
         }
         self._persist_context(project_id, context)
         return context
+
+    def has_recent_terminal_activity(self, within_seconds: int = 120) -> bool:
+        """Whether a terminal event was recorded recently; raw commands are never stored."""
+        now = _now()
+        for event in reversed(self._read_events()):
+            if event.get("event_type") != "terminal_command":
+                continue
+            timestamp = _parse_time(event.get("timestamp"))
+            if timestamp and 0 <= (now - timestamp).total_seconds() <= max(0, within_seconds):
+                return True
+        return False
 
     def latest_project_path(self) -> Path:
         """Resolve the most recently active project from safe event metadata."""
