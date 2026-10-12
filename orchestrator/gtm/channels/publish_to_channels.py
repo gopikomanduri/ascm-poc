@@ -440,7 +440,7 @@ def main(
             except Exception as exc:
                 logger.warning("[GTM telemetry] Could not record publication event: %s", exc)
 
-    print("\\n" + "=" * 60)
+    print("\n" + "=" * 60)
     print("✅  MILESTONE 1 COMPLETE")
     if os.getenv("BUFFER_API_KEY"):
         print("   Posts scheduled via Buffer API.")
