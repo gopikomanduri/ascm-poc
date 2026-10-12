@@ -109,10 +109,6 @@ def run_cico(paths: list[Path], repo_root: Path, timeout: int = 180) -> dict[str
                     "issues": ["ASCM_CICO_AGENT_CMD must be a non-empty JSON array of strings."]}
     elif shutil.which("cico"):
         command = ["cico"]
-    elif os.environ.get("CI", "").lower() == "true" and shutil.which("npx"):
-        # Some CI runners install the npm package but omit its global bin directory
-        # from the Python subprocess PATH. Use the exact pinned package through npx.
-        command = ["npx", "--yes", "git-cico@0.91.0"]
     else:
         return {"status": "not_configured", "passed": None,
                 "issues": ["CICO CLI is not available; configure ASCM_CICO_AGENT_CMD or install/configure the CICO CLI."]}
