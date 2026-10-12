@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -96,37 +97,46 @@ def scan_paths(paths: list[Path], repo_root: Path) -> list[dict[str, Any]]:
     return findings
 
 
-def run_coco(paths: list[Path], repo_root: Path, timeout: int = 120) -> dict[str, Any]:
+def run_coco(paths: list[Path], repo_root: Path, timeout: int = 180) -> dict[str, Any]:
+    """Run Coco's structured, read-only review against the current branch diff."""
     raw = os.environ.get("ASCM_COCO_AGENT_CMD", "").strip()
-    if not raw:
-        return {"status": "not_configured", "passed": None,
-                "issues": ["Coco agent command is not configured; no Coco review was run."]}
-    try:
-        command = json.loads(raw)
-    except json.JSONDecodeError:
-        return {"status": "configuration_error", "passed": False,
-                "issues": ["ASCM_COCO_AGENT_CMD must be a JSON array of executable and arguments."]}
-    if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
-        return {"status": "configuration_error", "passed": False,
-                "issues": ["ASCM_COCO_AGENT_CMD must be a non-empty JSON array of strings."]}
-    payload = {"task": "security_review", "files": []}
-    for path in paths:
-        full = (repo_root / path).resolve()
+    if raw:
         try:
-            full.relative_to(repo_root.resolve())
-            if full.is_file() and full.stat().st_size <= MAX_FILE_BYTES:
-                payload["files"].append({"path": str(path), "content": full.read_text(encoding="utf-8", errors="replace")})
-        except (OSError, ValueError):
-            continue
+            command = json.loads(raw)
+        except json.JSONDecodeError:
+            return {"status": "configuration_error", "passed": False,
+                    "issues": ["ASCM_COCO_AGENT_CMD must be a JSON array of executable and arguments."]}
+        if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
+            return {"status": "configuration_error", "passed": False,
+                    "issues": ["ASCM_COCO_AGENT_CMD must be a non-empty JSON array of strings."]}
+    elif shutil.which("coco"):
+        command = ["coco"]
+    else:
+        return {"status": "not_configured", "passed": None,
+                "issues": ["Coco CLI is not installed and ASCM_COCO_AGENT_CMD is not configured."]}
+
+    base_branch = os.environ.get("GITHUB_BASE_REF", "main").strip() or "main"
+    base_ref = f"origin/{base_branch}"
+    request = {
+        "version": 1,
+        "repo": str(repo_root.resolve()),
+        "source": {
+            "kind": "repository",
+            "scope": {"type": "branch", "base": base_ref, "head": "HEAD"},
+        },
+        "options": {"trustRepositoryConfig": False},
+    }
     try:
         result = subprocess.run(
-            command, input=json.dumps(payload), capture_output=True, text=True,
+            command + ["agent", "review", "--input", "-", "--repo", str(repo_root.resolve())],
+            input=json.dumps(request), capture_output=True, text=True,
             cwd=str(repo_root), timeout=timeout, check=False, shell=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return {"status": "execution_error", "passed": False,
                 "issues": [f"Coco agent could not run ({type(exc).__name__})."]}
     if result.returncode != 0:
+        # Do not copy stderr/stdout into the report: they may contain provider details.
         return {"status": "failed", "passed": False,
                 "issues": [f"Coco agent exited with status {result.returncode}."]}
     try:
@@ -134,15 +144,50 @@ def run_coco(paths: list[Path], repo_root: Path, timeout: int = 120) -> dict[str
     except json.JSONDecodeError:
         return {"status": "invalid_response", "passed": False,
                 "issues": ["Coco agent output was not valid JSON."]}
-    if not isinstance(response, dict) or not isinstance(response.get("passed"), bool) or not isinstance(response.get("issues", []), list):
+    if not isinstance(response, dict) or response.get("ok") is not True or response.get("operation") != "review":
         return {"status": "invalid_response", "passed": False,
-                "issues": ["Coco agent response must contain boolean passed and list issues."]}
+                "issues": ["Coco agent did not return a successful review envelope."]}
+    data = response.get("data")
+    findings = data.get("findings") if isinstance(data, dict) else None
+    if not isinstance(findings, list):
+        return {"status": "invalid_response", "passed": False,
+                "issues": ["Coco review response did not include a findings list."]}
+
+    normalized = []
+    blocking = []
+    for finding in findings[:200]:
+        if not isinstance(finding, dict):
+            continue
+        severity = finding.get("severity")
+        try:
+            score = int(severity)
+        except (TypeError, ValueError):
+            score = 0
+        item = {
+            "severity": score,
+            "category": str(finding.get("category", "unknown"))[:80],
+            "title": str(finding.get("title", "Untitled finding"))[:240],
+            "summary": str(finding.get("summary", ""))[:1200],
+            "filePath": str(finding.get("filePath", ""))[:500],
+        }
+        normalized.append(item)
+        if score >= 7:
+            blocking.append(item)
     try:
         from orchestrator.security.pii_scrubber import PIIScrubber
-        safe_issues = [PIIScrubber.scrub(str(item)[:1000]) for item in response.get("issues", [])[:100]]
+        safe_issues = [PIIScrubber.scrub(json.dumps(item, ensure_ascii=False)) for item in normalized]
     except Exception:
-        safe_issues = ["Coco returned findings; details omitted because redaction was unavailable."]
-    return {"status": "completed", "passed": response["passed"], "issues": safe_issues}
+        safe_issues = [f"Coco reported {len(normalized)} finding(s); details omitted because redaction was unavailable."]
+    return {
+        "status": "completed",
+        "passed": not blocking,
+        "issues": safe_issues,
+        "finding_count": len(normalized),
+        "blocking_finding_count": len(blocking),
+        "severity_threshold": 7,
+        "provider_warnings": [str(item)[:500] for item in response.get("warnings", [])[:20]]
+        if isinstance(response.get("warnings", []), list) else [],
+    }
 
 
 def main(argv=None) -> int:
