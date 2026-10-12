@@ -43,5 +43,5 @@ For GTM, generated content is not treated as published content. The mentor recom
 Run tests with:
 
 ```bash
-python -m unittest tests.test_founder_next_best_action
+python -m unittest discover -s tests -p 'test_founder_next_best_action.py'
 ```
