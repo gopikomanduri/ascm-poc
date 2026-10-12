@@ -186,9 +186,10 @@ class UniversalASCMDaemon:
             # Connect observed customer outcomes and (optionally) public GitHub reuse
             # candidates. Remote search is opt-in because task descriptions can be sensitive.
             try:
+                workspace = getattr(self, "repo_path", self.history_dir.parent)
                 evidence_sources = getattr(self, "evidence_sources", None)
                 if evidence_sources is None:
-                    evidence_sources = EvidenceSourceConnector(self.repo_path)
+                    evidence_sources = EvidenceSourceConnector(workspace)
                 recommendation_evidence.update(evidence_sources.collect(task))
             except Exception as exc:
                 # Evidence-source failure must not invent evidence or stop the daemon.
@@ -257,9 +258,9 @@ class UniversalASCMDaemon:
             # Include a concrete feedback path in the notification so quality can be
             # measured after a real work session instead of assuming usefulness.
             message += (
-                f" Feedback: python -m orchestrator.mentor.evidence_pipeline "
-                f"--feedback helpful|not_helpful|accepted|dismissed|acted_on|incorrect "
-                f"--intervention-id {intervention_id}"
+                f" Session: {session_id}. Feedback: python -m orchestrator.mentor.evidence_pipeline "
+                f"--feedback helpful --intervention-id {intervention_id}. "
+                f"Session report: python -m orchestrator.mentor.evidence_pipeline --report --session-id {session_id}"
             )
             audit_details["intervention_id"] = intervention_id
             audit_details["session_id"] = session_id
@@ -271,7 +272,7 @@ class UniversalASCMDaemon:
             CrossPlatformNotifier.notify(title, message[:1000], app_name="ASCM Mentor")
             tracker = getattr(self, "intervention_tracker", None)
             if tracker is None:
-                tracker = InterventionQualityTracker(self.repo_path)
+                tracker = InterventionQualityTracker(getattr(self, "repo_path", self.history_dir.parent))
             tracker.record_shown(
                 session_id=session_id,
                 project_id=inferred.get("project_id"),
