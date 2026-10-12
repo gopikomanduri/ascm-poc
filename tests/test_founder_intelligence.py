@@ -47,6 +47,25 @@ class FounderIntelligenceTests(unittest.TestCase):
         self.assertGreater(paths["reuse"], paths["build"])
         self.assertEqual(result["recommended_path"], "reuse")
 
+    def test_weak_reuse_metadata_does_not_claim_suitable_alternative(self):
+        result = self.engine.evaluate(
+            goal="Ship authentication",
+            observation="code_activity",
+            evidence={
+                "task_description": "Implement authentication",
+                "milestone": "Working sign-in",
+                "reuse_candidates": [{
+                    "name": "archived auth library",
+                    "license": "Not detected",
+                    "archived": True,
+                    "suitability_score": 5,
+                }],
+            },
+        )
+        paths = {item["path"]: item["score"] for item in result["ranked_paths"]}
+        self.assertLess(paths["reuse"], paths["build"])
+        self.assertIn("verified_reuse_fit_and_license", result["missing_evidence"])
+
     def test_verified_demand_and_readiness_support_bounded_launch(self):
         result = self.engine.evaluate(
             goal="Acquire first customers",
