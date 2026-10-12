@@ -128,6 +128,16 @@ The task description must match the feature key for the evidence to count toward
 
 Repository candidates include detected license metadata, stars, archived status, last push time, and a heuristic suitability score with reasons. Archived projects and missing/unknown license metadata are penalized. Before adoption, a human must check feature/API fit, license compatibility, security advisories, dependencies, release cadence, integration cost, and migration risk. ASCM does not clone, install, or integrate a candidate automatically. Search failures are recorded as unavailable rather than treated as an empty market.
 
+To record task-scoped customer evidence, use the outcome ledger CLI. Keep `feature_key` short and consistent so the daemon can match it to the observed task:
+
+```bash
+python -m orchestrator.gtm.strategy.outcome_ledger --event customer_interview \
+  --experiment-id auth-discovery --metrics-json '{"feature_key":"authentication","demand_signal":"strong","willingness_to_pay":"unconfirmed"}'
+
+python -m orchestrator.gtm.strategy.outcome_ledger --event feature_request \
+  --experiment-id auth-request --metrics-json '{"feature_key":"authentication","demand_signal":"weak"}'
+```
+
 ## Measure intervention quality in real work sessions
 
 The daemon records each intervention attempt with an intervention ID, a daemon-session ID, project ID, recommended path, confidence, and evidence event IDs. It does not store free-form feedback notes; if a note is supplied, only its character count is retained.
