@@ -251,10 +251,11 @@ def main(override_goal: Optional[str] = None):
     parser.add_argument("--approve-proposal", help="Record founder approval for a previously saved proposal ID; does not execute it")
     parser.add_argument("--reject-proposal", help="Record founder rejection for a previously saved proposal ID")
     parser.add_argument("--execute-approved-proposal", help="Execute an explicitly approved allowlisted local action; requires ASCM_ENABLE_APPROVED_EXECUTION=1")
+    parser.add_argument("--propose-local-action", choices=["inspect_git_status", "run_pytest"], help="Create a pending-approval proposal for a fixed local action")
     parser.add_argument("--mentor", action="store_true", help="Mentor flag (ignored)")
     args, _ = parser.parse_known_args()
-    if sum(bool(value) for value in (args.approve_proposal, args.reject_proposal, args.execute_approved_proposal)) > 1:
-        parser.error("choose only one proposal approval/rejection/execution action")
+    if sum(bool(value) for value in (args.approve_proposal, args.reject_proposal, args.execute_approved_proposal, args.propose_local_action)) > 1:
+        parser.error("choose only one proposal creation/approval/rejection/execution action")
     if args.propose_action and not args.observe:
         parser.error("--propose-action requires --observe")
     mentor = ASCMProactiveMentor()
@@ -262,6 +263,12 @@ def main(override_goal: Optional[str] = None):
     if args.mark_milestone:
         milestone = mentor.git_monitor.record_milestone(args.mark_milestone)
         print("Recorded milestone: {} ({})".format(milestone["name"], milestone["occurred_at"]))
+        return
+
+    if args.propose_local_action:
+        proposal = mentor.next_best_action.propose_local_action(args.propose_local_action)
+        print(json.dumps(proposal, indent=2))
+        print("Pending approval. Execution is not enabled by creating this proposal.")
         return
 
     if args.execute_approved_proposal:
