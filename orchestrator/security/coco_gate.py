@@ -183,8 +183,9 @@ def run_coco(paths: list[Path], repo_root: Path, timeout: int = 180) -> dict[str
         "finding_count": len(normalized),
         "blocking_finding_count": len(blocking),
         "severity_threshold": 7,
-        "provider_warnings": [str(item)[:500] for item in response.get("warnings", [])[:20]]
-        if isinstance(response.get("warnings", []), list) else [],
+        "provider_warnings": [
+            PIIScrubber.scrub(str(item)[:500]) for item in response.get("warnings", [])[:20]
+        ] if isinstance(response.get("warnings", []), list) and "PIIScrubber" in globals() else [],
     }
 
 
