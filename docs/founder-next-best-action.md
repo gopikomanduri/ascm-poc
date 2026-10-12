@@ -79,3 +79,31 @@ Run tests with:
 python -m unittest discover -s tests -p 'test_founder_next_best_action.py'
 python -m unittest discover -s tests -p 'test_reuse_advisor.py'
 ```
+
+
+## Passive project-context inference (first milestone)
+
+The daemon now records privacy-minimized filesystem events in
+`.ascm_history/activity_events.jsonl` and maintains separate inferred context
+files under `.ascm_history/project_contexts/`, keyed by canonical Git root.
+It stores file paths and event metadata, not source contents, keystrokes, screenshots,
+terminal output, or browser contents.
+
+The first deterministic fusion rules are intentionally conservative:
+
+- A single file edit creates a low-confidence hypothesis, not a confirmed task.
+- Multiple recent edits can create a tentative implementation hypothesis.
+- A test result recorded after a code edit can support a stronger hypothesis such as
+  investigating a failure or verifying recent changes.
+- When the founder's goal is known, the daemon stays silent for low-confidence
+  context and can recommend a next step when evidence is stronger. It no longer
+  asks the founder to restate a task just because coding activity continues.
+- If no founder goal is recorded, the daemon may ask for that goal because it
+  materially changes which next action is appropriate.
+
+This is a first event-correlation layer, not full desktop-wide awareness yet.
+The daemon currently receives filesystem events from its configured workspace;
+terminal/test-result, active-window, and browser adapters still need to be added
+before ASCM can reliably correlate all applications and all independent workspaces.
+Hypotheses are persisted separately from founder-confirmed context and are not
+written into the confirmed task field.
