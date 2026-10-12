@@ -37,22 +37,32 @@ Follow [the opt-in browser extension instructions](../browser_extension/README.m
 
 The local JSONL files are useful audit evidence, not tamper-proof or centralized audit storage. Commercial deployments should export events to a protected append-only store, define retention/deletion controls, and document incident response. Do not put customer content or secrets into event details.
 
-## Security gate and Coco agent
+## Security gate and CICO integration
 
-Every pull-request CI run installs a pinned `git-coco` CLI, invokes its structured `coco agent review` interface against the current branch diff, runs deterministic ASCM checks, scans changed Python files with Bandit, audits dependencies with pip-audit, and uploads machine-readable evidence. The Docker build is blocked unless the security release gates pass.
+The pull-request workflow integrates the CICO security-review adapter through GitHub Actions and exposes the same gate as a local CLI. Every run also performs deterministic ASCM checks, Bandit scans of changed Python files, a pip-audit dependency scan, and uploads machine-readable evidence. The Docker build is blocked unless the security release gates pass.
 
-The Coco adapter uses the documented versioned JSON request/response interface, not scraped terminal output. It reviews the branch diff with repository-defined prompts disabled, records normalized findings, and treats Coco findings with severity 7/10 or higher as blocking. The CI job passes provider credentials only from GitHub Actions secrets. Configure `COCO_SERVICE_API_KEY` (or `GEMINI_API_KEY` / `GOOGLE_API_KEY`) and, if needed, `COCO_SERVICE_PROVIDER` / `COCO_SERVICE_MODEL`. For an approved alternative runner, `ASCM_COCO_AGENT_CMD` can be a JSON array of executable plus arguments; the adapter appends Coco's `agent review --input - --repo <repo>` arguments and never evaluates a shell command.
+The adapter accepts `ASCM_CICO_AGENT_CMD` as a JSON array containing the CICO executable and any fixed arguments. It appends the structured review arguments (`agent review --input - --repo <repo>`) and sends a versioned JSON request on stdin. Commands are never shell-evaluated. CICO must return a valid structured review envelope; findings with severity 7/10 or higher block the gate. The adapter records normalized, redacted findings and status metadata, not raw provider output.
 
-If Coco cannot run, returns an invalid response, or lacks credentials, the security release gate fails. The security report and scanner artifacts are uploaded even when a gate fails. Local static checks alone are not represented as a Coco pass.
+**GitHub integration:** configure the repository Actions secret `ASCM_CICO_AGENT_CMD` with a JSON array that invokes the installed CICO CLI/adapter. The exact executable and its provider credentials depend on your CICO deployment; ASCM does not invent a CICO binary or assume provider credentials. If CICO is absent, misconfigured, exits unsuccessfully, or returns an invalid response, the required CI gate fails closed. Never store credentials in source files, workflow YAML, comments, or artifacts.
 
-### Configure the Coco credential (required)
+**Local CLI:**
 
-In GitHub, open **Settings → Secrets and variables → Actions → New repository secret** and add `COCO_SERVICE_API_KEY` with an API key for the provider selected by Coco. By default the workflow selects Gemini and `gemini-2.5-flash`; you can instead add `COCO_SERVICE_PROVIDER` and `COCO_SERVICE_MODEL`. Existing `GEMINI_API_KEY` or `GOOGLE_API_KEY` secrets are accepted as fallbacks. Never put API keys in source files, workflow YAML, issue comments, or artifacts.
+```bash
+# Review changed files against main and write an evidence report
+ASCM_CICO_AGENT_CMD='["/path/to/cico"]' \
+  python -m orchestrator.security.cico_gate --git-base origin/main \
+  --report .ascm_history/security/security-report.json --require-cico
 
-The latest observed CI run attempted the Coco review but failed because the Gemini provider had no API key configured. This is an intentionally blocking state: deterministic tests and dependency scanning passing does not count as a Coco review. After adding the secret, rerun the PR workflow and confirm the report records `coco.status = completed` and `coco.passed = true` before considering a release.
+# Scan an explicit file list (the command still runs the configured CICO review)
+ASCM_CICO_AGENT_CMD='["/path/to/cico"]' \
+  python -m orchestrator.security.cico_gate --paths orchestrator/security/cico_gate.py
+```
+
+The executable must implement the documented adapter contract. Until the real CICO entry point is configured and a successful structured response is observed, the integration is not considered validated and the security release gate remains blocked.
+
 ## Release gates still required for a commercial launch
 
-- Configure the approved Coco agent runner in GitHub Actions and verify a completed Coco review.
+- Configure the approved CICO agent runner in GitHub Actions and verify a completed CICO review.
 - Triage and remediate every high/medium finding from Bandit and pip-audit; pin and review dependencies, including transitive dependencies.
 - Add threat-model review and external penetration testing/DAST for any web/API endpoints; current CI is not a DAST scan.
 - Validate installer/uninstaller behavior on supported macOS, Linux desktop/systemd, and Windows versions. Browser native-host auto-registration is currently macOS/Linux only.
@@ -65,7 +75,7 @@ The latest observed CI run attempted the Coco review but failed because the Gemi
 
 To remove the OS login service without deleting local history, run `python -m orchestrator.mentor.daemon --repo /absolute/path/to/workspace --uninstall`. The terminal hooks and browser extension are separately opt-in and must be removed/disabled independently.
 
-The PR must remain unmerged until its latest CI run is green, Coco is actually invoked, findings are triaged, and a human review approves the release.
+The PR must remain unmerged until its latest CI run is green, CICO is actually invoked, findings are triaged, and a human review approves the release.
 
 
 ## Approved local action execution (opt-in)
