@@ -33,6 +33,7 @@ class ASCMProactiveMentor:
         self.git_monitor = ProactiveGitMonitor(str(self.repo_path))
         self.outcome_ledger = OutcomeLedger(self.repo_path)
         self._last_sell_notify = 0.0
+        self._last_outcome_notify = 0.0
 
     def notify(self, title: str, message: str, subtitle: str = "ASCM Proactive Mentor"):
         CrossPlatformNotifier.notify(title, message, app_name=subtitle)
@@ -130,6 +131,35 @@ class ASCMProactiveMentor:
             "milestone": milestone,
             "recommendation": "",
         }
+
+        reminder_hours = max(1, int(os.getenv("ASCM_OUTCOME_REMINDER_HOURS", "24")))
+        now_epoch = time.time()
+        old_unattributed_cycles = []
+        from datetime import datetime, timezone
+        for event in generated_cycles:
+            experiment_id = event.get("experiment_id")
+            linked = [item for item in recent_events if item.get("experiment_id") == experiment_id]
+            has_outcome = any(item.get("event_type") in {"customer_reply", "meeting_booked", "qualified_opportunity", "conversion"} for item in linked)
+            try:
+                created = datetime.fromisoformat(event.get("occurred_at", "").replace("Z", "+00:00"))
+                if created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
+                age_hours = (datetime.now(timezone.utc) - created.astimezone(timezone.utc)).total_seconds() / 3600
+                if not has_outcome and age_hours >= reminder_hours:
+                    old_unattributed_cycles.append({"experiment_id": experiment_id, "age_hours": round(age_hours, 1)})
+            except (ValueError, TypeError):
+                continue
+        outcome_feedback["unattributed_cycles_due"] = old_unattributed_cycles
+        if old_unattributed_cycles and now_epoch - getattr(self, "_last_outcome_notify", 0.0) > 14400:
+            self._last_outcome_notify = now_epoch
+            ids = ", ".join(str(item["experiment_id"]) for item in old_unattributed_cycles[:3])
+            try:
+                self.notify(
+                    "ASCM: GTM outcome attribution needed",
+                    f"{len(old_unattributed_cycles)} GTM experiment(s) have no recorded customer outcome after {reminder_hours}h. Review: {ids}. Record verified replies, meetings, qualified opportunities, or conversions; do not guess.",
+                )
+            except Exception as exc:
+                logger.debug("Outcome reminder notification failed: %s", exc)
 
         if outcome_feedback["status"] == "awaiting_outcomes":
             advice["outcome_recommendation"] = (
