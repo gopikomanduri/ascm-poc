@@ -89,9 +89,21 @@ class FounderContextStore:
             state["preferences"] = preferences
         state["updated_at"] = _utc_now()
         self.history_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.history_dir.chmod(0o700)
+        except OSError:
+            pass
         temp = self.path.with_suffix(".tmp")
         temp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        try:
+            temp.chmod(0o600)
+        except OSError:
+            pass
         temp.replace(self.path)
+        try:
+            self.path.chmod(0o600)
+        except OSError:
+            pass
         return state
 
 
@@ -250,7 +262,15 @@ class NextBestActionEngine:
         proposals.append(proposal)
         temp = self.proposals_path.with_suffix(".tmp")
         temp.write_text(json.dumps(proposals, indent=2), encoding="utf-8")
+        try:
+            temp.chmod(0o600)
+        except OSError:
+            pass
         temp.replace(self.proposals_path)
+        try:
+            self.proposals_path.chmod(0o600)
+        except OSError:
+            pass
         self.audit_logger.log_event(
             "ACTION_PROPOSED", agent="NEXT_BEST_ACTION_ENGINE",
             action=action_type,
@@ -274,7 +294,15 @@ class NextBestActionEngine:
                 proposal["decided_at"] = _utc_now()
                 temp = self.proposals_path.with_suffix(".tmp")
                 temp.write_text(json.dumps(proposals, indent=2), encoding="utf-8")
+                try:
+                    temp.chmod(0o600)
+                except OSError:
+                    pass
                 temp.replace(self.proposals_path)
+                try:
+                    self.proposals_path.chmod(0o600)
+                except OSError:
+                    pass
                 self.audit_logger.log_governance(
                     milestone=proposal.get("action_type", "unknown"),
                     decision="approved" if approved else "rejected",
