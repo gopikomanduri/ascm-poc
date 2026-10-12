@@ -30,6 +30,11 @@ class ContinuousGTMEngine:
         self.waitlist_file = self.project_path / ".ascm_waitlist.json"
         self.artifacts_dir = self.project_path / "artifacts" / "gtm_cycles"
         self.product = ProductContext.load(self.project_path)
+        self.product_configured = (
+            self.product.product_name != "Unconfigured product"
+            and "not configured" not in self.product.product_thesis.lower()
+            and "not configured" not in self.product.icp_description.lower()
+        )
         self.outcome_ledger = OutcomeLedger(self.project_path)
         self.marketing_agent = MarketingAgent()
         self.sales_agent = SalesAgentV2()
@@ -81,6 +86,11 @@ class ContinuousGTMEngine:
         1. Marketing: Translates code diff into Engineering-as-Marketing artifacts.
         2. Sales: Triages waitlist signups with signal-based PQL scoring and Challenger audits.
         """
+        if not self.product_configured:
+            raise ValueError(
+                f"Product context is incomplete. Create {self.project_path / '.ascm_product.json'} "
+                "with product_name, product_thesis, and icp_description before running a GTM cycle."
+            )
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         experiment_id = f"gtm-{timestamp}"
@@ -151,8 +161,7 @@ class ContinuousGTMEngine:
             "experiment_id": experiment_id,
             "product_context": {
                 "product_name": self.product.product_name,
-                "configured": self.product.product_name != "Unconfigured product"
-                    and "not configured" not in self.product.product_thesis.lower(),
+                "configured": self.product_configured,
                 "product_thesis": self.product.product_thesis,
                 "icp_description": self.product.icp_description,
                 "domain_keywords": self.product.domain_keywords,
@@ -266,7 +275,7 @@ class ContinuousGTMEngine:
         lines.extend([
             "---",
             "## 5. Live Multi-Channel Intent Radar (External Buy-Ready Leads)",
-            f"- **Total Live Signals Scanned:** {rr.get('total_scanned', 0)} across 4 channels (HN, Dev.to, GitHub, Tech Feeds)",
+            f"- **Total Live Signals Scanned:** {rr.get('total_scanned', 0)} across configured signal sources",
             f"- **High-Intent Leads Detected:** {rr.get('high_intent_leads_count', 0)}",
             "",
             "### Top Qualified External Opportunities:",
