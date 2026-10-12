@@ -17,7 +17,10 @@ from pathlib import Path
 from typing import Any
 
 
-CUSTOMER_OUTCOMES = {"customer_reply", "meeting_booked", "qualified_opportunity", "conversion"}
+CUSTOMER_OUTCOMES = {
+    "customer_reply", "customer_interview", "feature_request", "pilot_commitment",
+    "waitlist_signup", "meeting_booked", "qualified_opportunity", "conversion",
+}
 POSITIVE_SENTIMENTS = {"interested", "positive"}
 FEEDBACK_LABELS = {"helpful", "not_helpful", "accepted", "dismissed", "acted_on", "incorrect"}
 
@@ -122,14 +125,20 @@ class EvidenceSourceConnector:
         qualified = counts["qualified_opportunity"]
         conversions = counts["conversion"]
         # Conservative explicit evidence threshold; not a statistical PMF claim.
-        demand_signal = conversions > 0 or qualified > 0 or positive_replies >= 3
+        explicit_strong = any(
+            str((event.get("metrics") or {}).get("demand_signal", "")).lower() == "strong"
+            for event in recent
+        )
+        commitments = counts["pilot_commitment"] + counts["waitlist_signup"]
+        demand_signal = explicit_strong or commitments > 0 or conversions > 0 or qualified > 0 or positive_replies >= 3
         if not recent:
             summary = None
         else:
             summary = (
-                f"{len(recent)} recorded customer outcome event(s) in the last {window_days} days: "
-                f"{positive_replies} positive/interested replies, {counts['meeting_booked']} meetings, "
-                f"{qualified} qualified opportunities, {conversions} conversions."
+                f"{len(recent)} feature-matched customer evidence event(s) in the last {window_days} days: "
+                f"{positive_replies} positive/interested replies, {counts['customer_interview']} interviews, "
+                f"{counts['feature_request']} feature requests, {commitments} pilot/waitlist commitments, "
+                f"{counts['meeting_booked']} meetings, {qualified} qualified opportunities, {conversions} conversions."
             )
         return {
             "source": "local_gtm_outcome_ledger",
@@ -141,7 +150,7 @@ class EvidenceSourceConnector:
             "positive_reply_count": positive_replies,
             "customer_evidence": summary,
             "user_demand_verified": bool(demand_signal),
-            "demand_signal_rule": "At least one qualified opportunity/conversion or three positive/interested replies in the selected window.",
+            "demand_signal_rule": "Explicit strong demand, a pilot/waitlist commitment, a qualified opportunity/conversion, or at least three positive/interested replies matched to the feature key.",
             "evidence_event_ids": [str(e.get("event_id")) for e in recent[-50:] if e.get("event_id")],
             "limitation": (
                 "Only explicitly tagged, task-matching outcomes count when task scope is supplied. "
