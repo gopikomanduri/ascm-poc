@@ -229,9 +229,10 @@ class InterventionQualityTracker:
     def record_shown(
         self, *, session_id: str, project_id: str | None, recommendation: dict[str, Any],
         evidence_event_ids: list[str] | None = None,
+        intervention_id: str | None = None,
     ) -> dict[str, Any]:
         intervention = {
-            "intervention_id": str(uuid.uuid4()),
+            "intervention_id": intervention_id or str(uuid.uuid4()),
             "session_id": str(session_id)[:128],
             "project_id": str(project_id or "")[:128],
             "shown_at": _now().isoformat(),
