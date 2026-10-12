@@ -37,7 +37,7 @@ class GitHubRepositoryAdvisor:
             headers["Authorization"] = f"Bearer {self.token}"
         request = Request(url, headers=headers)
         try:
-            with urlopen(request, timeout=self.timeout) as response:
+            with urlopen(request, timeout=self.timeout) as response:  # nosec B310 - fixed HTTPS GitHub API endpoint
                 payload = json.loads(response.read().decode("utf-8"))
         except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
             return {
