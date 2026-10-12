@@ -37,7 +37,7 @@ class UniversalASCMDaemon:
 
     def __init__(self, repo_path: str = ".", poll_interval_sec: int = 30, assist: bool = False):
         self.repo_path = Path(repo_path).resolve()
-        if any(char in str(self.repo_path) for char in ("\\n", "\\r", "\\x00")):
+        if any(char in str(self.repo_path) for char in ("\n", "\r", "\x00")):
             raise ValueError("Workspace path must not contain newline or NUL characters")
         self.poll_interval_sec = poll_interval_sec
         self.mentor = ASCMProactiveMentor(repo_path=str(self.repo_path))
