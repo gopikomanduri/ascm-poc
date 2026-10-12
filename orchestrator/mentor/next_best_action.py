@@ -49,6 +49,7 @@ class FounderContextStore:
     def _empty() -> Dict[str, Any]:
         return {
             "current_goal": None,
+            "current_task": None,
             "target_customer": None,
             "next_milestone": None,
             "constraints": [],
