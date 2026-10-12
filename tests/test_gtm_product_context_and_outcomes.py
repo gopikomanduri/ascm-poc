@@ -5,6 +5,8 @@ from pathlib import Path
 
 from orchestrator.gtm.strategy.product_context import ProductContext
 from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
+from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
+from unittest import mock
 
 
 class ProductContextTests(unittest.TestCase):
@@ -51,6 +53,24 @@ class OutcomeLedgerTests(unittest.TestCase):
         self.assertEqual(summary["event_count"], 2)
         self.assertTrue(summary["outcomes_observed"])
         self.assertNotEqual(summary["events"][0]["event_id"], summary["events"][1]["event_id"])
+
+    def test_generated_cycle_without_customer_outcome_is_not_mistaken_for_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = OutcomeLedger(Path(tmp))
+            ledger.record("gtm_cycle_generated", experiment_id="exp-2")
+            mentor = ASCMProactiveMentor.__new__(ASCMProactiveMentor)
+            mentor.repo_analyzer = mock.Mock()
+            mentor.repo_analyzer.analyze.return_value = {"test_count": 0, "file_count": 0}
+            mentor.git_monitor = mock.Mock()
+            mentor.git_monitor.measure_gtm_activity.return_value = mock.Mock(
+                days_since_last_gtm_action=None, risk_level="UNKNOWN"
+            )
+            mentor.git_monitor.get_latest_milestone.return_value = None
+            mentor.outcome_ledger = ledger
+            advice = mentor.evaluate_code_progress_and_advise()
+        self.assertEqual(advice["gtm_outcome_feedback"]["status"], "awaiting_outcomes")
+        self.assertEqual(advice["gtm_outcome_feedback"]["verified_outcomes"], 0)
+        self.assertIn("no customer replies", advice["outcome_recommendation"].lower())
 
     def test_rejects_generated_copy_as_outcome(self):
         with tempfile.TemporaryDirectory() as tmp:
