@@ -421,7 +421,26 @@ def main(
 
     _save_log(product_goal, linkedin_content if post_linkedin else "", x_content if post_x else "", angle, hook)
 
-    print("\n" + "=" * 60)
+    # Opening a compose page or scheduling a post is not proof it went live.
+    # Only record campaign_published after the operator explicitly confirms publication.
+    if is_interactive:
+        try:
+            published = input("Did you actually publish at least one post (not just draft/schedule it)? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            published = "n"
+        if published in {"y", "yes"}:
+            try:
+                from orchestrator.gtm.strategy.proactive_monitor import ProactiveGitMonitor
+                ProactiveGitMonitor(str(Path.cwd())).record_gtm_event(
+                    "campaign_published",
+                    details={"channels": [name for name, enabled in (("linkedin", post_linkedin), ("x", post_x)) if enabled],
+                             "goal": product_goal[:160], "confirmed_by_operator": True},
+                )
+                logger.info("[GTM telemetry] Recorded operator-confirmed campaign publication.")
+            except Exception as exc:
+                logger.warning("[GTM telemetry] Could not record publication event: %s", exc)
+
+    print("\\n" + "=" * 60)
     print("✅  MILESTONE 1 COMPLETE")
     if os.getenv("BUFFER_API_KEY"):
         print("   Posts scheduled via Buffer API.")
