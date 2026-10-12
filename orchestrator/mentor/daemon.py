@@ -23,6 +23,8 @@ from orchestrator.mentor.notifier import CrossPlatformNotifier
 from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
 from orchestrator.mentor.file_watcher import ActivityAwareMonitor
 from orchestrator.mentor.context_fusion import ContextFusionEngine
+from orchestrator.mentor.activity_adapters import ActiveWindowAdapter
+from orchestrator.security.audit_logger import AuditLogger
 
 logger = logging.getLogger("ASCMDaemon")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -41,6 +43,8 @@ class UniversalASCMDaemon:
         # Cross-IDE activity monitor (filesystem + git combined)
         self.activity_monitor = ActivityAwareMonitor(repo_path=str(self.repo_path))
         self.context_fusion = ContextFusionEngine(workspace_path=self.repo_path)
+        self.active_window_adapter = ActiveWindowAdapter()
+        self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
         watcher = self.activity_monitor.file_watcher
         base_activity_callback = watcher.on_change
 
@@ -48,8 +52,13 @@ class UniversalASCMDaemon:
             # Preserve the watcher's existing activity counters and record only metadata.
             base_activity_callback(path)
             try:
-                self.context_fusion.record_file_change(path)
+                event = self.context_fusion.record_file_change(path)
                 self.context_fusion.infer_context(path)
+                self.audit_logger.log_event(
+                    "ACTIVITY_FILE_CHANGED", agent="ACTIVITY_ADAPTER",
+                    action="RECORD_PATH_METADATA",
+                    details={"event_id": event["event_id"], "project_id": event["project_id"]},
+                )
             except Exception as exc:
                 logger.debug("[Daemon] Context fusion skipped an event: %s", exc)
 
@@ -196,12 +205,40 @@ class UniversalASCMDaemon:
 
                 # Full activity summary: filesystem + git combined
                 activity = self.activity_monitor.get_activity_summary()
+                # Foreground app identity is sampled only; window titles and page contents are never read.
+                active_app = self.active_window_adapter.poll()
+                if active_app:
+                    recent_files = activity.get("filesystem_activity", {}).get("recently_edited_files", [])
+                    project_hint = recent_files[-1] if recent_files else self.repo_path
+                    try:
+                        app_event = self.context_fusion.record_active_app(
+                            cwd=project_hint, app_name=active_app
+                        )
+                        self.audit_logger.log_event(
+                            "ACTIVITY_ACTIVE_APP", agent="ACTIVITY_ADAPTER",
+                            action="RECORD_APP_CHANGE",
+                            details={"event_id": app_event["event_id"], "app_name": active_app,
+                                     "project_id": app_event["project_id"]},
+                        )
+                    except Exception as exc:
+                        logger.warning("[Daemon] Active app metadata was not recorded: %s", type(exc).__name__)
                 fs = activity["filesystem_activity"]
                 git = activity["git_activity"]
                 combined = activity["combined_signal"]
 
                 # Check GTM readiness from mentor
                 advice = self.mentor.evaluate_code_progress_and_advise()
+                self.audit_logger.log_event(
+                    "MENTOR_ACTIVITY_SNAPSHOT", agent="PROACTIVE_MENTOR",
+                    action="EVALUATE_ACTIVITY",
+                    details={
+                        "actively_coding": bool(combined["actively_coding_now"]),
+                        "editing_without_committing": bool(combined["editing_without_committing"]),
+                        "gtm_risk_level": git.get("risk_level"),
+                        "has_gtm_history": git.get("days_since_gtm") is not None,
+                        "should_trigger_gtm": bool(advice.get("should_trigger_gtm")),
+                    },
+                )
 
                 current_time = time.time()
 
