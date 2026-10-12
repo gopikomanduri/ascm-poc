@@ -8,6 +8,7 @@ This document describes the current implementation and the gates required before
 |---|---|---|---|
 | Code edits | Existing cross-platform filesystem watcher | Relative file path, project ID, timestamp | On for configured workspace |
 | Foreground application | Best-effort macOS, Windows, Linux detector | Sanitized process/application name only | On; only transitions are recorded |
+| IDE project activation | Optional VS Code-compatible extension | Canonical Git project identity and timestamp | Opt-in |
 | Terminal activity | Optional Bash/Zsh hooks | Command category and exit code only | Opt-in |
 | Test result | CLI event adapter | Pass/fail and exit code only | Opt-in unless integrated by a caller |
 | Browser research | Optional Chrome MV3 extension + native messaging host | Hostname only | Opt-in |
