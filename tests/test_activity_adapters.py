@@ -54,7 +54,7 @@ class ActivityAdapterTests(unittest.TestCase):
             engine = ContextFusionEngine(tmp)
             engine.record_terminal_event(cwd=tmp, command_category="python_tests", exit_code=1)
             context = engine.infer_context(tmp)
-            self.assertEqual(context["task_hypothesis"], "Running and evaluating the project test suite")
+            self.assertEqual(context["task_hypothesis"], "Investigating a failed test run")
             self.assertFalse(context["is_confirmed"])
 
     def test_active_window_adapter_returns_none_when_no_platform_api(self):
