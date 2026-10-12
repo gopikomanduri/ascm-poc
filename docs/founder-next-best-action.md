@@ -9,7 +9,7 @@ ASCM's proactive mentor is intended to help a founder decide what to do next, no
 
 ## Set or update the founder's goal
 
-The mentor's existing goal clarification flow now saves the clarified goal and target customer into the context store. You can run the interactive goal flow with:
+The mentor's existing goal clarification flow saves the clarified goal into the context store. Model-suggested ICP text is not stored as a founder-confirmed fact. You can run the interactive goal flow with:
 
 ```bash
 python -m orchestrator.mentor.proactive_mentor
