@@ -1,0 +1,129 @@
+"""Evidence-driven founder decision engine for proactive ASCM interventions.
+
+The engine ranks decision paths, not autonomous actions. It only scores paths supported
+by explicit evidence, reports missing evidence, and never executes or publishes anything.
+"""
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+
+DECISION_PATHS = (
+    "build",
+    "reuse",
+    "simplify",
+    "customer_validate",
+    "launch_or_sell",
+    "pause_or_stop",
+)
+
+
+class FounderIntelligenceEngine:
+    """Evaluate founder decision paths using explainable, conservative rules."""
+
+    def evaluate(
+        self,
+        *,
+        goal: str | None,
+        observation: str,
+        evidence: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        if not isinstance(observation, str) or not observation.strip():
+            raise ValueError("observation must be a non-empty string")
+        if evidence is None:
+            evidence = {}
+        if not isinstance(evidence, dict):
+            raise ValueError("evidence must be a dictionary")
+
+        signals: List[Dict[str, Any]] = []
+        missing: List[str] = []
+        normalized_goal = goal.strip() if isinstance(goal, str) and goal.strip() else None
+
+        def signal(path: str, score: int, reason: str, evidence_key: str | None = None) -> None:
+            signals.append({
+                "path": path,
+                "score": max(0, min(100, score)),
+                "reason": reason,
+                "evidence_key": evidence_key,
+            })
+
+        if not normalized_goal:
+            missing.append("founder_confirmed_goal")
+        if not evidence.get("task_description"):
+            missing.append("task_description")
+        if not evidence.get("customer_evidence"):
+            missing.append("customer_evidence")
+        if not evidence.get("reuse_candidates"):
+            missing.append("reuse_candidates")
+        if not evidence.get("milestone"):
+            missing.append("measurable_milestone")
+
+        task = evidence.get("task_description")
+        customer_evidence = evidence.get("customer_evidence")
+        reuse_candidates = evidence.get("reuse_candidates")
+        milestone = evidence.get("milestone")
+        tests_failed = evidence.get("tests_failed") is True
+        repeated_failures = evidence.get("repeated_failures") is True
+        scope_risk = evidence.get("scope_risk") is True
+        launch_ready = evidence.get("launch_readiness_verified") is True
+        user_demand = evidence.get("user_demand_verified") is True
+        explicit_stop_signal = evidence.get("explicit_stop_signal") is True
+
+        if normalized_goal and task:
+            signal("build", 65 if milestone else 45,
+                   "A stated goal and task exist; implementation priority still depends on a measurable milestone.",
+                   "task_description")
+        else:
+            signal("build", 10, "Insufficient confirmed context to conclude that more implementation is the right move.")
+
+        if reuse_candidates:
+            signal("reuse", 85, "Candidate reuse options were supplied; evaluate fit, license, maintenance, and integration cost before building.",
+                   "reuse_candidates")
+        else:
+            signal("reuse", 25, "Reuse has not been evaluated; this is a check to perform, not evidence that a suitable tool exists.")
+
+        if scope_risk or repeated_failures:
+            signal("simplify", 80, "Observed scope risk or repeated failure supports reducing the problem to a smaller verifiable slice.",
+                   "scope_risk" if scope_risk else "repeated_failures")
+        else:
+            signal("simplify", 35, "Consider simplification if the current plan exceeds the evidence or milestone.")
+
+        if not customer_evidence:
+            signal("customer_validate", 75, "No customer evidence was supplied; a small validation experiment can reduce demand uncertainty.")
+        elif user_demand:
+            signal("customer_validate", 35, "Demand is marked verified; validate remaining assumptions rather than repeating discovery by default.",
+                   "customer_evidence")
+        else:
+            signal("customer_validate", 65, "Customer evidence exists but demand is not explicitly marked verified; assess its strength.",
+                   "customer_evidence")
+
+        if launch_ready and user_demand:
+            signal("launch_or_sell", 85, "Launch readiness and user demand are explicitly marked verified; consider a bounded launch or sales test.",
+                   "launch_readiness_verified")
+        elif launch_ready:
+            signal("launch_or_sell", 55, "Readiness is marked verified, but customer demand is not; consider a limited validation or launch test.",
+                   "launch_readiness_verified")
+        else:
+            signal("launch_or_sell", 15, "Launch readiness has not been verified; do not infer that the product is ready to sell.")
+
+        if explicit_stop_signal or (tests_failed and repeated_failures):
+            signal("pause_or_stop", 75, "An explicit stop signal or repeated failures warrants a deliberate pause and review.",
+                   "explicit_stop_signal" if explicit_stop_signal else "repeated_failures")
+        else:
+            signal("pause_or_stop", 20, "No explicit stop evidence was supplied; stopping is an option to review, not a conclusion.")
+
+        # Deterministic tie-break: preserve the fixed path order.
+        ranked = sorted(enumerate(signals), key=lambda pair: (-pair[1]["score"], pair[0]))
+        top = ranked[0][1]
+        confidence = "low" if missing else ("high" if top["evidence_key"] and top["score"] >= 75 else "medium")
+        return {
+            "goal": normalized_goal,
+            "observation": observation,
+            "ranked_paths": [item for _, item in ranked],
+            "recommended_path": top["path"] if normalized_goal else "clarify_goal",
+            "confidence": confidence if normalized_goal else "low",
+            "missing_evidence": missing,
+            "requires_founder_input": not normalized_goal,
+            "execution_performed": False,
+            "policy": "Recommendations only; no actions are executed by the founder intelligence engine.",
+        }
