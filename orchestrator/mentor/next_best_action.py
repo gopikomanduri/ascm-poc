@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
 from orchestrator.security.audit_logger import AuditLogger
+from orchestrator.mentor.founder_intelligence import FounderIntelligenceEngine
 
 
 OUTCOME_EVENTS = {
@@ -116,6 +117,7 @@ class NextBestActionEngine:
         self.context_store = FounderContextStore(self.project_path)
         self.proposals_path = self.history_dir / "action_proposals.json"
         self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
+        self.founder_intelligence = FounderIntelligenceEngine()
 
     def recommend(
         self,
@@ -226,12 +228,23 @@ class NextBestActionEngine:
                 confidence="medium",
             )
 
+        decision = self.founder_intelligence.evaluate(
+            goal=goal,
+            observation=observation,
+            evidence=evidence,
+        )
+        # Keep the existing next-action list API stable while exposing a distinct
+        # evidence-based founder decision layer for the daemon, CLI, and dashboard.
         return {
             "goal": goal,
             "observation": observation,
             "evidence": evidence,
             "actions": actions,
-            "requires_founder_input": any(a["action_type"] in {"clarify_goal", "clarify_task"} for a in actions),
+            "founder_decision": decision,
+            "requires_founder_input": (
+                decision["requires_founder_input"]
+                or any(a["action_type"] in {"clarify_goal", "clarify_task"} for a in actions)
+            ),
             "generated_at": _utc_now(),
             "disclaimer": "Recommendations are evidence-limited. No code change, message, or publication is executed by this engine.",
         }
