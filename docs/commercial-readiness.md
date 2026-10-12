@@ -44,6 +44,12 @@ Every pull-request CI run installs a pinned `git-coco` CLI, invokes its structur
 The Coco adapter uses the documented versioned JSON request/response interface, not scraped terminal output. It reviews the branch diff with repository-defined prompts disabled, records normalized findings, and treats Coco findings with severity 7/10 or higher as blocking. The CI job passes provider credentials only from GitHub Actions secrets. Configure `COCO_SERVICE_API_KEY` (or `GEMINI_API_KEY` / `GOOGLE_API_KEY`) and, if needed, `COCO_SERVICE_PROVIDER` / `COCO_SERVICE_MODEL`. For an approved alternative runner, `ASCM_COCO_AGENT_CMD` can be a JSON array of executable plus arguments; the adapter appends Coco's `agent review --input - --repo <repo>` arguments and never evaluates a shell command.
 
 If Coco cannot run, returns an invalid response, or lacks credentials, the security release gate fails. The security report and scanner artifacts are uploaded even when a gate fails. Local static checks alone are not represented as a Coco pass.
+
+### Configure the Coco credential (required)
+
+In GitHub, open **Settings → Secrets and variables → Actions → New repository secret** and add `COCO_SERVICE_API_KEY` with an API key for the provider selected by Coco. By default the workflow selects Gemini and `gemini-2.5-flash`; you can instead add `COCO_SERVICE_PROVIDER` and `COCO_SERVICE_MODEL`. Existing `GEMINI_API_KEY` or `GOOGLE_API_KEY` secrets are accepted as fallbacks. Never put API keys in source files, workflow YAML, issue comments, or artifacts.
+
+The latest observed CI run attempted the Coco review but failed because the Gemini provider had no API key configured. This is an intentionally blocking state: deterministic tests and dependency scanning passing does not count as a Coco review. After adding the secret, rerun the PR workflow and confirm the report records `coco.status = completed` and `coco.passed = true` before considering a release.
 ## Release gates still required for a commercial launch
 
 - Configure the approved Coco agent runner in GitHub Actions and verify a completed Coco review.
