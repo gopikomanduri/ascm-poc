@@ -19,7 +19,8 @@ from orchestrator.mentor.founder_intelligence import FounderIntelligenceEngine
 
 
 OUTCOME_EVENTS = {
-    "customer_reply", "meeting_booked", "qualified_opportunity", "conversion",
+    "customer_reply", "customer_interview", "feature_request", "pilot_commitment",
+    "waitlist_signup", "meeting_booked", "qualified_opportunity", "conversion",
 }
 RESOLVING_EXPERIMENT_EVENTS = {"experiment_reviewed", "experiment_stopped"}
 SUPPORTED_OBSERVATIONS = {
