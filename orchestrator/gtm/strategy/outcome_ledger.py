@@ -45,7 +45,7 @@ class OutcomeLedger:
             raise ValueError("source must be one of the supported source labels")
         if experiment_id is not None and (
             not isinstance(experiment_id, str) or not experiment_id.strip()
-            or len(experiment_id) > 128 or "\\n" in experiment_id or "\\r" in experiment_id
+            or len(experiment_id) > 128 or "\n" in experiment_id or "\r" in experiment_id
         ):
             raise ValueError("experiment_id must be a short identifier, not free-form text")
         if metrics is not None and not isinstance(metrics, dict):
