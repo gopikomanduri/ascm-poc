@@ -1,11 +1,31 @@
+import ipaddress
 import json
 import os
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, List
+
+
+def _validate_http_endpoint(url: str) -> str:
+    """Allow HTTPS endpoints and HTTP only for explicit local/private model endpoints."""
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("LLM endpoint must be an absolute HTTP(S) URL")
+    if parsed.username or parsed.password:
+        raise ValueError("LLM endpoint URLs must not embed credentials")
+    host = parsed.hostname.rstrip(".").lower()
+    if parsed.scheme == "http" and host not in {"localhost"} and not host.endswith((".localhost", ".local", ".internal")):
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            raise ValueError("Non-local LLM endpoints must use HTTPS") from None
+        if not (address.is_private or address.is_loopback or address.is_link_local):
+            raise ValueError("Non-local LLM endpoints must use HTTPS")
+    return url
 
 
 def _load_dotenv():
@@ -139,7 +159,9 @@ class OpenAICompatibleProvider(BaseLLMProvider):
     def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
         self.provider_name = "openai"
         self.api_key = api_key
-        self.base_url = (base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
+        self.base_url = _validate_http_endpoint(
+            base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        ).rstrip("/")
         gen_m = os.environ.get("LLM_MODEL")
         if gen_m and ("gemini" in gen_m or "claude" in gen_m):
             gen_m = None
@@ -168,7 +190,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310 - base_url validated as HTTP(S) in provider initialization  # nosec B310 - base_url validated as HTTP(S) in provider initialization
                 result = json.loads(resp.read().decode("utf-8"))
                 return result["choices"][0]["message"]["content"].strip()
         except urllib.error.HTTPError as err:
@@ -236,7 +258,9 @@ class OllamaProvider(BaseLLMProvider):
     """
     def __init__(self, host: Optional[str] = None, model: Optional[str] = None):
         self.provider_name = "ollama"
-        self.host = (host or os.environ.get("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
+        self.host = _validate_http_endpoint(
+            host or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        ).rstrip("/")
         self.model = model or os.environ.get("OLLAMA_MODEL") or os.environ.get("LLM_MODEL", "qwen2.5-coder:latest")
 
     def generate(self, prompt: str, system_instruction: str, json_mode: bool = False,
@@ -259,7 +283,7 @@ class OllamaProvider(BaseLLMProvider):
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=120) as resp:  # nosec B310 - Ollama host validated as HTTP(S) in provider initialization
                 result = json.loads(resp.read().decode("utf-8"))
                 return result["message"]["content"].strip()
         except urllib.error.URLError as err:
