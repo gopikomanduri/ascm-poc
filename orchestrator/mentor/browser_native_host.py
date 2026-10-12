@@ -6,6 +6,7 @@ import os
 import platform
 import stat
 import struct
+import shlex
 import sys
 from pathlib import Path
 import argparse
@@ -53,10 +54,10 @@ def install_native_host(workspace: Path, extension_id: str) -> Path:
     wrapper_path = host_dir / "ascm-browser-native-host"
     wrapper_path.write_text(
         "#!/bin/sh\\n"
-        f"export ASCM_WATCH_PATH={json.dumps(str(workspace))}\\n"
-        f"export PYTHONPATH={json.dumps(str(repo_root))}\\n"
-        f"cd {json.dumps(str(repo_root))}\\n"
-        f"exec {json.dumps(sys.executable)} -m orchestrator.mentor.browser_native_host\\n",
+        f"export ASCM_WATCH_PATH={shlex.quote(str(workspace))}\\n"
+        f"export PYTHONPATH={shlex.quote(str(repo_root))}\\n"
+        f"cd {shlex.quote(str(repo_root))}\\n"
+        f"exec {shlex.quote(sys.executable)} -m orchestrator.mentor.browser_native_host\\n",
         encoding="utf-8",
     )
     wrapper_path.chmod(wrapper_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
