@@ -52,6 +52,19 @@ class ContextFusionEngineTests(unittest.TestCase):
             self.assertNotIn("terminal_output", payload)
 
 
+    def test_project_activation_updates_latest_project_without_file_contents(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "web"
+            project.mkdir()
+            subprocess.run(["git", "init", "-q", str(project)], check=True)
+            engine = ContextFusionEngine(root)
+            event = engine.record_project_activation(project_path=project)
+            self.assertEqual(event["event_type"], "project_activated")
+            self.assertEqual(engine.latest_project_path(), project.resolve())
+            self.assertNotIn("content", event)
+            self.assertNotIn("document_text", event)
+
     def test_latest_project_path_tracks_terminal_context_across_nested_repositories(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
