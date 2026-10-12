@@ -63,7 +63,7 @@ success "Dependencies installed ✓"
 # ── .env setup ────────────────────────────────────────────────────────────────
 if [[ ! -f "$INSTALL_DIR/.env" ]]; then
     cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
-    info "Created $INSTALL_DIR/.env — you need to add your LLM API key."
+    info "Created $INSTALL_DIR/.env. An LLM API key is optional; background monitoring and basic prompts work without one."
 else
     info ".env already exists — skipping."
 fi
@@ -126,9 +126,9 @@ echo -e "${GREEN}${BOLD}╚═════════════════�
 echo ""
 
 if [[ "$API_KEY_SET" == "false" ]]; then
-    echo -e "${YELLOW}${BOLD}Next step: Add your LLM API key${RESET}"
+    echo -e "${YELLOW}${BOLD}Optional: Add an LLM API key for richer analysis${RESET}"
     echo ""
-    echo "  Open this file and set GEMINI_API_KEY (or OPENAI_API_KEY):"
+    echo "  Basic proactive monitoring works without a key. For model-assisted analysis, set GEMINI_API_KEY (or OPENAI_API_KEY) in:"
     echo -e "  ${CYAN}$INSTALL_DIR/.env${RESET}"
     echo ""
     echo "  Get a free Gemini key at: https://aistudio.google.com/app/apikey"
