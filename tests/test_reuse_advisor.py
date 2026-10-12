@@ -13,6 +13,10 @@ class GitHubRepositoryAdvisorTests(unittest.TestCase):
                 "html_url": "https://github.com/example/auth-lib",
                 "description": "Authentication library",
                 "stargazers_count": 1200,
+                "score": 18.7,
+                "forks_count": 120,
+                "open_issues_count": 4,
+                "language": "Python",
                 "pushed_at": "2026-10-01T00:00:00Z",
                 "archived": False,
                 "license": {"spdx_id": "MIT", "name": "MIT License"},
@@ -25,6 +29,8 @@ class GitHubRepositoryAdvisorTests(unittest.TestCase):
             result = GitHubRepositoryAdvisor(token="test-token").search("authentication library")
         self.assertEqual(result["repositories"][0]["name"], "example/auth-lib")
         self.assertEqual(result["repositories"][0]["license"], "MIT")
+        self.assertEqual(result["repositories"][0]["search_score"], 18.7)
+        self.assertEqual(result["repositories"][0]["language"], "Python")
         self.assertIn("not a quality or security endorsement", result["caveat"])
 
     def test_search_failure_is_a_non_fatal_empty_result(self):
