@@ -17,6 +17,7 @@ import time
 import json
 import subprocess
 import logging
+import plistlib
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -453,40 +454,23 @@ class UniversalASCMDaemon:
             launch_agents_dir = Path.home() / "Library" / "LaunchAgents"
             launch_agents_dir.mkdir(parents=True, exist_ok=True)
             plist_path = launch_agents_dir / "com.ascm.mentor.plist"
-            plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.ascm.mentor</string>
-    <key>WorkingDirectory</key>
-    <string>{project_root}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{py_exe}</string>
-        <string>-m</string>
-        <string>orchestrator.mentor.daemon</string>
-        <string>--repo</string>
-        <string>{self.repo_path}</string>
-    </array>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>ASCM_ACTIVE_WINDOW_MONITOR</key>
-        <string>{os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "0")}</string>
-    </dict>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>{self.history_dir}/daemon_stdout.log</string>
-    <key>StandardErrorPath</key>
-    <string>{self.history_dir}/daemon_stderr.log</string>
-</dict>
-</plist>
-"""
-            with open(plist_path, "w") as f:
-                f.write(plist_content)
+            plist_content = {
+                "Label": "com.ascm.mentor",
+                "WorkingDirectory": str(project_root),
+                "ProgramArguments": [
+                    py_exe, "-m", "orchestrator.mentor.daemon",
+                    "--repo", str(self.repo_path),
+                ],
+                "EnvironmentVariables": {
+                    "ASCM_ACTIVE_WINDOW_MONITOR": os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "0")
+                },
+                "RunAtLoad": True,
+                "KeepAlive": True,
+                "StandardOutPath": str(self.history_dir / "daemon_stdout.log"),
+                "StandardErrorPath": str(self.history_dir / "daemon_stderr.log"),
+            }
+            with open(plist_path, "wb") as f:
+                plistlib.dump(plist_content, f, sort_keys=True)
             # Unload may fail on first install; loading the new service must succeed.
             subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
             subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True, check=True)
@@ -497,22 +481,25 @@ class UniversalASCMDaemon:
             systemd_dir = Path.home() / ".config" / "systemd" / "user"
             systemd_dir.mkdir(parents=True, exist_ok=True)
             service_path = systemd_dir / "ascm-mentor.service"
-            service_content = f"""[Unit]
-Description=ASCM Proactive Founder & Engineering Mentor
-After=default.target
+            def _systemd_quote(value: str) -> str:
+                escaped = value.replace("\\\\", "\\\\\\\\").replace('"', '\\\"').replace("%", "%%")
+                return f'"{escaped}"'
 
-[Service]
-WorkingDirectory="{project_root}"
-Environment="ASCM_ACTIVE_WINDOW_MONITOR={os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "0")}"
-ExecStart="{py_exe}" -m orchestrator.mentor.daemon --repo "{self.repo_path}"
-Restart=always
-RestartSec=30
-StandardOutput=file:{self.history_dir}/daemon_stdout.log
-StandardError=file:{self.history_dir}/daemon_stderr.log
-
-[Install]
-WantedBy=default.target
-"""
+            service_content = (
+                "[Unit]\\n"
+                "Description=ASCM Proactive Founder & Engineering Mentor\\n"
+                "After=default.target\\n\\n"
+                "[Service]\\n"
+                f"WorkingDirectory={_systemd_quote(str(project_root))}\\n"
+                f"Environment={_systemd_quote('ASCM_ACTIVE_WINDOW_MONITOR=' + os.environ.get('ASCM_ACTIVE_WINDOW_MONITOR', '0'))}\\n"
+                f"ExecStart={_systemd_quote(py_exe)} -m orchestrator.mentor.daemon --repo {_systemd_quote(str(self.repo_path))}\\n"
+                "Restart=always\\n"
+                "RestartSec=30\\n"
+                f"StandardOutput={_systemd_quote('file:' + str(self.history_dir / 'daemon_stdout.log'))}\\n"
+                f"StandardError={_systemd_quote('file:' + str(self.history_dir / 'daemon_stderr.log'))}\\n\\n"
+                "[Install]\\n"
+                "WantedBy=default.target\\n"
+            )
             with open(service_path, "w") as f:
                 f.write(service_content)
             subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=True)
