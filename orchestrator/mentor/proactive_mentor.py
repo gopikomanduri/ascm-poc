@@ -29,7 +29,11 @@ class ASCMProactiveMentor:
         self.history_dir = self.repo_path / ".ascm_history"
         self.history_dir.mkdir(parents=True, exist_ok=True)
         self.mentor_state_file = self.history_dir / "mentor_state.json"
-        self.provider = get_configured_provider()
+        try:
+            self.provider = get_configured_provider()
+        except RuntimeError:
+            # Deterministic monitoring and next-best-action recommendations must work without an LLM key.
+            self.provider = None
         self.repo_analyzer = RepoAnalyzer(str(self.repo_path))
         self.git_monitor = ProactiveGitMonitor(str(self.repo_path))
         self.outcome_ledger = OutcomeLedger(self.repo_path)
