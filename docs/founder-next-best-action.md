@@ -31,6 +31,20 @@ For coding, the mentor suggests evaluating build-versus-integrate options and a 
 
 For GTM, generated content is not treated as published content. The mentor recommends founder review before external distribution. Actual publishing and customer outreach must remain behind explicit authorization in the integration that performs them.
 
+## Record a proposed action and founder decision
+
+A GTM cycle recommendation can be persisted as a proposal, then explicitly approved or rejected. This records consent only; it does not publish anything.
+
+```bash
+python -m orchestrator.mentor.proactive_mentor --observe gtm_cycle_generated --propose-action approve_campaign
+# Copy proposal_id from the output, then:
+python -m orchestrator.mentor.proactive_mentor --approve-proposal <proposal_id>
+# Or reject it instead:
+python -m orchestrator.mentor.proactive_mentor --reject-proposal <proposal_id>
+```
+
+A future publishing adapter must independently verify approval, show the exact content/channel/recipient to the founder, execute the approved action, and record the real publication result. An approval for one proposal must never authorize a different action.
+
 ## Limits of this MVP
 
 - Activity is explicit input today; this is not yet continuous IDE observation or automatic milestone discovery.
