@@ -279,6 +279,52 @@ class NextBestActionEngine:
         )
         return proposal
 
+    def propose_local_action(self, action_type: str) -> Dict[str, Any]:
+        """Create an approval-required proposal for a fixed, allowlisted local action."""
+        allowed = {
+            "inspect_git_status": "Inspect Git status (read-only)",
+            "run_pytest": "Run pytest in the configured workspace",
+        }
+        if action_type not in allowed:
+            raise ValueError("Unsupported local action type")
+        proposal = {
+            "proposal_id": str(uuid.uuid4()),
+            "action_type": action_type,
+            "title": allowed[action_type],
+            "status": "pending_approval",
+            "created_at": _utc_now(),
+            "goal": self.context_store.load().get("current_goal"),
+            "observation": "founder_requested_local_action",
+            "rationale": "Fixed local action; execution is disabled unless the founder explicitly enables it.",
+            "requires_approval": True,
+        }
+        self.history_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            proposals = json.loads(self.proposals_path.read_text(encoding="utf-8"))
+            if not isinstance(proposals, list):
+                proposals = []
+        except (OSError, json.JSONDecodeError):
+            proposals = []
+        proposals.append(proposal)
+        temp = self.proposals_path.with_suffix(".tmp")
+        temp.write_text(json.dumps(proposals, indent=2), encoding="utf-8")
+        try:
+            temp.chmod(0o600)
+        except OSError:
+            pass
+        temp.replace(self.proposals_path)
+        try:
+            self.proposals_path.chmod(0o600)
+        except OSError:
+            pass
+        self.audit_logger.log_event(
+            "ACTION_PROPOSED", agent="NEXT_BEST_ACTION_ENGINE",
+            action=action_type,
+            details={"proposal_id": proposal["proposal_id"], "status": proposal["status"],
+                     "requires_approval": True, "local_allowlist": True},
+        )
+        return proposal
+
     def record_approval(self, proposal_id: str, *, approved: bool, actor: str = "founder") -> Dict[str, Any]:
         """Record founder consent. Execution remains the responsibility of an authorized adapter."""
         try:
