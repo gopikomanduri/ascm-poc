@@ -77,6 +77,7 @@ class UniversalASCMDaemon:
 
         last_gtm_prompt_time = 0
         last_edit_nudge_time = 0
+        last_founder_context_prompt_time = 0
 
         try:
             while True:
@@ -92,6 +93,29 @@ class UniversalASCMDaemon:
                 advice = self.mentor.evaluate_code_progress_and_advise()
 
                 current_time = time.time()
+
+                # Ask for intent when code edits are observed. File paths alone do not
+                # reveal the task, so the mentor asks rather than guessing or auto-editing.
+                if combined["actively_coding_now"] and current_time - last_founder_context_prompt_time > 14400:
+                    last_founder_context_prompt_time = current_time
+                    context = self.mentor.founder_context.load()
+                    recent_files = activity["filesystem_activity"].get("recently_edited_files", [])
+                    file_names = ", ".join(Path(item).name for item in recent_files[-3:]) or "recent code files"
+                    goal = context.get("current_goal")
+                    if not goal:
+                        message = (
+                            f"I noticed edits in {file_names}, but your current goal is not configured. "
+                            "What outcome are you trying to achieve? Set a goal so I can compare build, integrate, or defer options."
+                        )
+                        title = "ASCM Mentor: Clarify your goal"
+                    else:
+                        message = (
+                            f"I noticed edits in {file_names}. Your recorded goal is: {goal[:180]}. "
+                            "What task are these edits intended to achieve? I can then compare reusing an existing solution, "
+                            "building the smallest necessary version, or deferring the work. I will not change code automatically."
+                        )
+                        title = "ASCM Mentor: What are you building?"
+                    CrossPlatformNotifier.notify(title, message, app_name="ASCM Mentor")
 
                 if self.suggester:
                     try:
