@@ -28,7 +28,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
 
-      - name: Run ASCM 103 Core Engine Unit Tests
+      - name: Run ASCM Core Engine Unit Tests
         env:
           PYTHONPATH: .
         run: |
@@ -36,11 +36,11 @@ jobs:
 
       - name: Validate ASCM Mathematical Proofs
         run: |
-          python ascm_math_proofs.py
+          python tools/ascm_math_proofs.py
 
       - name: Validate MR-Bench Multi-Repo Coordination
         run: |
-          python mr_bench.py --task-limit 1
+          python tools/mr_bench.py --task T01
 
   # ── 2. Container Build Validation ────────────────────────────────────────
   docker-build-verification:
