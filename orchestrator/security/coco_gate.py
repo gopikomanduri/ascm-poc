@@ -1,9 +1,8 @@
 """Security gate for changed ASCM files.
 
-Runs deterministic local checks on every CI change and invokes the Coco security
-agent through a documented JSON-stdin contract when ASCM_COCO_AGENT_CMD is set
-to a JSON array (never shell-evaluated). The report records whether Coco actually
-ran; absence of Coco is never misrepresented as a successful Coco review.
+Runs deterministic local checks on every CI change and invokes Coco's structured
+branch-review CLI. ASCM_COCO_AGENT_CMD may override the executable via a JSON
+array (never shell-evaluated). The report records whether Coco actually ran.
 """
 from __future__ import annotations
 
@@ -12,7 +11,6 @@ import ast
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
