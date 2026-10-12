@@ -59,6 +59,92 @@ class UniversalASCMDaemon:
                 _s.on_file_changed(path)
             watcher.on_change = _on_change
 
+    def _load_daemon_state(self):
+        """Load persistent cooldowns so restarts do not repeatedly interrupt the founder."""
+        try:
+            state = json.loads((self.history_dir / "daemon_state.json").read_text(encoding="utf-8"))
+            return state if isinstance(state, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _save_daemon_state(self, state):
+        path = self.history_dir / "daemon_state.json"
+        temp = path.with_suffix(".tmp")
+        temp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        temp.replace(path)
+
+    def _prompt_for_founder_context(self, activity, state, current_time):
+        """Proactively ask in a desktop dialog; never wait for the founder to run a CLI command."""
+        last_prompt = float(state.get("last_founder_context_prompt_at", 0) or 0)
+        if current_time - last_prompt < 14400:
+            return
+        recent_files = activity.get("filesystem_activity", {}).get("recently_edited_files", [])
+        file_names = ", ".join(Path(item).name for item in recent_files[-3:]) or "recent code files"
+        context = self.mentor.founder_context.load()
+        goal = context.get("current_goal")
+        if not goal:
+            title = "ASCM Mentor: What outcome are you pursuing?"
+            question = (
+                f"I noticed code edits in {file_names}. What outcome are you trying to achieve? "
+                "I'll remember your goal and help you choose the smallest useful next step."
+            )
+        else:
+            title = "ASCM Mentor: What are you working on?"
+            question = (
+                f"I noticed code edits in {file_names}. Your current goal is: {goal[:180]}. "
+                "What specific task are these edits intended to achieve? I'll compare reuse, a minimal build, "
+                "and validation before recommending more implementation."
+            )
+
+        # Persist before showing the dialog so restarts or a failed desktop integration do not spam.
+        state["last_founder_context_prompt_at"] = current_time
+        self._save_daemon_state(state)
+        response = CrossPlatformNotifier.prompt_dialog(
+            question,
+            default_text="",
+            title=title,
+            allow_terminal_fallback=False,
+        )
+        if not response or not response.strip():
+            CrossPlatformNotifier.notify(
+                title,
+                "I detected coding activity. When you're ready, respond to the ASCM Mentor desktop prompt; "
+                "I'll keep monitoring in the background.",
+                app_name="ASCM Mentor",
+            )
+            return
+
+        response = response.strip()[:1000]
+        if not goal:
+            insights = self.mentor.clarify_goal_and_pre_validate(response)
+            plan = insights.get("pre_build_validation_plan", [])
+            next_step = plan[0] if plan else insights.get("mentor_advice", "Validate the problem before expanding scope.")
+            CrossPlatformNotifier.notify(
+                "ASCM Mentor: Goal captured",
+                f"I'll use this goal for future recommendations. Suggested first step: {next_step[:350]}",
+                app_name="ASCM Mentor",
+            )
+        else:
+            self.mentor.founder_context.update(current_task=response)
+            recommendation = self.mentor.recommend_next_action(
+                "code_activity",
+                {"task_description": response},
+            )
+            actions = recommendation.get("actions", [])
+            if actions:
+                first = actions[0]
+                CrossPlatformNotifier.notify(
+                    "ASCM Mentor: Recommended next step",
+                    f"{first['title']}. {first['rationale'][:300]}",
+                    app_name="ASCM Mentor",
+                )
+            else:
+                CrossPlatformNotifier.notify(
+                    "ASCM Mentor: Task captured",
+                    "I've saved the task and will use it in subsequent recommendations.",
+                    app_name="ASCM Mentor",
+                )
+
     def run_daemon_loop(self):
         """Infinite monitoring loop running quietly in the background."""
         logger.info(f"Starting ASCM Proactive Daemon for {self.repo_path} (Poll interval: {self.poll_interval_sec}s)")
@@ -77,7 +163,7 @@ class UniversalASCMDaemon:
 
         last_gtm_prompt_time = 0
         last_edit_nudge_time = 0
-        last_founder_context_prompt_time = 0
+        daemon_state = self._load_daemon_state()
 
         try:
             while True:
@@ -94,28 +180,9 @@ class UniversalASCMDaemon:
 
                 current_time = time.time()
 
-                # Ask for intent when code edits are observed. File paths alone do not
-                # reveal the task, so the mentor asks rather than guessing or auto-editing.
-                if combined["actively_coding_now"] and current_time - last_founder_context_prompt_time > 14400:
-                    last_founder_context_prompt_time = current_time
-                    context = self.mentor.founder_context.load()
-                    recent_files = activity["filesystem_activity"].get("recently_edited_files", [])
-                    file_names = ", ".join(Path(item).name for item in recent_files[-3:]) or "recent code files"
-                    goal = context.get("current_goal")
-                    if not goal:
-                        message = (
-                            f"I noticed edits in {file_names}, but your current goal is not configured. "
-                            "What outcome are you trying to achieve? Set a goal so I can compare build, integrate, or defer options."
-                        )
-                        title = "ASCM Mentor: Clarify your goal"
-                    else:
-                        message = (
-                            f"I noticed edits in {file_names}. Your recorded goal is: {goal[:180]}. "
-                            "What task are these edits intended to achieve? I can then compare reusing an existing solution, "
-                            "building the smallest necessary version, or deferring the work. I will not change code automatically."
-                        )
-                        title = "ASCM Mentor: What are you building?"
-                    CrossPlatformNotifier.notify(title, message, app_name="ASCM Mentor")
+                # Proactively ask in a native desktop dialog and persist the response; no CLI interaction required.
+                if combined["actively_coding_now"]:
+                    self._prompt_for_founder_context(activity, daemon_state, current_time)
 
                 if self.suggester:
                     try:
@@ -143,7 +210,7 @@ class UniversalASCMDaemon:
                     last_gtm_prompt_time = current_time
                     CrossPlatformNotifier.notify(
                         "🚨 Time to Sell! (ASCM Mentor)",
-                        "Code milestone reached with passing tests. Launch LinkedIn & CTO outreach now!",
+                        "An explicit milestone was recorded. Review customer-validation evidence and choose the next GTM experiment; approve any external action before it is sent.",
                         app_name="ASCM Mentor"
                     )
 
