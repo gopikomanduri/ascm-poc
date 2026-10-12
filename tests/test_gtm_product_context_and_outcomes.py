@@ -72,6 +72,41 @@ class OutcomeLedgerTests(unittest.TestCase):
         self.assertEqual(advice["gtm_outcome_feedback"]["verified_outcomes"], 0)
         self.assertIn("no customer replies", advice["outcome_recommendation"].lower())
 
+
+    def test_verified_outcome_notification_is_sent_without_storing_reply_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch("orchestrator.mentor.notifier.CrossPlatformNotifier.notify", return_value=True) as notify:
+                event = OutcomeLedger(Path(tmp)).record(
+                    "customer_reply", experiment_id="exp-3",
+                    metrics={"sentiment": "INTERESTED"}, notify=True,
+                )
+            notify.assert_called_once()
+            self.assertEqual(event["event_type"], "customer_reply")
+            serialized = json.dumps(OutcomeLedger(Path(tmp)).recent_events())
+            self.assertNotIn("email@example.com", serialized)
+
+    def test_old_unattributed_cycle_triggers_limited_reminder(self):
+        from datetime import datetime, timedelta, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = OutcomeLedger(Path(tmp))
+            old = (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat()
+            ledger.record("gtm_cycle_generated", experiment_id="exp-old", occurred_at=old)
+            mentor = ASCMProactiveMentor.__new__(ASCMProactiveMentor)
+            mentor.repo_analyzer = mock.Mock()
+            mentor.repo_analyzer.analyze.return_value = {"test_count": 0, "file_count": 0}
+            mentor.git_monitor = mock.Mock()
+            mentor.git_monitor.measure_gtm_activity.return_value = mock.Mock(
+                days_since_last_gtm_action=None, risk_level="UNKNOWN"
+            )
+            mentor.git_monitor.get_latest_milestone.return_value = None
+            mentor.outcome_ledger = ledger
+            mentor._last_outcome_notify = 0
+            with mock.patch.dict("os.environ", {"ASCM_OUTCOME_REMINDER_HOURS": "24"}), \
+                 mock.patch.object(mentor, "notify") as notify:
+                advice = mentor.evaluate_code_progress_and_advise()
+            self.assertEqual(advice["gtm_outcome_feedback"]["unattributed_cycles_due"][0]["experiment_id"], "exp-old")
+            notify.assert_called_once()
+
     def test_rejects_generated_copy_as_outcome(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(ValueError):
