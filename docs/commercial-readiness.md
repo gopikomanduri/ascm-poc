@@ -113,7 +113,17 @@ This local gate is a safety layer for a single-user MVP, not an authorization bo
 
 The daemon enriches each eligible intervention from two evidence sources:
 
-- **Customer demand (local by default):** reads `.ascm_history/gtm_outcomes.json` and summarizes explicitly recorded replies, meetings, qualified opportunities, and conversions from the last 90 days. It marks a demand signal as present only when there is at least one qualified opportunity/conversion or three positive/interested replies. This is a conservative heuristic, not product-market-fit proof. Missing events are unknown, not evidence of no demand.
+- **Customer demand (local by default):** reads `.ascm_history/gtm_outcomes.json` and summarizes explicitly recorded replies, meetings, qualified opportunities, and conversions from the last 90 days. For daemon recommendations, only events explicitly tagged with a matching `metrics.feature_key` are eligible; outcomes for unrelated features and untagged legacy events are excluded. A demand signal requires at least one qualified opportunity/conversion or three positive/interested replies for that feature. This is a conservative heuristic, not product-market-fit proof. Missing events are unknown, not evidence of no demand.
+
+To attach evidence to a feature, include a short, non-sensitive key when recording the outcome, for example:
+
+```bash
+python -m orchestrator.gtm.strategy.outcome_ledger --event customer_reply \
+  --experiment-id invoice-pilot-01 \
+  --metrics-json '{"sentiment":"interested","feature_key":"invoice-automation"}'
+``
+
+The task description must match the feature key for the evidence to count toward that intervention. Keep the key categorical and avoid customer names or private details.
 - **Open-source reuse (remote opt-in):** set `ASCM_ENABLE_REUSE_DISCOVERY=1` before starting the daemon to allow public GitHub repository search. Task descriptions are sent to GitHub Search, so keep this disabled for proprietary/sensitive task descriptions unless that transmission is acceptable. Without the opt-in, ASCM reports that reuse discovery is unavailable and does not infer that no alternative exists.
 
 Repository candidates include detected license metadata, stars, archived status, last push time, and a heuristic suitability score with reasons. Archived projects and missing/unknown license metadata are penalized. Before adoption, a human must check feature/API fit, license compatibility, security advisories, dependencies, release cadence, integration cost, and migration risk. ASCM does not clone, install, or integrate a candidate automatically. Search failures are recorded as unavailable rather than treated as an empty market.
@@ -136,6 +146,6 @@ python -m orchestrator.mentor.evidence_pipeline --report
 python -m orchestrator.mentor.evidence_pipeline --report --session-id SESSION_ID
 ```
 
-Quality reports separate the number of intervention attempts from explicit feedback and report positive/negative feedback rates only over rated interventions. Unreviewed interventions are not treated as success or failure. The labels `helpful`, `accepted`, and `acted_on` count as positive feedback; `not_helpful`, `dismissed`, and `incorrect` count as negative feedback. This first version measures explicit founder feedback, not causal impact or long-term customer outcomes; review labels consistently and compare multiple sessions before tuning ranking rules.
+Quality reports separate the number of intervention attempts from explicit feedback and report positive/negative feedback rates only over rated interventions, both overall and grouped by recommended path. Unreviewed interventions are not treated as success or failure. The labels `helpful`, `accepted`, and `acted_on` count as positive feedback; `not_helpful`, `dismissed`, and `incorrect` count as negative feedback. This first version measures explicit founder feedback, not causal impact or long-term customer outcomes; review labels consistently and compare multiple sessions before tuning ranking rules.
 
 Evidence and intervention records remain local under `.ascm_history`, use restrictive file permissions where supported, and are bounded to the latest 5,000 intervention records. The tracker is a single-process JSON-backed MVP and is not a tamper-proof audit system. No remote customer CRM is queried and no customer data is scraped; connect provider event adapters only with explicit credentials, consent, and privacy review.
