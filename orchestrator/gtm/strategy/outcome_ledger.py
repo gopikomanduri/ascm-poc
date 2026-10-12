@@ -30,7 +30,7 @@ class OutcomeLedger:
 
     def record(self, event_type: str, *, experiment_id: Optional[str] = None,
                occurred_at: Optional[str] = None, metrics: Optional[Dict[str, Any]] = None,
-               source: str = "operator") -> Dict[str, Any]:
+               source: str = "operator", notify: bool = False) -> Dict[str, Any]:
         if event_type not in self.EVENT_TYPES:
             raise ValueError(f"Unsupported outcome event type: {event_type}")
         if metrics is not None and not isinstance(metrics, dict):
@@ -49,6 +49,23 @@ class OutcomeLedger:
         temp_path = self.path.with_suffix(".tmp")
         temp_path.write_text(json.dumps(events, indent=2), encoding="utf-8")
         temp_path.replace(self.path)
+        if notify and event_type in {"customer_reply", "meeting_booked", "qualified_opportunity", "conversion"}:
+            # Notification failure must never undo a successfully recorded event.
+            try:
+                from orchestrator.mentor.notifier import CrossPlatformNotifier
+                next_step = {
+                    "customer_reply": "Classify the response and decide the next human-reviewed action.",
+                    "meeting_booked": "Prepare discovery questions and record the meeting outcome afterward.",
+                    "qualified_opportunity": "Confirm qualification evidence and agree on the next step.",
+                    "conversion": "Review the experiment and identify evidence supporting repetition.",
+                }[event_type]
+                CrossPlatformNotifier.notify(
+                    "ASCM: GTM outcome recorded",
+                    f"{event_type.replace('_', ' ').title()} recorded for {experiment_id or 'unassigned experiment'}. {next_step}",
+                    app_name="ASCM Outcome Attribution",
+                )
+            except Exception:
+                pass
         return event
 
     def recent_events(self, limit: int = 50):
@@ -79,14 +96,36 @@ def main():
     parser.add_argument("--experiment-id", required=True)
     parser.add_argument("--source", default="operator")
     parser.add_argument("--metrics-json", default="{}", help="JSON object with privacy-safe event metrics")
+    parser.add_argument("--no-notify", action="store_true", help="Suppress the desktop notification")
+    parser.add_argument("--prompt-review", action="store_true", help="Open a prompt to review the recorded outcome")
     args = parser.parse_args()
     try:
         metrics = json.loads(args.metrics_json)
         if not isinstance(metrics, dict):
             raise ValueError("--metrics-json must decode to a JSON object")
-        event = OutcomeLedger(Path(args.project_path)).record(
-            args.event, experiment_id=args.experiment_id, metrics=metrics, source=args.source
+        ledger = OutcomeLedger(Path(args.project_path))
+        event = ledger.record(
+            args.event, experiment_id=args.experiment_id, metrics=metrics, source=args.source,
+            notify=not args.no_notify,
         )
+        if args.prompt_review and args.event in {
+            "customer_reply", "meeting_booked", "qualified_opportunity", "conversion"
+        }:
+            from orchestrator.mentor.notifier import CrossPlatformNotifier
+            prompt = (
+                f"Review outcome '{args.event}' for experiment '{args.experiment_id}'. "
+                "What evidence explains this outcome, and what is the next action? "
+                "Enter a brief, privacy-safe summary (do not include personal data)."
+            )
+            response = CrossPlatformNotifier.prompt_dialog(
+                prompt, default_text="", title="ASCM: Review GTM Outcome"
+            )
+            if response:
+                ledger.record(
+                    "experiment_reviewed", experiment_id=args.experiment_id,
+                    metrics={"review_note": response[:500], "reviewed_event": args.event},
+                    source="founder_prompt",
+                )
     except (ValueError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
     print(json.dumps(event, indent=2))
