@@ -321,6 +321,19 @@ class UniversalASCMDaemon:
                 },
                 evidence_event_ids=evidence_ids,
                 intervention_id=intervention_id,
+                evidence_summary={
+                    "customer": {
+                        "event_count": customer_summary.get("event_count", 0)
+                        if isinstance(customer_summary, dict) else 0,
+                        "user_demand_verified": customer_summary.get("user_demand_verified", False)
+                        if isinstance(customer_summary, dict) else False,
+                    },
+                    "reuse": {
+                        "enabled": reuse_summary.get("enabled", False)
+                        if isinstance(reuse_summary, dict) else False,
+                        "candidate_count": len(repositories) if isinstance(repositories, list) else 0,
+                    },
+                },
             )
             return
 
