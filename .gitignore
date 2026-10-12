@@ -17,3 +17,7 @@ logs/
 
 # Generated artifacts
 artifacts/
+
+# Local security reports and test artifacts
+security-artifacts/
+.pytest_cache/
