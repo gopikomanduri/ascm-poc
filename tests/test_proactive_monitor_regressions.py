@@ -6,6 +6,7 @@ from unittest import mock
 
 from orchestrator.gtm.strategy.proactive_monitor import ProactiveGitMonitor
 from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
+from orchestrator.gtm.agents.sales_agent import SalesAgent
 
 
 class ProactiveMonitorRegressionTests(unittest.TestCase):
@@ -55,6 +56,28 @@ class ProactiveMonitorRegressionTests(unittest.TestCase):
         self.assertTrue(advice["should_trigger_gtm"])
         self.assertEqual(advice["milestone"]["name"], "MVP beta ready")
         notify.assert_called_once()
+
+    def test_actual_sales_reply_is_recorded_without_storing_reply_text(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            previous = os.getcwd()
+            try:
+                os.chdir(tmp)
+                agent = SalesAgent.__new__(SalesAgent)
+                agent.call = lambda prompt, json_mode=True: json.dumps({
+                    "sentiment": "INTERESTED", "next_action": "queue_review"
+                })
+                result = agent.classify_reply_and_route(
+                    "Thanks, let's talk next week.", "Prospect", "prospect@example.com"
+                )
+                self.assertEqual(result["sentiment"], "INTERESTED")
+                events = json.loads(Path(".ascm_history/gtm_activity.json").read_text())
+                self.assertEqual(events[-1]["event_type"], "customer_reply")
+                self.assertEqual(events[-1]["details"]["sentiment"], "INTERESTED")
+                self.assertNotIn("prospect@example.com", json.dumps(events))
+                self.assertNotIn("let's talk", json.dumps(events))
+            finally:
+                os.chdir(previous)
 
     def test_invalid_event_type_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
