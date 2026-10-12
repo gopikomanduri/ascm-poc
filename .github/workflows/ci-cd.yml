@@ -36,7 +36,7 @@ jobs:
         run: python tools/mr_bench.py --task T01
 
   security-review:
-    name: Security Review (Static + Dependency + Coco Adapter)
+    name: Security Review (Static + Dependency + Coco Agent)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -52,52 +52,84 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install bandit pip-audit
-      - name: Run ASCM deterministic security gate and optional Coco review
+      - name: Run ASCM deterministic security gate and Coco review
         env:
           PYTHONPATH: .
           ASCM_COCO_AGENT_CMD: ${{ secrets.ASCM_COCO_AGENT_CMD }}
+        shell: bash
         run: |
           mkdir -p security-artifacts
+          set +e
           python -m orchestrator.security.coco_gate \
             --git-base "origin/${GITHUB_BASE_REF:-main}" \
             --report security-artifacts/ascm-security-report.json
-          if [ -n "$ASCM_COCO_AGENT_CMD" ]; then
-            echo "Coco agent configured; the security report must record a completed Coco run."
-            python - <<'PY'
-          import json
-          from pathlib import Path
-          report = json.loads(Path("security-artifacts/ascm-security-report.json").read_text())
-          if report.get("coco", {}).get("status") != "completed":
-              raise SystemExit("Coco was configured but did not complete successfully.")
-          PY
-          else
-            echo "::warning::Coco agent is not configured in repository secrets; deterministic checks still ran, but this is not a Coco review."
-            echo "Coco agent not configured: deterministic scanner only." >> "$GITHUB_STEP_SUMMARY"
+          status=$?
+          set -e
+          echo "$status" > security-artifacts/ascm-security-gate-status.txt
+          if [ -z "$ASCM_COCO_AGENT_CMD" ]; then
+            echo "::error::Coco agent is not configured. Set the approved ASCM_COCO_AGENT_CMD repository secret before release."
+            echo "Coco agent not configured: no Coco review was performed." >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Run Bandit against changed Python files
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
           BASE="origin/${GITHUB_BASE_REF:-main}"
           mapfile -t changed_py < <(git diff --name-only --diff-filter=ACMR "$BASE...HEAD" -- '*.py' | grep -v '^tests/' || true)
           mkdir -p security-artifacts
           if [ "${#changed_py[@]}" -eq 0 ]; then
             echo '{"results":[],"metrics":{}}' > security-artifacts/bandit.json
-            echo "No changed Python files to scan."
+            status=0
           else
             bandit -ll -f json -o security-artifacts/bandit.json "${changed_py[@]}"
+            status=$?
           fi
+          echo "$status" > security-artifacts/bandit-status.txt
+          set -e
       - name: Audit Python dependency vulnerabilities
+        shell: bash
         run: |
           set +e
           pip-audit -r requirements.txt --format json --output security-artifacts/pip-audit.json
           status=$?
+          echo "$status" > security-artifacts/pip-audit-status.txt
           set -e
-          echo "pip-audit exit status: $status" > security-artifacts/pip-audit-status.txt
-          if [ "$status" -ne 0 ]; then
-            echo "Dependency vulnerability audit failed; inspect the JSON report."
-            exit "$status"
-          fi
+      - name: Enforce security release gates
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          failures = []
+          def read_status(path):
+              try:
+                  return int(Path(path).read_text().strip())
+              except (OSError, ValueError):
+                  return 999
+          report_path = Path("security-artifacts/ascm-security-report.json")
+          try:
+              report = json.loads(report_path.read_text())
+          except (OSError, json.JSONDecodeError):
+              report = {}
+              failures.append("deterministic security report missing or invalid")
+          if report.get("coco", {}).get("status") != "completed":
+              failures.append("Coco review did not complete; configure ASCM_COCO_AGENT_CMD")
+          elif report["coco"].get("passed") is not True:
+              failures.append("Coco review reported findings or did not pass")
+          high = [f for f in report.get("deterministic_findings", []) if f.get("severity") == "HIGH"]
+          if high:
+              failures.append(f"{len(high)} high-severity deterministic finding(s)")
+          if read_status("security-artifacts/bandit-status.txt") != 0:
+              failures.append("Bandit reported findings or failed")
+          if read_status("security-artifacts/pip-audit-status.txt") != 0:
+              failures.append("pip-audit reported dependency vulnerabilities or failed")
+          if failures:
+              print("SECURITY RELEASE GATE FAILED:")
+              for failure in failures:
+                  print(f"- {failure}")
+              raise SystemExit(1)
+          print("Security release gates passed, including a completed Coco review.")
+          PY
       - name: Upload security evidence
         if: always()
         uses: actions/upload-artifact@v4
