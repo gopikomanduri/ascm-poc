@@ -43,12 +43,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Set up Node.js for CICO
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.22.2'
-      - name: Install pinned CICO security reviewer
-        run: npm install --global git-cico@0.91.0
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
@@ -68,7 +62,7 @@ jobs:
           set +e
           python -m orchestrator.security.cico_gate \
             --git-base "origin/${GITHUB_BASE_REF:-main}" \
-            --report security-artifacts/ascm-security-report.json
+            --report security-artifacts/ascm-security-report.json --require-cico
           status=$?
           set -e
           echo "$status" > security-artifacts/ascm-security-gate-status.txt
