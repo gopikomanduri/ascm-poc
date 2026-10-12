@@ -51,6 +51,12 @@ class OutcomeLedger:
         temp_path.replace(self.path)
         return event
 
+    def recent_events(self, limit: int = 50):
+        """Return newest events first for mentor context; never infer missing outcomes."""
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        return list(reversed(self._read()))[:limit]
+
     def summarize_experiment(self, experiment_id: str) -> Dict[str, Any]:
         events = [event for event in self._read() if event.get("experiment_id") == experiment_id]
         return {
