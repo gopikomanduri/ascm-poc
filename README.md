@@ -141,6 +141,8 @@ python tools/mr_bench.py --run-all --publish   # Run the benchmark
 
 Privacy and responsible disclosure: read [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the [initial threat model](docs/threat-model.md). Foreground app-name monitoring is off by default and is enabled only after an explicit installer choice. Browser hostname and terminal-category signals remain opt-in.
 
+Inspect local settings/history size with `python -m orchestrator.mentor.privacy_cli --workspace /path/to/workspace status`. After stopping ASCM, delete local history explicitly with `python -m orchestrator.mentor.privacy_cli --workspace /path/to/workspace delete-history --confirm`.
+
 The mentor can correlate code edits, foreground application transitions, terminal command categories, test outcomes, and opt-in browser hostnames. It records metadata only; it does not capture keystrokes, terminal output, page contents, full URLs, window titles, or screenshots.
 
 - [Commercial readiness and privacy boundaries](docs/commercial-readiness.md)
