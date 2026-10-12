@@ -71,7 +71,8 @@ def normalize_domain(url_or_domain: str) -> str:
 class ActiveWindowAdapter:
     """Best-effort foreground application detector, without titles or window contents."""
 
-    def __init__(self):
+    def __init__(self, enabled: bool = True):
+        self.enabled = bool(enabled)
         self._last_app: Optional[str] = None
 
     @staticmethod
@@ -83,6 +84,8 @@ class ActiveWindowAdapter:
             return ""
 
     def current_app(self) -> Optional[str]:
+        if not self.enabled:
+            return None
         system = platform.system().lower()
         app = ""
         if system == "darwin" and shutil.which("osascript"):
