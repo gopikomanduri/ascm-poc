@@ -164,6 +164,14 @@ class EvidenceSourceConnector:
         now = now or _now()
         reasons = []
         score = 50
+        try:
+            search_rank = max(0, int(repo.get("search_rank", 99)))
+        except (TypeError, ValueError):
+            search_rank = 99
+        relevance_bonus = max(0, 12 - 3 * search_rank)
+        score += relevance_bonus
+        if relevance_bonus:
+            reasons.append("ranked near the top of GitHub's relevance-based search results")
         if repo.get("archived"):
             score -= 45
             reasons.append("archived repository is a major maintenance risk")
@@ -228,8 +236,8 @@ class EvidenceSourceConnector:
                 "caveat": "No candidate was inferred because public repository discovery failed.",
             }
         repositories = [
-            self._score_repository(item)
-            for item in result.get("repositories", [])
+            self._score_repository({**item, "search_rank": rank})
+            for rank, item in enumerate(result.get("repositories", []))
             if isinstance(item, dict)
         ]
         repositories.sort(key=lambda item: item["suitability_score"], reverse=True)
