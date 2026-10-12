@@ -30,9 +30,9 @@ class MarketingAgent(BaseAgent):
     def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
             system_instruction=(
-                "You are a Startup Growth & Content Strategist specializing in developer-led products for founders and entrepreneurs.\n"
-                "Your mission is to generate high-signal, engaging, authentic content that empowers first-time entrepreneurs and builders,\n"
-                "establishes authority, resonates with founder pain points, and drives organic inbound interest.\n\n"
+                "You are a product-agnostic Growth & Content Strategist.\n"
+                "Your mission is to generate high-signal, engaging, authentic content for the configured product, audience, and market.\n"
+                "Never assume an industry, persona, customer pain, traction, or product capability that was not supplied or verified.\n\n"
                 "Core Capabilities:\n"
                 "1. **Technical Breakdowns**: Architecture explainers, performance benchmarks, design deep-dives.\n"
                 "2. **SEO Strategy**: Keyword research, content briefs, long-form optimization targets.\n"
@@ -227,8 +227,9 @@ Output comprehensive JSON with all above fields + competitive advantage matrix.
         self,
         diff_summary: str,
         milestone_name: str = "Milestone 1",
-        product_thesis: str = "Outcode: Stop coding in isolation. Your terminal just hired a GTM team.",
+        product_thesis: str = "Product thesis not configured; ask the founder to define the value proposition.",
         facts: Optional[str] = None,
+        target_audience: str = "Target audience not configured; identify and validate the ideal customer profile.",
     ) -> Dict[str, Any]:
         """
         Implements modern 'Engineering as Marketing' + 'Category Design' frameworks:
@@ -249,13 +250,16 @@ CODE MILESTONE / RECENT GIT DIFF SUMMARY:
 MILESTONE NAME:
 {milestone_name}
 
+TARGET AUDIENCE / ICP:
+{target_audience}
+
 {facts_block(citable_facts)}
 
 Your goal is to build an "Engineering as Marketing" Playbook that turns this concrete code progress into inbound distribution.
 
 FRAMEWORK PRINCIPLES:
 1. "Engineering as Marketing": Developers hate generic marketing copy. Give them real code, architectural insights, or free interactive micro-tools.
-2. Category Design: Fight the villain ("The Dark Room Trap" — months of silent coding before user validation).
+2. Category Design: Identify the audience's actual costly status quo from supplied context; do not invent a villain or pain point.
 3. Compounding Growth Loops: Every release artifact must carry a subtle viral attribution badge.
 4. Tone: Technical, humble, transparent builder voice. Zero hype, zero corporate jargon.
 
@@ -263,7 +267,7 @@ OUTPUT JSON SCHEMA:
 {{
   "villain_narrative": {{
     "villain_name": "string (e.g. The Dark Room Trap / The Infinite Polishing Coping Mechanism)",
-    "core_frustration": "string (1-2 sentences on why solo engineers/founders get trapped here)",
+    "core_frustration": "string (1-2 sentences grounded in the supplied audience and product context)",
     "the_paradigm_shift": "string (From coding in isolation to real-time GTM interception)"
   }},
   "engineering_micro_tool_concept": {{
@@ -271,7 +275,7 @@ OUTPUT JSON SCHEMA:
     "description": "string (how a developer uses this 1-click tool to get immediate value without buying)",
     "viral_hook": "string (what makes them share their result on X/LinkedIn/Reddit)"
   }},
-  "growth_loop_footer": "string (e.g. ⚡ Distilled from git diff via Outcode)",
+  "growth_loop_footer": "string (truthful attribution or product-specific next step; no invented brand)",
   "release_artifacts": {{
     "show_hn": {{
       "title": "string (Show HN format)",
@@ -279,7 +283,7 @@ OUTPUT JSON SCHEMA:
       "technical_highlight": "string (what specific engineering decision we made)"
     }},
     "reddit_builder_post": {{
-      "subreddit": "r/SideProject",
+      "subreddit": "most relevant community for the configured audience",
       "title": "string",
       "story": "string (authentic builder journey with lessons learned from this milestone)"
     }},
