@@ -83,6 +83,17 @@ class EvidenceSourceConnectorTests(unittest.TestCase):
             self.assertEqual(billing["event_count"], 1)
             self.assertEqual(billing["evidence_event_ids"], ["billing-demand"])
 
+    def test_relevance_rank_contributes_to_candidate_triage_score(self):
+        recent = datetime.now(timezone.utc).isoformat()
+        base = {
+            "name": "org/project", "stars": 100, "archived": False,
+            "license": "MIT", "last_updated": recent,
+        }
+        first = EvidenceSourceConnector._score_repository({**base, "search_rank": 0})
+        fifth = EvidenceSourceConnector._score_repository({**base, "search_rank": 4})
+        self.assertGreater(first["suitability_score"], fifth["suitability_score"])
+        self.assertTrue(any("relevance-based" in reason for reason in first["suitability_reasons"]))
+
     def test_remote_repo_discovery_is_opt_in(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
             "os.environ", {"ASCM_ENABLE_REUSE_DISCOVERY": "0"}, clear=False
