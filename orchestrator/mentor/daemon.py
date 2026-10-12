@@ -262,8 +262,9 @@ class UniversalASCMDaemon:
 """
             with open(plist_path, "w") as f:
                 f.write(plist_content)
+            # Unload may fail on first install; loading the new service must succeed.
             subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
-            subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True)
+            subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True, check=True)
             return f"Installed & loaded macOS launchd agent at {plist_path}"
 
         # 2. Linux systemd
@@ -288,8 +289,8 @@ WantedBy=default.target
 """
             with open(service_path, "w") as f:
                 f.write(service_content)
-            subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
-            subprocess.run(["systemctl", "--user", "enable", "--now", "ascm-mentor.service"], capture_output=True)
+            subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=True)
+            subprocess.run(["systemctl", "--user", "enable", "--now", "ascm-mentor.service"], capture_output=True, check=True)
             return f"Installed & enabled Linux systemd service at {service_path}"
 
         # 3. Windows Task Scheduler / Startup
@@ -300,7 +301,8 @@ WantedBy=default.target
             bat_content = f'@echo off\ncd /d "{project_root}"\nstart /B "" "{py_exe}" -m orchestrator.mentor.daemon --repo "{self.repo_path}"\n'
             with open(bat_path, "w") as f:
                 f.write(bat_content)
-            return f"Installed Windows Startup Agent at {bat_path}"
+            subprocess.Popen(["cmd", "/c", str(bat_path)], cwd=str(project_root), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return f"Installed and started Windows Startup Agent at {bat_path}"
 
         return "OS autostart service not supported on this platform."
 
