@@ -482,23 +482,23 @@ class UniversalASCMDaemon:
             systemd_dir.mkdir(parents=True, exist_ok=True)
             service_path = systemd_dir / "ascm-mentor.service"
             def _systemd_quote(value: str) -> str:
-                escaped = value.replace("\\\\", "\\\\\\\\").replace('"', '\\\"').replace("%", "%%")
+                escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%")
                 return f'"{escaped}"'
 
             service_content = (
-                "[Unit]\\n"
-                "Description=ASCM Proactive Founder & Engineering Mentor\\n"
-                "After=default.target\\n\\n"
-                "[Service]\\n"
-                f"WorkingDirectory={_systemd_quote(str(project_root))}\\n"
-                f"Environment={_systemd_quote('ASCM_ACTIVE_WINDOW_MONITOR=' + os.environ.get('ASCM_ACTIVE_WINDOW_MONITOR', '0'))}\\n"
-                f"ExecStart={_systemd_quote(py_exe)} -m orchestrator.mentor.daemon --repo {_systemd_quote(str(self.repo_path))}\\n"
-                "Restart=always\\n"
-                "RestartSec=30\\n"
-                f"StandardOutput={_systemd_quote('file:' + str(self.history_dir / 'daemon_stdout.log'))}\\n"
-                f"StandardError={_systemd_quote('file:' + str(self.history_dir / 'daemon_stderr.log'))}\\n\\n"
-                "[Install]\\n"
-                "WantedBy=default.target\\n"
+                "[Unit]\n"
+                "Description=ASCM Proactive Founder & Engineering Mentor\n"
+                "After=default.target\n\n"
+                "[Service]\n"
+                f"WorkingDirectory={_systemd_quote(str(project_root))}\n"
+                f"Environment={_systemd_quote('ASCM_ACTIVE_WINDOW_MONITOR=' + os.environ.get('ASCM_ACTIVE_WINDOW_MONITOR', '0'))}\n"
+                f"ExecStart={_systemd_quote(py_exe)} -m orchestrator.mentor.daemon --repo {_systemd_quote(str(self.repo_path))}\n"
+                "Restart=always\n"
+                "RestartSec=30\n"
+                f"StandardOutput={_systemd_quote('file:' + str(self.history_dir / 'daemon_stdout.log'))}\n"
+                f"StandardError={_systemd_quote('file:' + str(self.history_dir / 'daemon_stderr.log'))}\n\n"
+                "[Install]\n"
+                "WantedBy=default.target\n"
             )
             with open(service_path, "w") as f:
                 f.write(service_content)
