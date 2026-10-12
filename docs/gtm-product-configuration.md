@@ -32,3 +32,20 @@ python -m orchestrator.gtm.strategy.outcome_ledger \
 Supported event types include `campaign_approved`, `campaign_published`, `email_sent`, `customer_reply`, `meeting_booked`, `qualified_opportunity`, `conversion`, `experiment_reviewed`, and `experiment_stopped`. Do not include message bodies, email addresses, or other unnecessary personal data in metrics.
 
 The JSON ledger uses atomic file replacement for basic local safety, but is not a transactional multi-writer database. Before running multiple workers or serving multiple users, move the ledger to a database with transactions, access control, retention rules, and deduplication.
+
+## Outcome notifications and review prompts
+
+When the reply classifier records a real customer reply, ASCM sends a native desktop notification with a suggested next action. Recording verified events with the outcome-ledger CLI also sends a notification by default for customer replies, meetings, qualified opportunities, and conversions.
+
+To open an interactive outcome-review prompt after recording a verified event:
+
+```bash
+python -m orchestrator.gtm.strategy.outcome_ledger \
+  --project-path . \
+  --event customer_reply \
+  --experiment-id gtm-YYYYMMDD_HHMMSS \
+  --metrics-json '{"sentiment":"INTERESTED","channel":"email"}' \
+  --prompt-review
+```
+
+The mentor checks for GTM cycles with no outcome linked to the same experiment ID. By default, it reminds the founder after 24 hours, at most once every four hours while the condition remains true. Override the delay with `ASCM_OUTCOME_REMINDER_HOURS=48`. The reminder is evaluated when the mentor readiness check or daemon runs; it is not a cloud push service. On headless systems, notifications fall back to terminal output, and interactive prompts may fall back to terminal input.
