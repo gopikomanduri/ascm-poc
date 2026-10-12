@@ -53,8 +53,7 @@ class UniversalASCMDaemon:
         self.activity_monitor = ActivityAwareMonitor(repo_path=str(self.repo_path))
         self.context_fusion = ContextFusionEngine(workspace_path=self.repo_path)
         self.active_window_adapter = ActiveWindowAdapter(
-            enabled=os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "0").strip().lower()
-            not in {"0", "false", "off", "no"}
+            enabled=os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "0").strip() == "1"
         )
         self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
         self.milestone_detector = MilestoneDetector(self.repo_path, audit_logger=self.audit_logger)
