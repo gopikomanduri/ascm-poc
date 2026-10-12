@@ -89,9 +89,9 @@ If you are an investor, founder, or engineering executive, here is the commercia
 - **Deployment and compliance**: local models can support offline deployments, but ASCM does not by itself establish HIPAA, SOC 2, or other regulatory compliance. Customers must validate their full deployment and controls.
 
 ### 3. Business Model & Go-To-Market
-- **Open-Core / Community (Free Forever)**: 100% local CLI and dashboard with Bring-Your-Own-Key (BYOK). Drives developer adoption from the ground up, following the playbook of Docker, Git, and Terraform.
-- **Team Tier ($49/seat/month)**: Shared blueprint memory across teams, custom domain adapter packs, and priority technical support.
-- **Enterprise Air-Gapped Pilot ($5,000 – $10,000 / 90-day pilot)**: Hands-on deployment on client infrastructure, custom SLM fine-tuning, SOC 2 audit trail compliance, and dedicated engineering support.
+- **Open-Core / Community (proposed)**: local-first CLI and dashboard with optional Bring-Your-Own-Key (BYOK) providers. Cloud-provider prompts/context leave the machine; offline use requires a local model and verified network isolation.
+- **Potential Team Tier ($49/seat/month hypothesis)**: shared blueprint memory, domain adapter packs, and priority support are proposed capabilities/pricing, not an available commercial plan.
+- **Potential Enterprise Pilot ($5,000–$10,000 / 90-day hypothesis)**: hands-on deployment and dedicated support are proposed. Local audit logs do not confer SOC 2 compliance or certification.
 - **Current status**: this is an evolving proof of concept. Reference applications and tests are not evidence of production adoption, zero technical debt, or commercial readiness.
 
 ---
@@ -103,7 +103,7 @@ If you are an investor, founder, or engineering executive, here is the commercia
 - **Cross-Repository Knowledge Graph**: in-memory directed graph linking routes, schemas, and callers across repos with impact radius calculation
 - **RepoSwarm & SKILLS.md Interoperability**: natively ingests standardized `.arch.md` architecture discovery files
 - Domain adapter: auto-detects FinTech / CAD/CAM / MedTech / Legal / Web3 / Robotics
-- Blueprint engine: reuses prior architectural patterns (reduces LLM cost 36–63%)
+- Blueprint engine: reuses prior architectural patterns (cost savings are a hypothesis to measure on representative workloads)
 - Pre-flight cost radar: P50/P90 token forecaster with circuit breakers
 - Mandatory TDD: tests required before milestone confirmation
 - Structured local audit logging with PII/credential scrubbing and bounded rotation
@@ -118,7 +118,7 @@ If you are an investor, founder, or engineering executive, here is the commercia
 | **CNC CAD/CAM Engine** | Advanced Manufacturing | 1 | 2 ✅ |
 
 ### Mathematical Foundations
-Six peer-reviewable probabilistic theorems prove ASCM's architectural claims:
+The repository includes mathematical models and simulations for these architectural hypotheses; they are not independent empirical validation of production outcomes:
 - **Independent Critic Theorem**: 59.1% defect escape reduction vs same-model review (500k Monte Carlo trials)
 - **Multi-Repo Coordination**: P(breaking change) = 78.4% uncoordinated → ~0% with ASCM
 - **Defect Escape Equation**: 16.7× improvement, **p-independent** (holds for any LLM)
@@ -245,7 +245,7 @@ If you're interested: [founders@ascm.dev](mailto:founders@ascm.dev)
 
 ## Stage & Honesty
 
-> Pre-revenue, open-source proof-of-concept. **103/103 tests passing. 0 paying customers.**
+> Pre-revenue, open-source proof-of-concept. Test counts and security status are tracked in [GitHub Actions](https://github.com/gopikomanduri/ascm-poc/actions). **0 paying customers.**
 > 
 > We'd rather be transparent than oversell. The math and the code are open — evaluate them yourself.
 
