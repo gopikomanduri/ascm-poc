@@ -24,7 +24,7 @@ class OutcomeLedger:
         "conversion_count", "revenue_amount", "currency", "channel",
         "days_to_reply", "response_time_hours", "source_system",
         "product_configured", "intent_scan_status", "reviewed_event",
-        "review_note_recorded", "review_note_length", "feature_area",
+        "review_note_recorded", "review_note_length", "feature_key", "feature_area",
         "demand_signal", "willingness_to_pay",
     }
     SENTIMENTS = {"interested", "not_interested", "neutral", "positive", "negative", "out_of_office", "unknown"}
