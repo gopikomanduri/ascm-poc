@@ -107,6 +107,29 @@ class OutcomeLedgerTests(unittest.TestCase):
             self.assertEqual(advice["gtm_outcome_feedback"]["unattributed_cycles_due"][0]["experiment_id"], "exp-old")
             notify.assert_called_once()
 
+    def test_reviewed_or_stopped_experiment_does_not_keep_reminding(self):
+        from datetime import datetime, timedelta, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = OutcomeLedger(Path(tmp))
+            old = (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat()
+            ledger.record("gtm_cycle_generated", experiment_id="exp-reviewed", occurred_at=old)
+            ledger.record("experiment_stopped", experiment_id="exp-reviewed")
+            mentor = ASCMProactiveMentor.__new__(ASCMProactiveMentor)
+            mentor.repo_analyzer = mock.Mock()
+            mentor.repo_analyzer.analyze.return_value = {"test_count": 0, "file_count": 0}
+            mentor.git_monitor = mock.Mock()
+            mentor.git_monitor.measure_gtm_activity.return_value = mock.Mock(
+                days_since_last_gtm_action=None, risk_level="UNKNOWN"
+            )
+            mentor.git_monitor.get_latest_milestone.return_value = None
+            mentor.outcome_ledger = ledger
+            mentor._last_outcome_notify = 0
+            with mock.patch.dict("os.environ", {"ASCM_OUTCOME_REMINDER_HOURS": "24"}), \\
+                 mock.patch.object(mentor, "notify") as notify:
+                advice = mentor.evaluate_code_progress_and_advise()
+            self.assertEqual(advice["gtm_outcome_feedback"]["unattributed_cycles_due"], [])
+            notify.assert_not_called()
+
     def test_rejects_generated_copy_as_outcome(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(ValueError):
