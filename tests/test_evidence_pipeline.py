@@ -156,6 +156,40 @@ class InterventionQualityTrackerTests(unittest.TestCase):
             self.assertEqual(report["by_recommended_path"]["reuse"]["reviewed"], 1)
             self.assertEqual(report["by_recommended_path"]["reuse"]["positive_feedback_rate"], 1.0)
 
+    def test_report_segments_feedback_by_evidence_coverage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tracker = InterventionQualityTracker(tmp)
+            evidence_rich = tracker.record_shown(
+                session_id="session-evidence",
+                project_id="project-a",
+                recommendation={"recommended_path": "reuse", "confidence": "medium"},
+                evidence_summary={
+                    "customer": {"event_count": 4, "user_demand_verified": True},
+                    "reuse": {"enabled": True, "candidate_count": 2},
+                },
+            )
+            evidence_sparse = tracker.record_shown(
+                session_id="session-evidence",
+                project_id="project-a",
+                recommendation={"recommended_path": "customer_validate", "confidence": "low"},
+                evidence_summary={
+                    "customer": {"event_count": 0, "user_demand_verified": False},
+                    "reuse": {"enabled": False, "candidate_count": 0},
+                },
+            )
+            tracker.record_feedback(feedback="acted_on", intervention_id=evidence_rich["intervention_id"])
+            tracker.record_feedback(feedback="not_helpful", intervention_id=evidence_sparse["intervention_id"])
+
+            report = tracker.report("session-evidence")
+            self.assertEqual(report["feedback_coverage"], 1.0)
+            self.assertEqual(len(report["by_evidence_profile"]), 2)
+            rich = report["by_evidence_profile"]["demand_verified|reuse_candidates_found"]
+            self.assertEqual(rich["positive_feedback_rate"], 1.0)
+            self.assertEqual(rich["reviewed"], 1)
+            sparse = report["by_evidence_profile"]["demand_unknown|reuse_search_disabled_or_unavailable"]
+            self.assertEqual(sparse["positive_feedback_rate"], 0.0)
+            self.assertEqual(sparse["reviewed"], 1)
+
     def test_feedback_rejects_unknown_labels(self):
         with tempfile.TemporaryDirectory() as tmp:
             tracker = InterventionQualityTracker(tmp)
