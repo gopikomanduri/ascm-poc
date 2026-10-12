@@ -48,6 +48,9 @@ def main(argv=None) -> int:
     active.add_argument("--cwd", default=os.getcwd())
     active.add_argument("--app-name", required=True)
 
+    project = sub.add_parser("project-activated", help="Record an IDE workspace activation without reading document contents")
+    project.add_argument("--project-path", required=True)
+
     infer = sub.add_parser("infer", help="Print persisted context hypotheses")
     infer.add_argument("--cwd", default=os.getcwd())
 
@@ -98,6 +101,12 @@ def main(argv=None) -> int:
             audit.log_event("ACTIVITY_ACTIVE_APP", agent="ACTIVITY_ADAPTER",
                             action="RECORD_APP_NAME", details={
                                 "app_name": event["app_name"], "project_id": event["project_id"],
+                            })
+        elif args.kind == "project-activated":
+            event = adapter.fusion.record_project_activation(project_path=args.project_path)
+            audit.log_event("ACTIVITY_PROJECT_ACTIVATED", agent="ACTIVITY_ADAPTER",
+                            action="RECORD_IDE_WORKSPACE", details={
+                                "project_id": event["project_id"], "source": event["source"],
                             })
         else:
             from orchestrator.mentor.context_fusion import ContextFusionEngine
