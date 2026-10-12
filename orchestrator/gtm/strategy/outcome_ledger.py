@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 
 class OutcomeLedger:
     EVENT_TYPES = {
-        "experiment_planned", "campaign_approved", "campaign_published",
+        "gtm_cycle_generated", "experiment_planned", "campaign_approved", "campaign_published",
         "email_sent", "customer_reply", "meeting_booked", "qualified_opportunity",
         "conversion", "experiment_reviewed", "experiment_stopped",
     }
@@ -61,3 +61,30 @@ class OutcomeLedger:
                 "customer_reply", "meeting_booked", "qualified_opportunity", "conversion"
             } for event in events),
         }
+
+
+def main():
+    """Record a verified GTM event from the command line; never infer outcomes from generated copy."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Record a verified GTM event for an experiment.")
+    parser.add_argument("--project-path", default=".", help="Project root containing .ascm_history")
+    parser.add_argument("--event", required=True, choices=sorted(OutcomeLedger.EVENT_TYPES))
+    parser.add_argument("--experiment-id", required=True)
+    parser.add_argument("--source", default="operator")
+    parser.add_argument("--metrics-json", default="{}", help="JSON object with privacy-safe event metrics")
+    args = parser.parse_args()
+    try:
+        metrics = json.loads(args.metrics_json)
+        if not isinstance(metrics, dict):
+            raise ValueError("--metrics-json must decode to a JSON object")
+        event = OutcomeLedger(Path(args.project_path)).record(
+            args.event, experiment_id=args.experiment_id, metrics=metrics, source=args.source
+        )
+    except (ValueError, json.JSONDecodeError) as exc:
+        parser.error(str(exc))
+    print(json.dumps(event, indent=2))
+
+
+if __name__ == "__main__":
+    main()
