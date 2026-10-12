@@ -10,6 +10,7 @@ import argparse
 import json
 import math
 import os
+import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -70,19 +71,48 @@ class EvidenceSourceConnector:
         self.project_path = Path(project_path).resolve()
         self.history_dir = self.project_path / ".ascm_history"
 
-    def customer_demand_evidence(self, window_days: int = 90) -> dict[str, Any]:
-        """Summarize only explicitly recorded customer outcome events."""
+    @staticmethod
+    def _feature_key_matches(feature_key: Any, task_description: str) -> bool:
+        """Require an explicit feature tag that matches the observed task."""
+        if not isinstance(feature_key, str) or not feature_key.strip():
+            return False
+        normalize = lambda value: re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+        key_phrase = normalize(feature_key)
+        task_phrase = normalize(task_description)
+        if not key_phrase or not task_phrase:
+            return False
+        if key_phrase in task_phrase:
+            return True
+        key_tokens = {token for token in key_phrase.split() if len(token) >= 3}
+        task_tokens = set(task_phrase.split())
+        return bool(key_tokens) and key_tokens.issubset(task_tokens)
+
+    def customer_demand_evidence(
+        self, window_days: int = 90, task_description: str | None = None
+    ) -> dict[str, Any]:
+        """Summarize recent recorded outcomes, optionally scoped to an explicitly tagged feature.
+
+        A daemon task must not inherit demand from unrelated features in the same workspace.
+        When task_description is supplied, only events with a matching metrics.feature_key count.
+        """
         events = _read_json(self.history_dir / "gtm_outcomes.json", [])
         if not isinstance(events, list):
             events = []
         cutoff = _now() - timedelta(days=window_days)
         recent = []
+        eligible_unscoped = 0
         for event in events:
             if not isinstance(event, dict) or event.get("event_type") not in CUSTOMER_OUTCOMES:
                 continue
             occurred = _parse_time(event.get("occurred_at"))
-            if occurred and occurred >= cutoff:
-                recent.append(event)
+            if not occurred or occurred < cutoff:
+                continue
+            if task_description is not None:
+                metrics = event.get("metrics") if isinstance(event.get("metrics"), dict) else {}
+                if not self._feature_key_matches(metrics.get("feature_key"), task_description):
+                    eligible_unscoped += 1
+                    continue
+            recent.append(event)
         counts = {kind: sum(e.get("event_type") == kind for e in recent) for kind in sorted(CUSTOMER_OUTCOMES)}
         positive_replies = sum(
             e.get("event_type") == "customer_reply"
@@ -104,14 +134,19 @@ class EvidenceSourceConnector:
         return {
             "source": "local_gtm_outcome_ledger",
             "window_days": window_days,
+            "feature_scope": task_description,
             "event_count": len(recent),
+            "unscoped_or_unmatched_events_ignored": eligible_unscoped,
             "event_counts": counts,
             "positive_reply_count": positive_replies,
             "customer_evidence": summary,
             "user_demand_verified": bool(demand_signal),
             "demand_signal_rule": "At least one qualified opportunity/conversion or three positive/interested replies in the selected window.",
             "evidence_event_ids": [str(e.get("event_id")) for e in recent[-50:] if e.get("event_id")],
-            "limitation": "Recorded outcomes are a sample, not proof of overall product-market fit; missing events are not negative demand.",
+            "limitation": (
+                "Only explicitly tagged, task-matching outcomes count when task scope is supplied. "
+                "Recorded outcomes are a sample, not proof of product-market fit; missing events are not negative demand."
+            ),
         }
 
     @staticmethod
@@ -198,7 +233,7 @@ class EvidenceSourceConnector:
         }
 
     def collect(self, task_description: str) -> dict[str, Any]:
-        demand = self.customer_demand_evidence()
+        demand = self.customer_demand_evidence(task_description=task_description)
         reuse = self.reuse_candidates(task_description) if task_description.strip() else {
             "source": "github_public_search", "enabled": False, "repositories": [],
             "caveat": "No task description was available; no search was attempted.",
@@ -285,12 +320,26 @@ class InterventionQualityTracker:
         helpful = counts["helpful"] + counts["accepted"] + counts["acted_on"]
         not_helpful = counts["not_helpful"] + counts["dismissed"] + counts["incorrect"]
         total = helpful + not_helpful
+        by_path = {}
+        for item in reviewed:
+            path = str(item.get("recommended_path", "unknown"))
+            bucket = by_path.setdefault(path, {"reviewed": 0, "positive": 0, "negative": 0})
+            bucket["reviewed"] += 1
+            if item.get("feedback") in {"helpful", "accepted", "acted_on"}:
+                bucket["positive"] += 1
+            elif item.get("feedback") in {"not_helpful", "dismissed", "incorrect"}:
+                bucket["negative"] += 1
+        for bucket in by_path.values():
+            rated = bucket["positive"] + bucket["negative"]
+            bucket["positive_feedback_rate"] = round(bucket["positive"] / rated, 4) if rated else None
+            bucket["negative_feedback_rate"] = round(bucket["negative"] / rated, 4) if rated else None
         return {
             "session_id": session_id,
             "interventions_shown": len(events),
             "interventions_reviewed": len(reviewed),
             "unreviewed": len(events) - len(reviewed),
             "feedback_counts": counts,
+            "by_recommended_path": by_path,
             "positive_feedback_rate": round(helpful / total, 4) if total else None,
             "negative_feedback_rate": round(not_helpful / total, 4) if total else None,
             "measurement_note": "Rates use only explicit reviewed feedback; unreviewed interventions are not counted as success or failure.",
