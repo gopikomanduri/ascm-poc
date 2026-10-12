@@ -154,36 +154,91 @@ class UniversalASCMDaemon:
                                  "evidence_count": len(inferred.get("evidence_event_ids", []))},
                     )
                 return
+            evidence_ids = inferred.get("evidence_event_ids", [])
+            evidence_signature = json.dumps(evidence_ids, sort_keys=True)
+            previous_signature = state.get("last_context_recommendation_evidence", "")
             last_recommendation = float(state.get("last_context_recommendation_at", 0) or 0)
-            if current_time - last_recommendation < 14400:
+            # Re-evaluate promptly when new evidence arrives, but rate-limit genuinely
+            # new interventions to avoid turning activity monitoring into notification spam.
+            if evidence_signature == previous_signature and current_time - last_recommendation < 14400:
                 return
-            state["last_context_recommendation_at"] = current_time
-            self._save_daemon_state(state)
-            recommendation = self.mentor.recommend_next_action(
-                "code_activity",
-                {
-                    "task_description": task,
-                    "context_confidence": confidence,
-                    "evidence_event_ids": inferred.get("evidence_event_ids", []),
-                    "inference_rationale": inferred.get("rationale", ""),
-                },
-            )
+            if evidence_signature != previous_signature and last_recommendation and current_time - last_recommendation < 600:
+                return
+
+            recommendation_evidence = {
+                "task_description": task,
+                "context_confidence": confidence,
+                "evidence_event_ids": evidence_ids,
+                "inference_rationale": inferred.get("rationale", ""),
+            }
+            # Pass only signals supported by context or an explicit persisted founder fact.
+            if context.get("next_milestone"):
+                recommendation_evidence["milestone"] = context["next_milestone"]
+            if "test failure" in task.lower() or "failed test" in task.lower():
+                recommendation_evidence["tests_failed"] = True
+            recommendation = self.mentor.recommend_next_action("code_activity", recommendation_evidence)
+            decision = recommendation.get("founder_decision") or {}
+            ranked_paths = decision.get("ranked_paths", [])
             actions = recommendation.get("actions", [])
-            if actions:
+            if not decision and not actions:
+                return
+
+            # Persist the cooldown only when a notification is actually being prepared.
+            state["last_context_recommendation_at"] = current_time
+            state["last_context_recommendation_evidence"] = evidence_signature
+            self._save_daemon_state(state)
+
+            if decision:
+                recommended_path = decision.get("recommended_path", "undetermined")
+                decision_confidence = decision.get("confidence", "low")
+                top_paths = ranked_paths[:3]
+                path_summary = "; ".join(
+                    f"{item.get('path')}: {item.get('score')}/100"
+                    for item in top_paths
+                )
+                missing = decision.get("missing_evidence", [])
+                missing_summary = (
+                    " Missing evidence: " + ", ".join(missing[:4]) + "."
+                    if missing else ""
+                )
+                title = "ASCM Founder Intelligence: " + recommended_path.replace("_", " ").title()
+                message = (
+                    f"Goal: {goal}. Current signal: {task} (activity confidence {confidence:.0%}). "
+                    f"Recommended path: {recommended_path.replace('_', ' ')} "
+                    f"(decision confidence: {decision_confidence}). "
+                    f"Top paths: {path_summary or 'no ranked paths'}."
+                    f"{missing_summary} This is advice only; no action was executed."
+                )
+                audit_details = {
+                    "project_id": inferred.get("project_id"),
+                    "activity_confidence": confidence,
+                    "decision_confidence": decision_confidence,
+                    "recommended_path": recommended_path,
+                    "ranked_paths": top_paths,
+                    "missing_evidence": missing,
+                    "evidence_event_ids": evidence_ids,
+                    "recommendation_title": title,
+                }
+            else:
                 first = actions[0]
-                self.audit_logger.log_event(
-                    "MENTOR_RECOMMENDATION", agent="PROACTIVE_MENTOR",
-                    action=first.get("action_type", "recommend"),
-                    details={"project_id": inferred.get("project_id"), "confidence": confidence,
-                             "evidence_event_ids": inferred.get("evidence_event_ids", []),
-                             "recommendation_title": first.get("title", "")},
-                )
-                CrossPlatformNotifier.notify(
-                    "ASCM Mentor: Suggested next step",
+                title = "ASCM Mentor: Suggested next step"
+                message = (
                     f"I infer you're working on: {task} (confidence {confidence:.0%}). "
-                    f"{first['title']}. {first['rationale'][:240]}",
-                    app_name="ASCM Mentor",
+                    f"{first['title']}. {first['rationale'][:240]}"
                 )
+                audit_details = {
+                    "project_id": inferred.get("project_id"),
+                    "confidence": confidence,
+                    "evidence_event_ids": evidence_ids,
+                    "recommendation_title": first.get("title", ""),
+                }
+
+            self.audit_logger.log_event(
+                "MENTOR_RECOMMENDATION", agent="PROACTIVE_MENTOR",
+                action=decision.get("recommended_path", "recommend"),
+                details=audit_details,
+            )
+            CrossPlatformNotifier.notify(title, message[:1000], app_name="ASCM Mentor")
             return
 
         # A missing goal changes every recommendation, so this is a worthwhile clarification.
