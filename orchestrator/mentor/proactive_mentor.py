@@ -99,7 +99,8 @@ class ASCMProactiveMentor:
         test_count = int(analysis.get("test_count", 0) or 0)
         file_count = int(analysis.get("file_count", 0) or 0)
         days_since_gtm = activity.days_since_last_gtm_action
-        code_ready_threshold = bool(analysis.get("milestone_reached", False) or analysis.get("release_candidate", False))
+        milestone = self.git_monitor.get_latest_milestone()
+        code_ready_threshold = milestone is not None
 
         advice = {
             "test_count": test_count,
@@ -108,6 +109,7 @@ class ASCMProactiveMentor:
             "risk_level": activity.risk_level,
             "gtm_history_known": days_since_gtm is not None,
             "should_trigger_gtm": False,
+            "milestone": milestone,
             "recommendation": "",
         }
 
@@ -119,7 +121,7 @@ class ASCMProactiveMentor:
         elif code_ready_threshold and days_since_gtm > 2.0:
             advice["should_trigger_gtm"] = True
             advice["recommendation"] = (
-                f"A release milestone is marked and the last recorded GTM action was {days_since_gtm:.1f} days ago. "
+                f"An explicitly marked milestone was reached and the last recorded GTM action was {days_since_gtm:.1f} days ago. "
                 "Review customer outreach and choose the next validated GTM action; don't stop coding solely because of file counts."
             )
             now = time.time()
@@ -151,9 +153,15 @@ def main(override_goal: Optional[str] = None):
     parser.add_argument("--goal", help="What are you trying to build?")
     parser.add_argument("--watch", action="store_true", help="Run background mentor loop")
     parser.add_argument("--check-readiness", action="store_true", help="Check GTM activity and milestones")
+    parser.add_argument("--mark-milestone", help="Explicitly record a completed milestone by name")
     parser.add_argument("--mentor", action="store_true", help="Mentor flag (ignored)")
     args, _ = parser.parse_known_args()
     mentor = ASCMProactiveMentor()
+
+    if args.mark_milestone:
+        milestone = mentor.git_monitor.record_milestone(args.mark_milestone)
+        print("Recorded milestone: {} ({})".format(milestone["name"], milestone["occurred_at"]))
+        return
 
     if args.check_readiness:
         advice = mentor.evaluate_code_progress_and_advise()
