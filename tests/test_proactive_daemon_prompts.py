@@ -83,7 +83,8 @@ class ProactiveDaemonPromptTests(unittest.TestCase):
                 daemon.mentor.recommendations,
                 [("code_activity", {"task_description": "Implement authentication"})],
             )
-            self.assertIn("Check reuse first", notify.call_args.args[0])
+            self.assertEqual(notify.call_args.args[0], "ASCM Mentor: Recommended next step")
+            self.assertIn("Check reuse first", notify.call_args.args[1])
 
     def test_persistent_cooldown_prevents_repeated_interruptions(self):
         with tempfile.TemporaryDirectory() as tmp:
