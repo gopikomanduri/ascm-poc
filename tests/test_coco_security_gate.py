@@ -39,6 +39,17 @@ class CocoSecurityGateTests(unittest.TestCase):
             self.assertIsNone(result["passed"])
 
 
+    def test_ci_falls_back_to_pinned_npx_cli_when_global_coco_is_missing(self):
+        from unittest.mock import Mock
+
+        completed = Mock(returncode=1, stdout="", stderr="provider credentials missing")
+        with patch.dict(os.environ, {"CI": "true"}, clear=True), \
+             patch("orchestrator.security.coco_gate.shutil.which", side_effect=lambda name: name == "npx"), \
+             patch("orchestrator.security.coco_gate.subprocess.run", return_value=completed) as run:
+            result = run_coco([Path("example.py")], Path.cwd())
+        self.assertEqual(result["status"], "failed")
+        self.assertTrue(run.call_args.args[0][:3] == ["npx", "--yes", "git-coco@0.91.0"])
+
     def test_coco_structured_review_blocks_high_severity_finding(self):
         script = (
             "import json,sys; json.load(sys.stdin); "
