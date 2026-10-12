@@ -45,18 +45,6 @@ class UniversalASCMDaemon:
             self.history_dir.chmod(0o700)
         except OSError:
             pass
-        if not any(getattr(handler, "_ascm_daemon_handler", False) for handler in logger.handlers):
-            file_handler = RotatingFileHandler(
-                self.history_dir / "daemon.log", maxBytes=5 * 1024 * 1024,
-                backupCount=3, encoding="utf-8",
-            )
-            file_handler._ascm_daemon_handler = True
-            file_handler.setFormatter(logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(message)s"
-            ))
-            logger.addHandler(file_handler)
-            logger.setLevel(logging.INFO)
-            logger.propagate = False
         # Cross-IDE activity monitor (filesystem + git combined)
         self.activity_monitor = ActivityAwareMonitor(repo_path=str(self.repo_path))
         self.context_fusion = ContextFusionEngine(workspace_path=self.repo_path)
@@ -99,6 +87,20 @@ class UniversalASCMDaemon:
                 _base(path)
                 _s.on_file_changed(path)
             watcher.on_change = _on_change
+
+    def _configure_file_logging(self):
+        """Configure bounded daemon logs only when the background loop starts."""
+        if any(getattr(handler, "_ascm_daemon_handler", False) for handler in logger.handlers):
+            return
+        file_handler = RotatingFileHandler(
+            self.history_dir / "daemon.log", maxBytes=5 * 1024 * 1024,
+            backupCount=3, encoding="utf-8",
+        )
+        file_handler._ascm_daemon_handler = True
+        file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+        logger.addHandler(file_handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
 
     def _load_daemon_state(self):
         """Load persistent cooldowns so restarts do not repeatedly interrupt the founder."""
@@ -227,6 +229,7 @@ class UniversalASCMDaemon:
 
     def run_daemon_loop(self):
         """Infinite monitoring loop running quietly in the background."""
+        self._configure_file_logging()
         logger.info(f"Starting ASCM Proactive Daemon for {self.repo_path} (Poll interval: {self.poll_interval_sec}s)")
         CrossPlatformNotifier.notify(
             "ASCM Proactive Mentor",
