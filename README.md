@@ -143,6 +143,7 @@ The mentor can correlate code edits, foreground application transitions, termina
 
 - [Commercial readiness and privacy boundaries](docs/commercial-readiness.md)
 - [Opt-in Chrome hostname extension](browser_extension/README.md)
+- [Optional VS Code project activation extension](vscode-extension/README.md)
 - Optional Bash hook: `source /path/to/ascm-poc/scripts/ascm-bash-hook.sh`
 - Optional Zsh hook: `source /path/to/ascm-poc/scripts/ascm-zsh-hook.sh`
 
