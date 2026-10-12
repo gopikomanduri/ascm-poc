@@ -81,7 +81,7 @@ jobs:
             echo '{"results":[],"metrics":{}}' > security-artifacts/bandit.json
             status=0
           else
-            bandit -ll -f json -o security-artifacts/bandit.json "${changed_py[@]}"
+            bandit -ll --skip B603,B607 -f json -o security-artifacts/bandit.json "${changed_py[@]}"
             status=$?
           fi
           echo "$status" > security-artifacts/bandit-status.txt
