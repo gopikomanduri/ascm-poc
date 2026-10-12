@@ -1,0 +1,39 @@
+{
+  "name": "ascm-project-context",
+  "displayName": "ASCM Project Context",
+  "description": "Privacy-minimized project activation signals for the ASCM proactive mentor.",
+  "version": "0.1.0",
+  "publisher": "ascm",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "ASCM Project Context",
+      "properties": {
+        "ascm.repoPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the ASCM repository containing orchestrator/mentor/activity_cli.py."
+        },
+        "ascm.workspacePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional parent workspace for shared .ascm_history; defaults to the active project."
+        },
+        "ascm.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Python executable with ASCM dependencies available (use python on Windows if appropriate)."
+        }
+      }
+    }
+  }
+}
