@@ -76,7 +76,7 @@ class OutcomeLedger:
                 if not isinstance(value, str) or value.strip().lower() not in self.WILLINGNESS_TO_PAY:
                     raise ValueError("willingness_to_pay must be confirmed, unconfirmed, no, or unknown")
                 safe_metrics[key] = value.strip().lower()
-            elif key in {"currency", "channel", "source_system", "intent_scan_status", "feature_area"}:
+            elif key in {"currency", "channel", "source_system", "intent_scan_status", "feature_key", "feature_area"}:
                 if not isinstance(value, str) or not value.strip() or len(value.strip()) > 64:
                     raise ValueError(f"{key} must be a short categorical label")
                 safe_metrics[key] = value.strip()
