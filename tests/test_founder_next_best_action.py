@@ -24,6 +24,20 @@ class FounderContextStoreTests(unittest.TestCase):
 
 
 class NextBestActionTests(unittest.TestCase):
+    def test_deterministic_mentor_initializes_without_llm_credentials(self):
+        from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch(
+                "orchestrator.mentor.proactive_mentor.get_configured_provider",
+                side_effect=RuntimeError("No provider configured"),
+            ):
+                mentor = ASCMProactiveMentor(tmp)
+            self.assertIsNone(mentor.provider)
+            self.assertEqual(
+                mentor.recommend_next_action("code_activity")["actions"][0]["action_type"],
+                "clarify_goal",
+            )
+
     def test_missing_goal_asks_for_clarification_instead_of_guessing(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = NextBestActionEngine(tmp).recommend(observation="code_activity")
