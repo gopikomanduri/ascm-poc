@@ -203,7 +203,12 @@ class UniversalASCMDaemon:
             if not decision and not actions:
                 return
 
-            # Persist the cooldown only when a notification is actually being prepared.
+            # Approximate a working session using a 30-minute idle boundary, while
+            # persisting the ID so daemon restarts do not automatically split a session.
+            previous_session_activity = float(state.get("last_working_session_activity_at", 0) or 0)
+            if not state.get("working_session_id") or current_time - previous_session_activity >= 1800:
+                state["working_session_id"] = uuid.uuid4().hex
+            state["last_working_session_activity_at"] = current_time
             state["last_context_recommendation_at"] = current_time
             state["last_context_recommendation_evidence"] = evidence_signature
             self._save_daemon_state(state)
@@ -254,7 +259,7 @@ class UniversalASCMDaemon:
                 }
 
             intervention_id = str(uuid.uuid4())
-            session_id = getattr(self, "working_session_id", "daemon-session")
+            session_id = state.get("working_session_id") or getattr(self, "working_session_id", "daemon-session")
             # Include a concrete feedback path in the notification so quality can be
             # measured after a real work session instead of assuming usefulness.
             message += (
