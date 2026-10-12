@@ -113,6 +113,13 @@ class UniversalASCMDaemon:
             confidence = float(inferred.get("confidence", 0.0) or 0.0)
             task = inferred.get("task_hypothesis")
             if not task or confidence < 0.60:
+                if task:
+                    self.audit_logger.log_event(
+                        "MENTOR_RECOMMENDATION_SUPPRESSED", agent="PROACTIVE_MENTOR",
+                        action="LOW_CONFIDENCE",
+                        details={"confidence": confidence, "project_id": inferred.get("project_id"),
+                                 "evidence_count": len(inferred.get("evidence_event_ids", []))},
+                    )
                 return
             last_recommendation = float(state.get("last_context_recommendation_at", 0) or 0)
             if current_time - last_recommendation < 14400:
@@ -131,6 +138,13 @@ class UniversalASCMDaemon:
             actions = recommendation.get("actions", [])
             if actions:
                 first = actions[0]
+                self.audit_logger.log_event(
+                    "MENTOR_RECOMMENDATION", agent="PROACTIVE_MENTOR",
+                    action=first.get("action_type", "recommend"),
+                    details={"project_id": inferred.get("project_id"), "confidence": confidence,
+                             "evidence_event_ids": inferred.get("evidence_event_ids", []),
+                             "recommendation_title": first.get("title", "")},
+                )
                 CrossPlatformNotifier.notify(
                     "ASCM Mentor: Suggested next step",
                     f"I infer you're working on: {task} (confidence {confidence:.0%}). "
@@ -154,6 +168,11 @@ class UniversalASCMDaemon:
         # Persist before showing the dialog so restarts or a failed desktop integration do not spam.
         state["last_founder_context_prompt_at"] = current_time
         self._save_daemon_state(state)
+        self.audit_logger.log_event(
+            "FOUNDER_CONTEXT_PROMPT", agent="PROACTIVE_MENTOR",
+            action="PROMPT_SHOWN",
+            details={"recent_file_count": len(recent_files), "desktop_dialog_only": True},
+        )
         response = CrossPlatformNotifier.prompt_dialog(
             question,
             default_text="",
@@ -161,6 +180,12 @@ class UniversalASCMDaemon:
             allow_terminal_fallback=False,
         )
         if not response or not response.strip():
+            self.audit_logger.log_event(
+                "FOUNDER_CONTEXT_PROMPT", agent="PROACTIVE_MENTOR",
+                action="NO_RESPONSE_OR_NO_DIALOG",
+                details={"response_received": False},
+                level="WARN",
+            )
             CrossPlatformNotifier.notify(
                 title,
                 "I detected coding activity, but no interactive desktop dialog was available. "
@@ -171,6 +196,11 @@ class UniversalASCMDaemon:
 
         response = response.strip()[:1000]
         insights = self.mentor.clarify_goal_and_pre_validate(response)
+        self.audit_logger.log_event(
+            "FOUNDER_CONTEXT_CAPTURED", agent="PROACTIVE_MENTOR",
+            action="GOAL_CLARIFIED",
+            details={"response_char_length": len(response), "goal_saved": bool(self.mentor.founder_context.load().get("current_goal"))},
+        )
         plan = insights.get("pre_build_validation_plan", [])
         next_step = plan[0] if plan else insights.get("mentor_advice", "Validate the problem before expanding scope.")
         CrossPlatformNotifier.notify(
