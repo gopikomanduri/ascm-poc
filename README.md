@@ -137,6 +137,17 @@ python tools/mr_bench.py --run-all --publish   # Run the benchmark
 
 ---
 
+## Proactive Founder Mentor: Activity Signals
+
+The mentor can correlate code edits, foreground application transitions, terminal command categories, test outcomes, and opt-in browser hostnames. It records metadata only; it does not capture keystrokes, terminal output, page contents, full URLs, window titles, or screenshots.
+
+- [Commercial readiness and privacy boundaries](docs/commercial-readiness.md)
+- [Opt-in Chrome hostname extension](browser_extension/README.md)
+- Optional Bash hook: `source /path/to/ascm-poc/scripts/ascm-bash-hook.sh`
+- Optional Zsh hook: `source /path/to/ascm-poc/scripts/ascm-zsh-hook.sh`
+
+Security CI runs a deterministic review, Bandit on changed Python files, and a dependency vulnerability audit. A Coco review is only reported as completed when the approved Coco runner is configured in the `ASCM_COCO_AGENT_CMD` GitHub Actions secret and returns a valid result. A missing Coco integration is explicitly reported as unavailable, not passed.
+
 ## Quick Start
 
 ### Option 1: One-Line Install (Recommended for macOS / Linux)
