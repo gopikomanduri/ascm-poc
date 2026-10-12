@@ -208,8 +208,7 @@ class UniversalASCMDaemon:
                 # Foreground app identity is sampled only; window titles and page contents are never read.
                 active_app = self.active_window_adapter.poll()
                 if active_app:
-                    recent_files = activity.get("filesystem_activity", {}).get("recently_edited_files", [])
-                    project_hint = recent_files[-1] if recent_files else self.repo_path
+                    project_hint = self.context_fusion.latest_project_path()
                     try:
                         app_event = self.context_fusion.record_active_app(
                             cwd=project_hint, app_name=active_app
