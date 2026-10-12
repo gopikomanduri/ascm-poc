@@ -31,6 +31,9 @@ class FakeContextFusion:
             "rationale": "Insufficient evidence",
         }
 
+    def latest_project_path(self):
+        return Path(".")
+
     def infer_context(self, project_path=None):
         return self.context
 
@@ -58,6 +61,7 @@ class ProactiveDaemonPromptTests(unittest.TestCase):
         daemon.history_dir.mkdir(parents=True, exist_ok=True)
         daemon.mentor = FakeMentor(goal)
         daemon.context_fusion = FakeContextFusion()
+        daemon.audit_logger = mock.Mock()
         return daemon
 
     def test_first_observed_edit_prompts_and_persists_goal_without_cli(self):
