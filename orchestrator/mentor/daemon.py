@@ -226,6 +226,7 @@ class UniversalASCMDaemon:
         platform = sys.platform.lower()
         py_exe = sys.executable
         daemon_script = Path(__file__).resolve()
+        project_root = daemon_script.parents[2]
 
         # 1. macOS launchd
         if platform.startswith("darwin"):
@@ -239,11 +240,12 @@ class UniversalASCMDaemon:
     <key>Label</key>
     <string>com.ascm.mentor</string>
     <key>WorkingDirectory</key>
-    <string>{daemon_script.parents[2]}</string>
+    <string>{project_root}</string>
     <key>ProgramArguments</key>
     <array>
         <string>{py_exe}</string>
-        <string>{daemon_script}</string>
+        <string>-m</string>
+        <string>orchestrator.mentor.daemon</string>
         <string>--repo</string>
         <string>{self.repo_path}</string>
     </array>
@@ -274,8 +276,8 @@ Description=ASCM Proactive Founder & Engineering Mentor
 After=default.target
 
 [Service]
-WorkingDirectory={daemon_script.parents[2]}
-ExecStart="{py_exe}" "{daemon_script}" --repo "{self.repo_path}"
+WorkingDirectory={project_root}
+ExecStart="{py_exe}" -m orchestrator.mentor.daemon --repo "{self.repo_path}"
 Restart=always
 RestartSec=30
 StandardOutput=file:{self.history_dir}/daemon_stdout.log
@@ -295,7 +297,7 @@ WantedBy=default.target
             # Generates Windows Startup batch file
             startup_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
             bat_path = startup_dir / "ascm_mentor_daemon.bat"
-            bat_content = f'@echo off\ncd /d "{daemon_script.parents[2]}"\nstart /B "" "{py_exe}" "{daemon_script}" --repo "{self.repo_path}"\n'
+            bat_content = f'@echo off\ncd /d "{project_root}"\nstart /B "" "{py_exe}" -m orchestrator.mentor.daemon --repo "{self.repo_path}"\n'
             with open(bat_path, "w") as f:
                 f.write(bat_content)
             return f"Installed Windows Startup Agent at {bat_path}"
