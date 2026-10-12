@@ -80,7 +80,7 @@ class CrossPlatformNotifier:
         return False
 
     @staticmethod
-    def prompt_dialog(prompt_text: str, default_text: str = "", title: str = "ASCM Proactive Mentor") -> Optional[str]:
+    def prompt_dialog(prompt_text: str, default_text: str = "", title: str = "ASCM Proactive Mentor", allow_terminal_fallback: bool = True) -> Optional[str]:
         """
         Pops up an interactive modal dialog over whatever app the user is working in
         (Excel, Browser, IDE), allowing them to respond.
@@ -148,7 +148,11 @@ class CrossPlatformNotifier:
                 except Exception as e:
                     logger.debug(f"Linux kdialog failed: {e}")
 
-        # Fallback to terminal input
+        # A background daemon must never block on terminal input when no desktop dialog is available.
+        if not allow_terminal_fallback:
+            return None
+
+        # Fallback to terminal input for explicitly interactive CLI workflows.
         try:
             return input(f"\n💡 [{title.upper()}] {prompt_text} [{default_text}]: ").strip() or default_text
         except (EOFError, KeyboardInterrupt):
