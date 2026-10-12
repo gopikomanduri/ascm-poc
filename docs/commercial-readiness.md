@@ -159,3 +159,19 @@ python -m orchestrator.mentor.evidence_pipeline --report --session-id SESSION_ID
 Quality reports separate the number of intervention attempts from explicit feedback and report positive/negative feedback rates only over rated interventions, both overall and grouped by recommended path. Unreviewed interventions are not treated as success or failure. The labels `helpful`, `accepted`, and `acted_on` count as positive feedback; `not_helpful`, `dismissed`, and `incorrect` count as negative feedback. This first version measures explicit founder feedback, not causal impact or long-term customer outcomes; review labels consistently and compare multiple sessions before tuning ranking rules.
 
 Evidence and intervention records remain local under `.ascm_history`, use restrictive file permissions where supported, and are bounded to the latest 5,000 intervention records. The tracker is a single-process JSON-backed MVP and is not a tamper-proof audit system. No remote customer CRM is queried and no customer data is scraped; connect provider event adapters only with explicit credentials, consent, and privacy review.
+
+
+## Evidence-aware intervention-quality loop
+
+Every surfaced recommendation receives an intervention ID and a working-session ID. The local tracker stores the recommended path, confidence, evidence-event IDs, and a privacy-minimized evidence snapshot: number of feature-matched customer events, whether the conservative demand threshold was met, whether public reuse discovery was enabled, and how many candidates were returned. It does not store raw customer notes, repository descriptions, task text, or the free-text feedback note.
+
+The notification includes a feedback command and a session-report command. After the session, label the intervention honestly (for example, `helpful`, `not_helpful`, `accepted`, `dismissed`, `acted_on`, or `incorrect`). Then review the evidence-aware breakdown:
+
+```bash
+python -m orchestrator.mentor.evidence_pipeline --feedback acted_on --intervention-id <INTERVENTION_ID>
+python -m orchestrator.mentor.evidence_pipeline --report --session-id <SESSION_ID>
+```
+
+The report includes feedback coverage, positive/negative feedback rates among explicitly reviewed interventions, per-recommended-path rates, and feedback segmented by customer-evidence and reuse-discovery coverage. Unreviewed interventions are not counted as successes or failures; missing customer evidence means demand is unknown, not absent. Compare multiple sessions before changing ranking rules, and inspect low-feedback paths for noisy evidence matching, bad timing, and irrelevant interruptions.
+
+The working-session ID is a local approximation based on a 30-minute inactivity boundary between recorded recommendations, not a perfect measurement of active work. Explicit feedback is self-reported and can be biased. The report is an instrumentation baseline—not causal proof that ASCM saved time, prevented rework, accelerated milestones, or improved revenue. Those claims require longer real-world trials with pre-defined outcomes and verified milestone/customer events. Use the feedback ledger as a starting point and do not claim intervention quality until actual sessions have been reviewed.
