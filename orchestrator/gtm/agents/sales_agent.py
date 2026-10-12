@@ -162,7 +162,6 @@ Output JSON with:
                 "customer_reply",
                 details={
                     "sentiment": result.get("sentiment", "UNKNOWN") if isinstance(result, dict) else "UNKNOWN",
-                    "prospect_email": prospect_email,
                     "source": "sales_agent_reply_classifier",
                 },
             )
