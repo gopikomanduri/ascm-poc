@@ -137,8 +137,12 @@ def run_coco(paths: list[Path], repo_root: Path, timeout: int = 120) -> dict[str
     if not isinstance(response, dict) or not isinstance(response.get("passed"), bool) or not isinstance(response.get("issues", []), list):
         return {"status": "invalid_response", "passed": False,
                 "issues": ["Coco agent response must contain boolean passed and list issues."]}
-    return {"status": "completed", "passed": response["passed"],
-            "issues": [str(item)[:1000] for item in response.get("issues", [])[:100]]}
+    try:
+        from orchestrator.security.pii_scrubber import PIIScrubber
+        safe_issues = [PIIScrubber.scrub(str(item)[:1000]) for item in response.get("issues", [])[:100]]
+    except Exception:
+        safe_issues = ["Coco returned findings; details omitted because redaction was unavailable."]
+    return {"status": "completed", "passed": response["passed"], "issues": safe_issues}
 
 
 def main(argv=None) -> int:
@@ -196,6 +200,10 @@ def main(argv=None) -> int:
     print(json.dumps({
         "status": report["status"], "files_scanned": len(paths),
         "finding_count": len(findings), "high_severity_count": len(blocking),
+        "finding_summary": [
+            {"severity": item["severity"], "rule": item["rule"], "path": item["path"],
+             "line": item.get("line")} for item in findings
+        ],
         "coco_status": coco["status"], "report": str(report_path),
     }, indent=2))
     return 1 if report["status"] == "failed" else 0
