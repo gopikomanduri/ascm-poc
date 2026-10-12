@@ -17,7 +17,6 @@ class ProductContext:
     icp_description: str = "Ideal customer profile not configured; validate the target user before outreach."
     milestone_name: str = "Unspecified milestone"
     domain_keywords: List[str] = field(default_factory=list)
-    channels: List[str] = field(default_factory=lambda: ["hacker_news", "dev_to", "github", "tech_feeds"])
     sender_name: str = "Founder"
     tone: str = "Clear, candid, evidence-based"
     goals: List[str] = field(default_factory=list)
