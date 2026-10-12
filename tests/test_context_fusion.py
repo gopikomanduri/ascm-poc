@@ -1,4 +1,5 @@
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -36,13 +37,16 @@ class ContextFusionEngineTests(unittest.TestCase):
             project_b = root / "b"
             project_a.mkdir()
             project_b.mkdir()
+            subprocess.run(["git", "init", "-q", str(project_a)], check=True)
+            subprocess.run(["git", "init", "-q", str(project_b)], check=True)
             engine = ContextFusionEngine(root)
             engine.record_file_change(project_a / "api.py")
             engine.record_file_change(project_b / "worker.py")
             contexts = engine.infer_context()
-            self.assertEqual(len(contexts), 1)  # Non-Git folders share the configured workspace identity.
+            self.assertEqual(len(contexts), 2)
+            self.assertNotEqual(contexts[0]["project_id"], contexts[1]["project_id"])
             saved = engine.list_saved_contexts()
-            self.assertEqual(len(saved), 1)
+            self.assertEqual(len(saved), 2)
             payload = json.loads(engine.events_path.read_text(encoding="utf-8").splitlines()[0])
             self.assertNotIn("content", payload)
             self.assertNotIn("terminal_output", payload)
