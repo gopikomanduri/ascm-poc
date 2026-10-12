@@ -1,4 +1,6 @@
+import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -35,6 +37,20 @@ class CocoSecurityGateTests(unittest.TestCase):
             result = run_coco([Path("example.py")], Path.cwd())
             self.assertEqual(result["status"], "not_configured")
             self.assertIsNone(result["passed"])
+
+
+    def test_coco_structured_review_blocks_high_severity_finding(self):
+        script = (
+            "import json,sys; json.load(sys.stdin); "
+            "print(json.dumps({'version':1,'ok':True,'operation':'review','status':'completed',"
+            "'data':{'findings':[{'severity':8,'category':'security','title':'Unsafe flow',"
+            "'summary':'Potential injection','filePath':'src/example.py'}]},'warnings':[]}))"
+        )
+        with patch.dict(os.environ, {"ASCM_COCO_AGENT_CMD": json.dumps([sys.executable, "-c", script])}):
+            result = run_coco([], Path.cwd())
+        self.assertEqual(result["status"], "completed")
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["blocking_finding_count"], 1)
 
     def test_coco_command_configuration_must_be_json_array(self):
         with patch.dict(os.environ, {"ASCM_COCO_AGENT_CMD": "coco security --json"}):
