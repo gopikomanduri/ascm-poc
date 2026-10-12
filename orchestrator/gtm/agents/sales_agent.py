@@ -153,4 +153,19 @@ Output JSON with:
 - founder_alert: string (if not suppressed)
 """
         raw = self.call(prompt, json_mode=True)
-        return parse_json_lenient(raw)
+        result = parse_json_lenient(raw)
+
+        # This method receives an actual prospect reply, unlike generated GTM copy.
+        try:
+            from orchestrator.gtm.strategy.proactive_monitor import ProactiveGitMonitor
+            ProactiveGitMonitor(".").record_gtm_event(
+                "customer_reply",
+                details={
+                    "sentiment": result.get("sentiment", "UNKNOWN") if isinstance(result, dict) else "UNKNOWN",
+                    "prospect_email": prospect_email,
+                    "source": "sales_agent_reply_classifier",
+                },
+            )
+        except Exception as exc:
+            logger.warning("Could not record customer reply telemetry: %s", exc)
+        return result
