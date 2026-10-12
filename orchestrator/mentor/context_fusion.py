@@ -323,6 +323,25 @@ class ContextFusionEngine:
         self._persist_context(project_id, context)
         return context
 
+    def latest_project_path(self) -> Path:
+        """Resolve the most recently active project from safe event metadata."""
+        events = self._read_events()
+        candidates = [
+            event for event in events
+            if event.get("event_type") in {"terminal_command", "test_passed", "test_failed", "file_changed"}
+            and isinstance(event.get("project_root"), str)
+            and _parse_time(event.get("timestamp")) is not None
+        ]
+        if not candidates:
+            return self.workspace_path
+        latest = max(candidates, key=lambda event: event["timestamp"])
+        root = Path(latest["project_root"]).resolve()
+        try:
+            root.relative_to(self.workspace_path)
+            return root
+        except ValueError:
+            return self.workspace_path
+
     def list_saved_contexts(self) -> list[Dict[str, Any]]:
         """Return persisted per-project hypotheses without reading project source files."""
         contexts = []
