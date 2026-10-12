@@ -7,6 +7,7 @@ SalesAgent: Autonomous outbound sales via OpenOutreach + Smartlead + Cal.com
 
 import json
 import logging
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from orchestrator.agents.base import BaseAgent, BaseLLMProvider, parse_json_lenient
 from orchestrator.gtm.strategy.claims_guard import GROUNDING_RULES
@@ -158,12 +159,20 @@ Output JSON with:
         # This method receives an actual prospect reply, unlike generated GTM copy.
         try:
             from orchestrator.gtm.strategy.proactive_monitor import ProactiveGitMonitor
+            from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
+            sentiment = result.get("sentiment", "UNKNOWN") if isinstance(result, dict) else "UNKNOWN"
             ProactiveGitMonitor(".").record_gtm_event(
                 "customer_reply",
                 details={
-                    "sentiment": result.get("sentiment", "UNKNOWN") if isinstance(result, dict) else "UNKNOWN",
+                    "sentiment": sentiment,
                     "source": "sales_agent_reply_classifier",
                 },
+            )
+            OutcomeLedger(Path(".")).record(
+                "customer_reply",
+                metrics={"sentiment": sentiment},
+                source="sales_agent_reply_classifier",
+                notify=True,
             )
         except Exception as exc:
             logger.warning("Could not record customer reply telemetry: %s", exc)
