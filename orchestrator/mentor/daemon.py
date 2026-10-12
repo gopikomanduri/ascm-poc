@@ -17,6 +17,7 @@ import time
 import json
 import subprocess
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from orchestrator.mentor.notifier import CrossPlatformNotifier
@@ -40,6 +41,22 @@ class UniversalASCMDaemon:
         self.history_dir = self.repo_path / ".ascm_history"
         self.history_dir.mkdir(parents=True, exist_ok=True)
         self.pid_file = self.history_dir / "ascm_daemon.pid"
+        try:
+            self.history_dir.chmod(0o700)
+        except OSError:
+            pass
+        if not any(getattr(handler, "_ascm_daemon_handler", False) for handler in logger.handlers):
+            file_handler = RotatingFileHandler(
+                self.history_dir / "daemon.log", maxBytes=5 * 1024 * 1024,
+                backupCount=3, encoding="utf-8",
+            )
+            file_handler._ascm_daemon_handler = True
+            file_handler.setFormatter(logging.Formatter(
+                "%(asctime)s [%(levelname)s] %(message)s"
+            ))
+            logger.addHandler(file_handler)
+            logger.setLevel(logging.INFO)
+            logger.propagate = False
         # Cross-IDE activity monitor (filesystem + git combined)
         self.activity_monitor = ActivityAwareMonitor(repo_path=str(self.repo_path))
         self.context_fusion = ContextFusionEngine(workspace_path=self.repo_path)
@@ -311,6 +328,39 @@ class UniversalASCMDaemon:
             if self.pid_file.exists():
                 self.pid_file.unlink()
 
+    def uninstall_autostart_service(self) -> str:
+        """Disable the login service and remove its registration without deleting history."""
+        platform_name = sys.platform.lower()
+        removed = []
+        if platform_name.startswith("darwin"):
+            plist_path = Path.home() / "Library" / "LaunchAgents" / "com.ascm.mentor.plist"
+            if plist_path.exists():
+                subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True, timeout=10)
+                plist_path.unlink(missing_ok=True)
+                removed.append(str(plist_path))
+        elif platform_name.startswith("linux"):
+            service_path = Path.home() / ".config" / "systemd" / "user" / "ascm-mentor.service"
+            subprocess.run(
+                ["systemctl", "--user", "disable", "--now", "ascm-mentor.service"],
+                capture_output=True, timeout=15,
+            )
+            if service_path.exists():
+                service_path.unlink()
+                removed.append(str(service_path))
+            subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, timeout=10)
+        elif platform_name.startswith("win"):
+            startup_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+            startup_path = startup_dir / "ascm_mentor_daemon.bat"
+            if startup_path.exists():
+                startup_path.unlink()
+                removed.append(str(startup_path))
+        else:
+            return "Autostart uninstallation is not supported on this platform."
+        return (
+            "Autostart registration removed: " + ", ".join(removed)
+            if removed else "No ASCM autostart registration was found. Local history was preserved."
+        )
+
     def install_autostart_service(self) -> str:
         """Installs self into OS native autostart service manager."""
         platform = sys.platform.lower()
@@ -404,12 +454,18 @@ if __name__ == "__main__":
     parser.add_argument("--interval", type=int, default=30, help="Poll interval in seconds")
     parser.add_argument("--assist", action="store_true", help="Enable consent-gated code suggestions while you work")
     parser.add_argument("--install", action="store_true", help="Install into OS autostart service (launchd/systemd/Windows)")
+    parser.add_argument("--uninstall", action="store_true", help="Remove OS autostart registration without deleting history")
     args = parser.parse_args()
 
     daemon = UniversalASCMDaemon(repo_path=args.repo, poll_interval_sec=args.interval, assist=args.assist)
 
+    if args.install and args.uninstall:
+        parser.error("--install and --uninstall cannot be used together")
     if args.install:
         msg = daemon.install_autostart_service()
+        print(f"[+] {msg}")
+    elif args.uninstall:
+        msg = daemon.uninstall_autostart_service()
         print(f"[+] {msg}")
     else:
         daemon.run_daemon_loop()
