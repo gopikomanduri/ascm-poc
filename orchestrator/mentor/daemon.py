@@ -25,6 +25,7 @@ from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
 from orchestrator.mentor.file_watcher import ActivityAwareMonitor
 from orchestrator.mentor.context_fusion import ContextFusionEngine
 from orchestrator.mentor.activity_adapters import ActiveWindowAdapter
+from orchestrator.mentor.milestone_detector import MilestoneDetector
 from orchestrator.security.audit_logger import AuditLogger
 
 logger = logging.getLogger("ASCMDaemon")
@@ -53,6 +54,7 @@ class UniversalASCMDaemon:
             not in {"0", "false", "off", "no"}
         )
         self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
+        self.milestone_detector = MilestoneDetector(self.repo_path, audit_logger=self.audit_logger)
         watcher = self.activity_monitor.file_watcher
         base_activity_callback = watcher.on_change
 
@@ -300,6 +302,19 @@ class UniversalASCMDaemon:
                 )
 
                 current_time = time.time()
+
+                # Detect new commits without reading commit messages or source diffs.
+                try:
+                    checkpoint = self.milestone_detector.poll()
+                    if checkpoint and checkpoint.get("test_evidence", {}).get("passed"):
+                        CrossPlatformNotifier.notify(
+                            "ASCM Mentor: Git checkpoint detected",
+                            "A new commit was detected and a passing test event exists in local history. "
+                            "Please verify that the test run covers this exact commit before treating it as complete.",
+                            app_name="ASCM Mentor",
+                        )
+                except Exception as exc:
+                    logger.warning("[Daemon] Milestone detector failed safely: %s", type(exc).__name__)
 
                 # Proactively ask in a native desktop dialog and persist the response; no CLI interaction required.
                 if combined["actively_coding_now"] or self.context_fusion.has_recent_terminal_activity():
