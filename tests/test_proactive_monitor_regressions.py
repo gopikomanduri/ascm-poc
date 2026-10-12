@@ -97,7 +97,7 @@ class ProactiveMonitorRegressionTests(unittest.TestCase):
                 notify.assert_not_called()
                 events = json.loads(Path(".ascm_history/gtm_outcomes.json").read_text())
                 self.assertEqual(events[-1]["experiment_id"], "exp-negative")
-                self.assertEqual(events[-1]["metrics"]["sentiment"], "NEGATIVE")
+                self.assertEqual(events[-1]["metrics"]["sentiment"], "negative")
                 self.assertNotIn("Please unsubscribe", json.dumps(events))
             finally:
                 os.chdir(previous)
