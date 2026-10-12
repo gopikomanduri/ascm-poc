@@ -234,6 +234,9 @@ def main(override_goal: Optional[str] = None):
     parser.add_argument("--observe", choices=sorted(__import__("orchestrator.mentor.next_best_action", fromlist=["SUPPORTED_OBSERVATIONS"]).SUPPORTED_OBSERVATIONS), help="Evaluate an explicitly observed event for a next-best-action recommendation")
     parser.add_argument("--task-description", help="Task details accompanying code_activity/coding_started")
     parser.add_argument("--discover-repos", action="store_true", help="Search public GitHub repositories for a supplied coding task")
+    parser.add_argument("--propose-action", help="Persist one action from --observe as a proposal (action_type)")
+    parser.add_argument("--approve-proposal", help="Record founder approval for a previously saved proposal ID; does not execute it")
+    parser.add_argument("--reject-proposal", help="Record founder rejection for a previously saved proposal ID")
     parser.add_argument("--mentor", action="store_true", help="Mentor flag (ignored)")
     args, _ = parser.parse_known_args()
     mentor = ASCMProactiveMentor()
@@ -243,9 +246,21 @@ def main(override_goal: Optional[str] = None):
         print("Recorded milestone: {} ({})".format(milestone["name"], milestone["occurred_at"]))
         return
 
+    if args.approve_proposal or args.reject_proposal:
+        proposal_id = args.approve_proposal or args.reject_proposal
+        decision = mentor.next_best_action.record_approval(proposal_id, approved=bool(args.approve_proposal))
+        print(json.dumps(decision, indent=2))
+        print("Consent recorded only; no code, outreach, or publication was executed.")
+        return
+
     if args.observe:
         evidence = {"task_description": args.task_description} if args.task_description else {}
         result = mentor.recommend_next_action(args.observe, evidence)
+        if args.propose_action:
+            proposal = mentor.next_best_action.propose_action(result, args.propose_action)
+            print(json.dumps(proposal, indent=2))
+            print("Proposal recorded; it has not been executed.")
+            return
         print("\\nASCM Next-Best-Action Recommendation")
         print("Goal: {}".format(result.get("goal") or "not configured"))
         for index, action in enumerate(result.get("actions", []), 1):
