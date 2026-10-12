@@ -82,12 +82,11 @@ class ActiveWindowAdapter:
             ])
         elif system == "windows":
             script = (
-                "Add-Type @'
-using System; using System.Runtime.InteropServices;
-"
+                "Add-Type @'\n"
+                "using System; using System.Runtime.InteropServices;\n"
                 "public class ForegroundWindow { [DllImport(\"user32.dll\")] "
-                "public static extern IntPtr GetForegroundWindow(); }
-'@; "
+                "public static extern IntPtr GetForegroundWindow(); }\n"
+                "'@; "
                 "$h=[ForegroundWindow]::GetForegroundWindow(); "
                 "$p=Get-Process | Where-Object { $_.MainWindowHandle -eq $h } | Select-Object -First 1 -ExpandProperty ProcessName; "
                 "if ($p) { $p }"
