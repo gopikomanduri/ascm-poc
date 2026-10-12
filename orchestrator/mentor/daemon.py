@@ -335,34 +335,83 @@ class UniversalASCMDaemon:
         """Disable the login service and remove its registration without deleting history."""
         platform_name = sys.platform.lower()
         removed = []
+        errors = []
         if platform_name.startswith("darwin"):
             plist_path = Path.home() / "Library" / "LaunchAgents" / "com.ascm.mentor.plist"
             if plist_path.exists():
-                subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True, timeout=10)
-                plist_path.unlink(missing_ok=True)
-                removed.append(str(plist_path))
+                try:
+                    result = subprocess.run(
+                        ["launchctl", "unload", str(plist_path)],
+                        capture_output=True, timeout=10, check=False,
+                    )
+                    if result.returncode != 0:
+                        errors.append("launchctl could not unload the service")
+                    plist_path.unlink(missing_ok=True)
+                    removed.append(str(plist_path))
+                except (OSError, subprocess.SubprocessError) as exc:
+                    errors.append(f"launchctl error: {type(exc).__name__}")
         elif platform_name.startswith("linux"):
             service_path = Path.home() / ".config" / "systemd" / "user" / "ascm-mentor.service"
-            subprocess.run(
-                ["systemctl", "--user", "disable", "--now", "ascm-mentor.service"],
-                capture_output=True, timeout=15,
-            )
+            try:
+                result = subprocess.run(
+                    ["systemctl", "--user", "disable", "--now", "ascm-mentor.service"],
+                    capture_output=True, timeout=15, check=False,
+                )
+                if result.returncode != 0:
+                    errors.append("systemd could not confirm service shutdown")
+            except (OSError, subprocess.SubprocessError) as exc:
+                errors.append(f"systemd error: {type(exc).__name__}")
             if service_path.exists():
                 service_path.unlink()
                 removed.append(str(service_path))
-            subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, timeout=10)
+            try:
+                subprocess.run(
+                    ["systemctl", "--user", "daemon-reload"],
+                    capture_output=True, timeout=10, check=False,
+                )
+            except (OSError, subprocess.SubprocessError):
+                errors.append("systemd daemon-reload was unavailable")
         elif platform_name.startswith("win"):
             startup_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
             startup_path = startup_dir / "ascm_mentor_daemon.bat"
             if startup_path.exists():
                 startup_path.unlink()
                 removed.append(str(startup_path))
+            # Stop only the process named by this workspace's PID file and verify its command line.
+            try:
+                pid = int(self.pid_file.read_text(encoding="utf-8").strip())
+                result = subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                     f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').CommandLine"],
+                    capture_output=True, text=True, timeout=5, check=False,
+                )
+                command_line = result.stdout or ""
+                if "orchestrator.mentor.daemon" in command_line and str(self.repo_path) in command_line:
+                    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                                   capture_output=True, timeout=10, check=False)
+            except (OSError, ValueError, subprocess.SubprocessError):
+                errors.append("could not verify/stop the current Windows daemon process")
         else:
             return "Autostart uninstallation is not supported on this platform."
-        return (
+
+        message = (
             "Autostart registration removed: " + ", ".join(removed)
-            if removed else "No ASCM autostart registration was found. Local history was preserved."
+            if removed else "No ASCM autostart registration was found."
         )
+        if errors:
+            message += " Warnings: " + "; ".join(errors)
+        message += " Local history was preserved."
+        try:
+            self.audit_logger.log_event(
+                "DAEMON_AUTOSTART_UNINSTALL", agent="DAEMON_LIFECYCLE",
+                action="UNINSTALL", details={
+                    "platform": platform_name, "registration_removed": bool(removed),
+                    "warning_count": len(errors), "history_preserved": True,
+                }, level="WARN" if errors else "INFO",
+            )
+        except Exception:
+            logger.warning("[Daemon] Could not audit autostart uninstallation.")
+        return message
 
     def install_autostart_service(self) -> str:
         """Installs self into OS native autostart service manager."""
