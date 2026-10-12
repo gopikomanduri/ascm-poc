@@ -2,6 +2,18 @@
 
 This document describes the current implementation and the gates required before a paid production launch. Passing unit tests or a static scan alone is not a commercial-readiness certification.
 
+## Founder intelligence decision loop
+
+The next-best-action engine now exposes a separate `founder_decision` object produced by `orchestrator/mentor/founder_intelligence.py`. It ranks six paths—build, reuse, simplify, customer validation, launch/sell, and pause/stop—using explicit context and conservative deterministic rules. The CLI prints the leading path, confidence, top-ranked alternatives, and missing evidence.
+
+Important limitations:
+
+- A score is a prioritization heuristic, not a calibrated probability or proof that a path is best.
+- Missing founder goal forces `clarify_goal`; absent evidence is reported rather than fabricated.
+- Reuse candidates, demand verification, launch readiness, repeated failures, and stop signals must be supplied as explicit evidence; the engine does not claim it discovered these facts by itself.
+- This layer only recommends. It does not execute code, publish campaigns, contact customers, or authorize consequential actions.
+- The daemon has not yet been proven to gather all required evidence and run this decision loop on every relevant event. Event-to-decision wiring and 30-day usefulness measurements remain release work.
+
 ## Activity signals now supported
 
 | Signal | Adapter | Stored data | Default |
