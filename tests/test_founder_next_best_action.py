@@ -25,6 +25,20 @@ class FounderContextStoreTests(unittest.TestCase):
 
 
 class NextBestActionTests(unittest.TestCase):
+    def test_local_action_proposal_requires_approval_and_is_audited(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            audit = mock.Mock()
+            engine = NextBestActionEngine(project_path=tmp, audit_logger=audit)
+            proposal = engine.propose_local_action("inspect_git_status")
+            self.assertEqual(proposal["status"], "pending_approval")
+            self.assertTrue(proposal["requires_approval"])
+            self.assertEqual(proposal["action_type"], "inspect_git_status")
+            audit.log_event.assert_called_once()
+            approved = engine.record_approval(proposal["proposal_id"], approved=True)
+            self.assertEqual(approved["status"], "approved")
+            with self.assertRaises(ValueError):
+                engine.propose_local_action("run_shell_command")
+
     def test_deterministic_mentor_initializes_without_llm_credentials(self):
         from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
         with tempfile.TemporaryDirectory() as tmp:
