@@ -219,8 +219,17 @@ class ASCMProactiveMentor:
         return advice
 
     def _save_state(self, state_dict: Dict[str, Any]):
+        self.mentor_state_file.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.mentor_state_file.parent.chmod(0o700)
+        except OSError:
+            pass
         with open(self.mentor_state_file, "w", encoding="utf-8") as f:
             json.dump(state_dict, f, indent=2)
+        try:
+            self.mentor_state_file.chmod(0o600)
+        except OSError:
+            pass
 
 
 def datetime_now_iso():
