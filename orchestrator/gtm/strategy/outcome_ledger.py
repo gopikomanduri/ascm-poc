@@ -17,13 +17,13 @@ class OutcomeLedger:
         "email_sent", "customer_reply", "meeting_booked", "qualified_opportunity",
         "conversion", "experiment_reviewed", "experiment_stopped",
     }
-    SOURCES = {"operator", "sales_agent", "publisher", "system", "api", "test"}
+    SOURCES = {"operator", "sales_agent", "sales_agent_reply_classifier", "publisher", "system", "api", "test"}
     METRIC_KEYS = {
         "sentiment", "reply_count", "meeting_count", "qualified_opportunity_count",
         "conversion_count", "revenue_amount", "currency", "channel",
         "days_to_reply", "response_time_hours", "source_system",
     }
-    SENTIMENTS = {"interested", "not_interested", "neutral", "positive", "negative", "unknown"}
+    SENTIMENTS = {"interested", "not_interested", "neutral", "positive", "negative", "out_of_office", "unknown"}
 
     def __init__(self, project_path: Path):
         self.history_dir = Path(project_path) / ".ascm_history"
