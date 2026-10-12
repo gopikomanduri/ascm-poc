@@ -295,6 +295,15 @@ def main(override_goal: Optional[str] = None):
             return
         print("\\nASCM Next-Best-Action Recommendation")
         print("Goal: {}".format(result.get("goal") or "not configured"))
+        decision = result.get("founder_decision", {})
+        if decision:
+            print("Founder decision: {} (confidence: {})".format(
+                decision.get("recommended_path", "undetermined"), decision.get("confidence", "low")
+            ))
+            if decision.get("missing_evidence"):
+                print("Missing evidence: {}".format(", ".join(decision["missing_evidence"])))
+            for path in decision.get("ranked_paths", [])[:3]:
+                print("   - {path}: {score}/100 — {reason}".format(**path))
         for index, action in enumerate(result.get("actions", []), 1):
             print("\\n{}. {} [{}]".format(index, action["title"], action["confidence"]))
             print("   Why: {}".format(action["rationale"]))
