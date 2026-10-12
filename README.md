@@ -4,7 +4,7 @@
 
 ASCM coordinates a squad of AI agents — Product, Architect, Coder, Adversarial Critic, and Security Auditor — to deliver features across **multiple repositories simultaneously**, with a human approval gate before any code is committed.
 
-[![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen)](tests/)
+[![CI](https://github.com/gopikomanduri/ascm-poc/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/gopikomanduri/ascm-poc/actions/workflows/ci-cd.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Open Source](https://img.shields.io/badge/open--source-BYOK-violet)](https://github.com/gopikomanduri/ascm-poc)
 
@@ -51,14 +51,14 @@ ASCM is not an autocomplete plugin or a chatbot wrapper. It is an **autonomous, 
   - `CoderAgent`: Polyglot code generation (Go, Python, TypeScript) with **mandatory Test-Driven Development (TDD)** — generates implementation code *and* unit test suites (using `testify`, `pytest`, `unittest`, or `jest`).
   - `CodeReviewAgent` / `CriticAgent`: Independent adversarial review. Employs a **different LLM model** than the Coder (e.g. Claude 3.5 Sonnet auditing Gemini 2.5 Flash, or local deepseek-coder) to eliminate same-model self-confirmation bias.
   - `BusinessStrategyAgent`: Generates vertical market economics, competitive battlecards, and GTM strategy for the detected domain.
-- **Local-First & Air-Gapped (`install.sh`, `dashboard_server.py`)**:
-  - Runs directly on `localhost:8080` (FastAPI + Vanilla JS/CSS dashboard).
-  - Interacts directly with your local filesystem and local Git repositories.
-  - **Your proprietary source code never leaves your machine.** Supports BYOK cloud models (Gemini, Claude, GPT-4o) and 100% offline air-gapped SLMs via Ollama (Qwen 2.5 Coder, Phi-4).
+- **Local-first runtime (`install.sh`, `dashboard_server.py`)**:
+  - The dashboard runs on `localhost:8080` by default.
+  - Activity history is stored locally in `.ascm_history`.
+  - If a cloud LLM provider is configured, prompt/context data sent to that provider leaves the machine. Use a local model and verify provider/network settings for deployments that require offline processing. Local-first behavior alone is not a compliance certification.
 - **Engineering Safety & Guardrails**:
   - `orchestrator/engine/sandbox.py`: Enforces strict directory path jail limits preventing unauthorized disk access.
   - `orchestrator/budget/token_forecaster.py`: Pre-flight P50/P90 token forecaster with automatic budget circuit breakers before executing LLM calls.
-  - `orchestrator/security/audit_logger.py`: Tamper-evident JSONL audit trail with SHA-256 cryptographic hash chaining.
+  - `orchestrator/security/audit_logger.py`: Structured, PII-scrubbed local audit logs with bounded rotation. These logs are not tamper-proof or a compliance certification.
   - `orchestrator/security/pii_scrubber.py`: High-entropy secret and credential scrubber.
 
 ### 2. Codebase Directory Map
@@ -70,7 +70,7 @@ ASCM is not an autocomplete plugin or a chatbot wrapper. It is an **autonomous, 
   - External Flagship: [**Mutual Funds SLM Copilot**](https://github.com/gopikomanduri/mutual-funds-slm) — SEBI/SEC compliant edge financial copilot with real-time AMFI data sync, multi-broker gateway, and RBI Account Aggregator.
 - `tools/ascm_math_proofs.py`: 6 probabilistic theorems with Monte Carlo simulation scripts (500k trials) proving defect reduction and coordination correctness.
 - `tools/mr_bench.py`: Benchmark suite evaluating multi-repo AI coordination tasks.
-- `tests/`: 15 comprehensive test suites covering 89 core tests + 9 product tests (98/98 passing).
+- `tests/`: Automated unit and regression tests; see the latest GitHub Actions run for the current validated count.
 
 ---
 
@@ -84,20 +84,19 @@ If you are an investor, founder, or engineering executive, here is the commercia
 - When a developer uses existing AI to modify a backend API, the AI cannot see or update the frontend client or consumer SDK. This causes **silent breaking contract changes, integration outages, and broken CI pipelines** — turning senior engineers into full-time AI code cleanup crews.
 
 ### 2. Concrete ROI & Defect Reduction (Backed by Math)
-- **Zero Breaking Contract Outages**: In uncoordinated multi-repo development, the probability of a breaking contract change is $P(\text{breaking}) = 78.4\%$. ASCM's atomic multi-repo synchronization brings this defect escape rate to **~0%**.
-- **59.1% Defect Escape Reduction via Independent Critic**: When the same AI model reviews its own code, it shares blindspots (confirmation bias). ASCM enforces an independent model architecture (Theorem 1), cutting bug escapes by **59.1%** (verified via 500,000 Monte Carlo trials).
-- **36% to 63% LLM Inference Cost Reduction**: ASCM's Blueprint Engine (`orchestrator/knowledge/blueprint_engine.py`) indexes and reuses validated architectural patterns, drastically cutting token consumption.
-- **Enterprise Compliance & Air-Gapped Security**: Regulated industries (FinTech, Defense, Healthcare) are legally barred from sending proprietary code to cloud AI servers. ASCM runs 100% locally with open-weight models (Ollama), complying with HIPAA, SOC 2, and data residency laws.
+- **Research hypotheses, not production guarantees**: mathematical simulations and benchmark scores in this repository are model-based results. They are not independent empirical evidence of zero outages, specific defect reductions, or customer ROI.
+- **Reuse and cost optimization**: blueprint reuse is intended to reduce repeated work; savings must be measured on representative customer workloads before making quantified claims.
+- **Deployment and compliance**: local models can support offline deployments, but ASCM does not by itself establish HIPAA, SOC 2, or other regulatory compliance. Customers must validate their full deployment and controls.
 
 ### 3. Business Model & Go-To-Market
 - **Open-Core / Community (Free Forever)**: 100% local CLI and dashboard with Bring-Your-Own-Key (BYOK). Drives developer adoption from the ground up, following the playbook of Docker, Git, and Terraform.
 - **Team Tier ($49/seat/month)**: Shared blueprint memory across teams, custom domain adapter packs, and priority technical support.
 - **Enterprise Air-Gapped Pilot ($5,000 – $10,000 / 90-day pilot)**: Hands-on deployment on client infrastructure, custom SLM fine-tuning, SOC 2 audit trail compliance, and dedicated engineering support.
-- **Current Traction**: 103/103 unit tests passing, 3 production-grade reference implementations across FinTech, Web3, and CAD/CAM, zero debt, ready for developer adoption.
+- **Current status**: this is an evolving proof of concept. Reference applications and tests are not evidence of production adoption, zero technical debt, or commercial readiness.
 
 ---
 
-## What's Built (103/103 Tests Passing)
+## What's Built (status is validated by CI)
 
 ### Core Engine
 - Multi-agent orchestrator with 5 specialized agents
@@ -107,8 +106,8 @@ If you are an investor, founder, or engineering executive, here is the commercia
 - Blueprint engine: reuses prior architectural patterns (reduces LLM cost 36–63%)
 - Pre-flight cost radar: P50/P90 token forecaster with circuit breakers
 - Mandatory TDD: tests required before milestone confirmation
-- Tamper-evident JSONL audit log with SHA-256 hash chain
-- PII scrubber: strips secrets and personal data from all LLM prompts
+- Structured local audit logging with PII/credential scrubbing and bounded rotation
+- PII scrubber: redacts known secret and personal-data patterns; it cannot guarantee detection of every sensitive value
 - Air-gapped local SLM mode via Ollama (Qwen 2.5 Coder, Phi-4)
 
 ### Reference Implementations
