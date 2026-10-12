@@ -130,7 +130,7 @@ class ProductAgentConfidenceTests(unittest.TestCase):
                 {"checkpoint": "TASK-DB", "question": "Use Postgres connection pooling?", "default_assumption": "max_open=25"}
             ]
         })
-        agent = ProductAgent()
+        agent = ProductAgent(provider=MagicMock())
         res = agent.run("Detailed PRD for payment service")
         self.assertTrue(res["is_clear"])
         self.assertGreaterEqual(res["confidence_score"], 0.90)
@@ -149,7 +149,7 @@ class ProductAgentConfidenceTests(unittest.TestCase):
             "clarification_questions": ["What API protocols?", "What database?"],
             "checkpoint_clarification_items": []
         })
-        agent = ProductAgent()
+        agent = ProductAgent(provider=MagicMock())
         res = agent.run("build a product")
         self.assertFalse(res["is_clear"])
         self.assertLess(res["confidence_score"], 0.90)
