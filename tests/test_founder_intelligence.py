@@ -169,6 +169,13 @@ class FounderIntelligenceDaemonIntegrationTests(unittest.TestCase):
             self.assertEqual(daemon.audit_logger.log_event.call_args.args[0], "MENTOR_RECOMMENDATION")
             self.assertEqual(daemon.mentor.received[0], "code_activity")
             self.assertTrue(daemon.mentor.received[1]["tests_failed"])
+            self.assertIn("customer_evidence_summary", daemon.mentor.received[1])
+            self.assertFalse(daemon.mentor.received[1]["customer_evidence_summary"]["user_demand_verified"])
+            self.assertIn("reuse_evidence_summary", daemon.mentor.received[1])
+            self.assertFalse(daemon.mentor.received[1]["reuse_evidence_summary"]["enabled"])
+            self.assertIn("Open-source search disabled", notify.call_args.args[1])
+            self.assertIn("--feedback helpful --intervention-id", notify.call_args.args[1])
+            self.assertIn("--report --session-id", notify.call_args.args[1])
 
 
 if __name__ == "__main__":
