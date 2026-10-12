@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
+from orchestrator.security.audit_logger import AuditLogger
+
 
 OUTCOME_EVENTS = {
     "customer_reply", "meeting_booked", "qualified_opportunity", "conversion",
@@ -101,6 +103,7 @@ class NextBestActionEngine:
         self.history_dir = self.project_path / ".ascm_history"
         self.context_store = FounderContextStore(self.project_path)
         self.proposals_path = self.history_dir / "action_proposals.json"
+        self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
 
     def recommend(
         self,
@@ -248,6 +251,12 @@ class NextBestActionEngine:
         temp = self.proposals_path.with_suffix(".tmp")
         temp.write_text(json.dumps(proposals, indent=2), encoding="utf-8")
         temp.replace(self.proposals_path)
+        self.audit_logger.log_event(
+            "ACTION_PROPOSED", agent="NEXT_BEST_ACTION_ENGINE",
+            action=action_type,
+            details={"proposal_id": proposal["proposal_id"], "status": proposal["status"],
+                     "observation": proposal.get("observation"), "requires_approval": action.get("requires_approval", False)},
+        )
         return proposal
 
     def record_approval(self, proposal_id: str, *, approved: bool, actor: str = "founder") -> Dict[str, Any]:
@@ -266,5 +275,17 @@ class NextBestActionEngine:
                 temp = self.proposals_path.with_suffix(".tmp")
                 temp.write_text(json.dumps(proposals, indent=2), encoding="utf-8")
                 temp.replace(self.proposals_path)
+                self.audit_logger.log_governance(
+                    milestone=proposal.get("action_type", "unknown"),
+                    decision="approved" if approved else "rejected",
+                    feedback=None,
+                    auto_approved=False,
+                )
+                self.audit_logger.log_event(
+                    "ACTION_APPROVAL_RECORDED", agent="HUMAN_IN_THE_LOOP",
+                    action="APPROVE" if approved else "REJECT",
+                    details={"proposal_id": proposal_id, "actor": actor,
+                             "execution_performed": False},
+                )
                 return proposal
         raise KeyError(f"Unknown proposal id: {proposal_id}")
