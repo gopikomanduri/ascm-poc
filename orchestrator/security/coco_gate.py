@@ -109,9 +109,13 @@ def run_coco(paths: list[Path], repo_root: Path, timeout: int = 180) -> dict[str
                     "issues": ["ASCM_COCO_AGENT_CMD must be a non-empty JSON array of strings."]}
     elif shutil.which("coco"):
         command = ["coco"]
+    elif os.environ.get("CI", "").lower() == "true" and shutil.which("npx"):
+        # Some CI runners install the npm package but omit its global bin directory
+        # from the Python subprocess PATH. Use the exact pinned package through npx.
+        command = ["npx", "--yes", "git-coco@0.91.0"]
     else:
         return {"status": "not_configured", "passed": None,
-                "issues": ["Coco CLI is not installed and ASCM_COCO_AGENT_CMD is not configured."]}
+                "issues": ["Coco CLI is not available; configure ASCM_COCO_AGENT_CMD or install Coco."]}
 
     base_branch = os.environ.get("GITHUB_BASE_REF", "main").strip() or "main"
     base_ref = f"origin/{base_branch}"
