@@ -1,5 +1,9 @@
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
+from orchestrator.mentor.daemon import UniversalASCMDaemon
 from orchestrator.mentor.founder_intelligence import FounderIntelligenceEngine
 
 
@@ -70,6 +74,77 @@ class FounderIntelligenceTests(unittest.TestCase):
     def test_invalid_evidence_rejected(self):
         with self.assertRaises(ValueError):
             self.engine.evaluate(goal="Goal", observation="code_activity", evidence=[])
+
+
+
+class _FakeFounderContext:
+    def __init__(self, goal):
+        self.goal = goal
+
+    def load(self):
+        return {"current_goal": self.goal}
+
+
+class _FakeFusion:
+    def __init__(self, context):
+        self.context = context
+
+    def latest_project_path(self):
+        return Path(".")
+
+    def infer_context(self, project_path=None):
+        return self.context
+
+
+class _FakeDecisionMentor:
+    def __init__(self, goal, recommendation):
+        self.founder_context = _FakeFounderContext(goal)
+        self.recommendation = recommendation
+        self.received = None
+
+    def recommend_next_action(self, observation, evidence):
+        self.received = (observation, evidence)
+        return self.recommendation
+
+
+class FounderIntelligenceDaemonIntegrationTests(unittest.TestCase):
+    def test_daemon_surfaces_decision_and_missing_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            daemon = UniversalASCMDaemon.__new__(UniversalASCMDaemon)
+            daemon.history_dir = Path(tmp)
+            daemon.audit_logger = mock.Mock()
+            daemon.context_fusion = _FakeFusion({
+                "task_hypothesis": "Investigating test failures after recent code changes",
+                "confidence": 0.82,
+                "evidence_event_ids": ["edit-1", "test-fail-1"],
+                "rationale": "A test failure followed a code change.",
+                "project_id": "project-a",
+            })
+            daemon.mentor = _FakeDecisionMentor(
+                "Launch invoice automation",
+                {
+                    "actions": [{"title": "Simplify the failing slice", "rationale": "Narrow the failure."}],
+                    "founder_decision": {
+                        "recommended_path": "simplify",
+                        "confidence": "medium",
+                        "ranked_paths": [
+                            {"path": "simplify", "score": 80},
+                            {"path": "customer_validate", "score": 75},
+                            {"path": "reuse", "score": 60},
+                        ],
+                        "missing_evidence": ["customer_evidence", "reuse_candidates"],
+                    },
+                },
+            )
+            with mock.patch("orchestrator.mentor.daemon.CrossPlatformNotifier.notify") as notify:
+                daemon._prompt_for_founder_context(
+                    {"filesystem_activity": {"recently_edited_files": []}}, {}, 100000
+                )
+            self.assertIn("Founder Intelligence: Simplify", notify.call_args.args[0])
+            self.assertIn("customer_evidence", notify.call_args.args[1])
+            self.assertEqual(daemon.audit_logger.log_event.call_args.args[0], "MENTOR_RECOMMENDATION")
+            self.assertEqual(daemon.mentor.received[0], "code_activity")
+            self.assertTrue(daemon.mentor.received[1]["tests_failed"])
 
 
 if __name__ == "__main__":
