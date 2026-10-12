@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import MagicMock
 from orchestrator.engine.verifier import VerifierEngine, VerificationResult
 from orchestrator.dashboard import DashboardState
 from orchestrator.agents.all_agents import GoCoderAgent, CoderAgent
@@ -126,7 +127,7 @@ Time:        1.25 s
         self.assertTrue(any("Unit tests PASSED" in evt["action"] for evt in snapshot["timeline_events"]))
 
     def test_coder_agent_system_prompt_enforces_famous_test_libraries(self):
-        coder = GoCoderAgent()
+        coder = GoCoderAgent(provider=MagicMock())
         prompt = coder.system_instruction
         self.assertIn("stretchr/testify", prompt)
         self.assertIn("pytest", prompt)
@@ -135,7 +136,7 @@ Time:        1.25 s
         self.assertIn("table-driven", prompt.lower())
 
         # CoderAgent alias check
-        alias_coder = CoderAgent()
+        alias_coder = CoderAgent(provider=MagicMock())
         self.assertEqual(alias_coder.system_instruction, prompt)
 
 
