@@ -178,11 +178,20 @@ def run_cico(paths: list[Path], repo_root: Path, timeout: int = 180) -> dict[str
         normalized.append(item)
         if score >= 7:
             blocking.append(item)
+    # Import in this function's scope so both finding details and provider warnings
+    # are scrubbed consistently. A local import is not visible through globals().
     try:
         from orchestrator.security.pii_scrubber import PIIScrubber
         safe_issues = [PIIScrubber.scrub(json.dumps(item, ensure_ascii=False)) for item in normalized]
+        warnings = response.get("warnings", [])
+        safe_warnings = (
+            [PIIScrubber.scrub(str(item)[:500]) for item in warnings[:20]]
+            if isinstance(warnings, list) else []
+        )
     except Exception:
         safe_issues = [f"CICO reported {len(normalized)} finding(s); details omitted because redaction was unavailable."]
+        # Do not persist raw provider warning text if redaction is unavailable.
+        safe_warnings = []
     return {
         "status": "completed",
         "passed": not blocking,
@@ -190,9 +199,7 @@ def run_cico(paths: list[Path], repo_root: Path, timeout: int = 180) -> dict[str
         "finding_count": len(normalized),
         "blocking_finding_count": len(blocking),
         "severity_threshold": 7,
-        "provider_warnings": [
-            PIIScrubber.scrub(str(item)[:500]) for item in response.get("warnings", [])[:20]
-        ] if isinstance(response.get("warnings", []), list) and "PIIScrubber" in globals() else [],
+        "provider_warnings": safe_warnings,
     }
 
 
