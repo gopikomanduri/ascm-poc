@@ -22,6 +22,19 @@ class FakeContext:
         return {"current_goal": self.goal, "current_task": self.current_task}
 
 
+class FakeContextFusion:
+    def __init__(self, context=None):
+        self.context = context or {
+            "task_hypothesis": None,
+            "confidence": 0.0,
+            "evidence_event_ids": [],
+            "rationale": "Insufficient evidence",
+        }
+
+    def infer_context(self, project_path=None):
+        return self.context
+
+
 class FakeMentor:
     def __init__(self, goal=None):
         self.founder_context = FakeContext(goal)
@@ -44,6 +57,7 @@ class ProactiveDaemonPromptTests(unittest.TestCase):
         daemon.history_dir = Path(tmp)
         daemon.history_dir.mkdir(parents=True, exist_ok=True)
         daemon.mentor = FakeMentor(goal)
+        daemon.context_fusion = FakeContextFusion()
         return daemon
 
     def test_first_observed_edit_prompts_and_persists_goal_without_cli(self):
@@ -69,22 +83,49 @@ class ProactiveDaemonPromptTests(unittest.TestCase):
             self.assertTrue((Path(tmp) / "daemon_state.json").exists())
             notify.assert_called_once()
 
-    def test_known_goal_captures_task_and_immediately_recommends_next_step(self):
+    def test_known_goal_uses_high_confidence_inference_without_asking_again(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            daemon = self._daemon(tmp, goal="Launch a secure customer portal")
+            daemon.context_fusion = FakeContextFusion({
+                "task_hypothesis": "Investigating test failures after recent code changes",
+                "confidence": 0.82,
+                "evidence_event_ids": ["edit-1", "test-1"],
+                "rationale": "A test failure followed a code change.",
+            })
+            activity = {"filesystem_activity": {"recently_edited_files": ["/work/auth.py"]}}
+            state = {}
+            with mock.patch(
+                "orchestrator.mentor.daemon.CrossPlatformNotifier.prompt_dialog"
+            ) as prompt, mock.patch(
+                "orchestrator.mentor.daemon.CrossPlatformNotifier.notify"
+            ) as notify:
+                daemon._prompt_for_founder_context(activity, state, 100000)
+            prompt.assert_not_called()
+            self.assertEqual(
+                daemon.mentor.recommendations,
+                [("code_activity", {
+                    "task_description": "Investigating test failures after recent code changes",
+                    "context_confidence": 0.82,
+                    "evidence_event_ids": ["edit-1", "test-1"],
+                    "inference_rationale": "A test failure followed a code change.",
+                })],
+            )
+            self.assertEqual(state["last_context_recommendation_at"], 100000)
+            self.assertEqual(notify.call_args.args[0], "ASCM Mentor: Suggested next step")
+            self.assertIn("Check reuse first", notify.call_args.args[1])
+
+    def test_known_goal_with_low_confidence_stays_silent(self):
         with tempfile.TemporaryDirectory() as tmp:
             daemon = self._daemon(tmp, goal="Launch a secure customer portal")
             activity = {"filesystem_activity": {"recently_edited_files": ["/work/auth.py"]}}
             with mock.patch(
-                "orchestrator.mentor.daemon.CrossPlatformNotifier.prompt_dialog",
-                return_value="Implement authentication",
-            ), mock.patch("orchestrator.mentor.daemon.CrossPlatformNotifier.notify") as notify:
+                "orchestrator.mentor.daemon.CrossPlatformNotifier.prompt_dialog"
+            ) as prompt, mock.patch(
+                "orchestrator.mentor.daemon.CrossPlatformNotifier.notify"
+            ) as notify:
                 daemon._prompt_for_founder_context(activity, {}, 100000)
-            self.assertEqual(daemon.mentor.founder_context.current_task, "Implement authentication")
-            self.assertEqual(
-                daemon.mentor.recommendations,
-                [("code_activity", {"task_description": "Implement authentication"})],
-            )
-            self.assertEqual(notify.call_args.args[0], "ASCM Mentor: Recommended next step")
-            self.assertIn("Check reuse first", notify.call_args.args[1])
+            prompt.assert_not_called()
+            notify.assert_not_called()
 
     def test_persistent_cooldown_prevents_repeated_interruptions(self):
         with tempfile.TemporaryDirectory() as tmp:
