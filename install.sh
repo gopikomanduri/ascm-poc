@@ -98,6 +98,30 @@ fi
 WATCH_DIR="$(cd "$WATCH_DIR" && pwd -P)"
 success "Workspace selected: $WATCH_DIR"
 
+# Foreground application names are a separate, optional activity signal.
+# The default is off; no window title or document content is captured.
+ACTIVE_WINDOW_MONITOR="${ASCM_ACTIVE_WINDOW_MONITOR:-}"
+if [[ -z "$ACTIVE_WINDOW_MONITOR" ]]; then
+    ACTIVE_WINDOW_MONITOR="0"
+    if [[ -r /dev/tty ]]; then
+        echo ""
+        info "Optional context signal: ASCM can record foreground app names (for example, VS Code or a browser)."
+        info "It does not read window titles, page contents, keystrokes, or screenshots."
+        read -r -p "Enable foreground app-name signals? [y/N]: " ENABLE_ACTIVE_APP < /dev/tty || true
+        case "${ENABLE_ACTIVE_APP:-}" in
+            y|Y|yes|YES) ACTIVE_WINDOW_MONITOR="1" ;;
+        esac
+    else
+        info "Foreground app-name signals are disabled by default in non-interactive installs."
+    fi
+fi
+export ASCM_ACTIVE_WINDOW_MONITOR="$ACTIVE_WINDOW_MONITOR"
+if [[ "$ACTIVE_WINDOW_MONITOR" == "1" ]]; then
+    success "Foreground app-name signals enabled by explicit choice."
+else
+    info "Foreground app-name signals disabled. Enable later with ASCM_ACTIVE_WINDOW_MONITOR=1."
+fi
+
 # ── Create launcher script ────────────────────────────────────────────────────
 LAUNCHER="$HOME/.local/bin/ascm"
 mkdir -p "$(dirname "$LAUNCHER")"
