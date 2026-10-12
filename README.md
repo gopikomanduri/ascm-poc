@@ -253,3 +253,8 @@ If you're interested: [founders@ascm.dev](mailto:founders@ascm.dev)
 ---
 
 *Built with [Google Gemini](https://ai.google.dev) · Open Source (MIT)*
+
+
+## License
+
+ASCM source code is licensed under the [MIT License](LICENSE). Third-party dependencies and bundled assets retain their respective licenses; review dependency notices before redistributing a commercial build.
