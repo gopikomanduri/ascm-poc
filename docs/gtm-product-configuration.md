@@ -9,7 +9,6 @@ The continuous GTM engine reads `.ascm_product.json` from the project root. It d
   "icp_description": "Specific roles, company stage, and observable qualification criteria.",
   "milestone_name": "Private beta",
   "domain_keywords": ["specific problem phrase", "existing workaround"],
-  "channels": ["hacker_news", "dev_to", "github", "tech_feeds"],
   "sender_name": "Founder",
   "tone": "Candid, concise, evidence-based",
   "goals": ["Conduct 5 discovery interviews"]
