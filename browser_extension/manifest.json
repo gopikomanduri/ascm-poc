@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "ASCM Private Activity Signals",
+  "version": "0.1.0",
+  "description": "Opt-in hostname-only browser activity signals for ASCM. Does not capture page content or full URLs.",
+  "permissions": [
+    "tabs",
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
