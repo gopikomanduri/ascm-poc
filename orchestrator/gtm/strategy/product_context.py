@@ -5,7 +5,7 @@ stay explicitly generic rather than silently assuming a particular product or IC
 """
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import List
 
@@ -36,7 +36,7 @@ class ProductContext:
             raise ValueError(f"Cannot read product config {config_path}: {exc}") from exc
         if not isinstance(payload, dict):
             raise ValueError("Product config must be a JSON object")
-        allowed = {item.name for item in __import__("dataclasses").fields(cls)}
+        allowed = {item.name for item in fields(cls)}
         unknown = set(payload) - allowed
         if unknown:
             raise ValueError(f"Unknown product config fields: {', '.join(sorted(unknown))}")
