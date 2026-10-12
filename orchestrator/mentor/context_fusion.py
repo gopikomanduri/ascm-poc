@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
 
-ALLOWED_EVENT_TYPES = {"file_changed", "test_passed", "test_failed"}
+ALLOWED_EVENT_TYPES = {"file_changed", "test_passed", "test_failed", "active_app_changed", "browser_domain_seen", "terminal_command"}
 MAX_EVENTS_READ = 1000
 
 
@@ -115,6 +115,63 @@ class ContextFusionEngine:
         }
         return self._append(event)
 
+    def _record_project_event(self, *, project_path: str | Path, event_type: str, source: str, **metadata: Any) -> Dict[str, Any]:
+        """Append a schema-limited metadata event, never raw content."""
+        if event_type not in ALLOWED_EVENT_TYPES or event_type == "file_changed":
+            raise ValueError("Unsupported generic activity event")
+        root = self._project_root_for(project_path)
+        event = {
+            "event_id": str(uuid.uuid4()),
+            "timestamp": _iso(_now()),
+            "event_type": event_type,
+            "source": source,
+            "project_id": self._project_id(root),
+            "project_root": str(root),
+        }
+        allowed = {
+            "app_name": (str, 100),
+            "domain": (str, 253),
+            "command_category": (str, 40),
+            "exit_code": (int, None),
+        }
+        for key, value in metadata.items():
+            if key not in allowed:
+                raise ValueError(f"Unsupported activity metadata field: {key}")
+            expected, max_len = allowed[key]
+            if value is not None and (not isinstance(value, expected) or isinstance(value, bool)):
+                raise ValueError(f"Invalid value for {key}")
+            if isinstance(value, str):
+                value = value.strip()
+                if not value or (max_len and len(value) > max_len):
+                    raise ValueError(f"Invalid value for {key}")
+            event[key] = value
+        return self._append(event)
+
+    def record_active_app(self, *, cwd: str | Path, app_name: str) -> Dict[str, Any]:
+        return self._record_project_event(
+            project_path=cwd, event_type="active_app_changed", source="active_window",
+            app_name=app_name,
+        )
+
+    def record_browser_domain(self, *, cwd: str | Path, domain: str) -> Dict[str, Any]:
+        # Caller must normalize and validate the domain; paths and query strings are never stored.
+        if "/" in domain or "?" in domain or "@" in domain:
+            raise ValueError("Only a hostname may be recorded")
+        return self._record_project_event(
+            project_path=cwd, event_type="browser_domain_seen", source="browser_opt_in",
+            domain=domain.lower(),
+        )
+
+    def record_terminal_event(
+        self, *, cwd: str | Path, command_category: str, exit_code: Optional[int] = None
+    ) -> Dict[str, Any]:
+        if exit_code is not None and (not isinstance(exit_code, int) or isinstance(exit_code, bool)):
+            raise ValueError("exit_code must be an integer or None")
+        return self._record_project_event(
+            project_path=cwd, event_type="terminal_command", source="shell_hook",
+            command_category=command_category, exit_code=exit_code,
+        )
+
     def _read_events(self) -> list[Dict[str, Any]]:
         try:
             lines = self.events_path.read_text(encoding="utf-8").splitlines()[-MAX_EVENTS_READ:]
@@ -179,6 +236,10 @@ class ContextFusionEngine:
         confidence = 0.0
         rationale = "No recent activity is available for this project."
         evidence = []
+        terminal = [e for e in recent if e.get("event_type") == "terminal_command"]
+        active_apps = [e for e in recent if e.get("event_type") == "active_app_changed"]
+        browser_events = [e for e in recent if e.get("event_type") == "browser_domain_seen"]
+        latest_terminal = max(terminal, key=lambda e: e["timestamp"], default=None)
         if latest_test and latest_edit and latest_test["timestamp"] >= latest_edit["timestamp"]:
             if latest_test["event_type"] == "test_failed":
                 task = "Investigating test failures after recent code changes"
@@ -200,6 +261,23 @@ class ContextFusionEngine:
             confidence = 0.35
             rationale = "A file changed, but there is not enough evidence to infer the underlying task."
             evidence = [latest_edit["event_id"]]
+        elif latest_terminal and latest_terminal.get("command_category") in {"python_tests", "javascript_tests", "go_tests", "rust_tests"}:
+            task = "Running and evaluating the project test suite"
+            confidence = 0.58
+            rationale = "A test command category was observed; no command text or output was retained."
+            evidence = [latest_terminal["event_id"]]
+        elif active_apps:
+            latest_app = max(active_apps, key=lambda e: e["timestamp"])
+            task = f"Working in {latest_app.get('app_name', 'an application')}"
+            confidence = 0.25
+            rationale = "Foreground application metadata is weak evidence and cannot establish project intent."
+            evidence = [latest_app["event_id"]]
+        elif browser_events:
+            latest_domain = max(browser_events, key=lambda e: e["timestamp"])
+            task = f"Researching {latest_domain.get('domain', 'a website')}"
+            confidence = 0.30
+            rationale = "An opt-in browser domain was observed; no page URL, path, title, or content was retained."
+            evidence = [latest_domain["event_id"]]
 
         context = {
             "project_id": project_id,
