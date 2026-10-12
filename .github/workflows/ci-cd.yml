@@ -43,6 +43,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Set up Node.js for Coco
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.2'
+      - name: Install pinned Coco security reviewer
+        run: npm install --global git-coco@0.91.0
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
@@ -56,6 +62,10 @@ jobs:
         env:
           PYTHONPATH: .
           ASCM_COCO_AGENT_CMD: ${{ secrets.ASCM_COCO_AGENT_CMD }}
+          COCO_SERVICE_PROVIDER: ${{ secrets.COCO_SERVICE_PROVIDER || 'gemini' }}
+          COCO_SERVICE_MODEL: ${{ secrets.COCO_SERVICE_MODEL || 'gemini-2.5-flash' }}
+          COCO_SERVICE_API_KEY: ${{ secrets.COCO_SERVICE_API_KEY || secrets.GEMINI_API_KEY || secrets.GOOGLE_API_KEY }}
+          COCO_USAGE_LOG: "0"
         shell: bash
         run: |
           mkdir -p security-artifacts
@@ -66,10 +76,7 @@ jobs:
           status=$?
           set -e
           echo "$status" > security-artifacts/ascm-security-gate-status.txt
-          if [ -z "$ASCM_COCO_AGENT_CMD" ]; then
-            echo "::error::Coco agent is not configured. Set the approved ASCM_COCO_AGENT_CMD repository secret before release."
-            echo "Coco agent not configured: no Coco review was performed." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          echo "Coco CLI review attempted; final gate requires a successful structured response." >> "$GITHUB_STEP_SUMMARY"
       - name: Run Bandit against changed Python files
         shell: bash
         run: |
