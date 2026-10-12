@@ -66,3 +66,16 @@ The latest observed CI run attempted the Coco review but failed because the Gemi
 To remove the OS login service without deleting local history, run `python -m orchestrator.mentor.daemon --repo /absolute/path/to/workspace --uninstall`. The terminal hooks and browser extension are separately opt-in and must be removed/disabled independently.
 
 The PR must remain unmerged until its latest CI run is green, Coco is actually invoked, findings are triaged, and a human review approves the release.
+
+
+## Approved local action execution (opt-in)
+
+The local executor supports only `inspect_git_status` and `run_pytest`. It never evaluates a shell string, runs arbitrary generated commands, publishes content, or contacts customers. Execution is disabled unless `ASCM_ENABLE_APPROVED_EXECUTION=1` is explicitly set. A proposal must already be marked `approved`; the executor records start/end status and uses a 300-second timeout. Test execution runs code from the configured repository, so enable it only for repositories you trust.
+
+Example after a proposal with an allowlisted action has been explicitly approved:
+
+```bash
+ASCM_ENABLE_APPROVED_EXECUTION=1 python -m orchestrator.mentor.proactive_mentor --execute-approved-proposal PROPOSAL_ID
+```
+
+This local gate is a safety layer for a single-user MVP, not an authorization boundary for a multi-user or hosted commercial service. Do not enable remote execution until identity, server-side authorization, isolation, and audited approval tokens are implemented.
