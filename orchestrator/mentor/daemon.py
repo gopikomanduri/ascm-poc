@@ -37,6 +37,8 @@ class UniversalASCMDaemon:
 
     def __init__(self, repo_path: str = ".", poll_interval_sec: int = 30, assist: bool = False):
         self.repo_path = Path(repo_path).resolve()
+        if any(char in str(self.repo_path) for char in ("\\n", "\\r", "\\x00")):
+            raise ValueError("Workspace path must not contain newline or NUL characters")
         self.poll_interval_sec = poll_interval_sec
         self.mentor = ASCMProactiveMentor(repo_path=str(self.repo_path))
         self.history_dir = self.repo_path / ".ascm_history"
@@ -50,7 +52,7 @@ class UniversalASCMDaemon:
         self.activity_monitor = ActivityAwareMonitor(repo_path=str(self.repo_path))
         self.context_fusion = ContextFusionEngine(workspace_path=self.repo_path)
         self.active_window_adapter = ActiveWindowAdapter(
-            enabled=os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "1").strip().lower()
+            enabled=os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "0").strip().lower()
             not in {"0", "false", "off", "no"}
         )
         self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
@@ -467,6 +469,11 @@ class UniversalASCMDaemon:
         <string>--repo</string>
         <string>{self.repo_path}</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ASCM_ACTIVE_WINDOW_MONITOR</key>
+        <string>{os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "0")}</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -495,7 +502,8 @@ Description=ASCM Proactive Founder & Engineering Mentor
 After=default.target
 
 [Service]
-WorkingDirectory={project_root}
+WorkingDirectory="{project_root}"
+Environment="ASCM_ACTIVE_WINDOW_MONITOR={os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "0")}"
 ExecStart="{py_exe}" -m orchestrator.mentor.daemon --repo "{self.repo_path}"
 Restart=always
 RestartSec=30
@@ -516,7 +524,7 @@ WantedBy=default.target
             # Generates Windows Startup batch file
             startup_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
             bat_path = startup_dir / "ascm_mentor_daemon.bat"
-            bat_content = f'@echo off\ncd /d "{project_root}"\nstart /B "" "{py_exe}" -m orchestrator.mentor.daemon --repo "{self.repo_path}"\n'
+            bat_content = f'@echo off\nset "ASCM_ACTIVE_WINDOW_MONITOR={os.environ.get("ASCM_ACTIVE_WINDOW_MONITOR", "0")}"\ncd /d "{project_root}"\nstart /B "" "{py_exe}" -m orchestrator.mentor.daemon --repo "{self.repo_path}"\n'
             with open(bat_path, "w") as f:
                 f.write(bat_content)
             subprocess.Popen(["cmd", "/c", str(bat_path)], cwd=str(project_root), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
