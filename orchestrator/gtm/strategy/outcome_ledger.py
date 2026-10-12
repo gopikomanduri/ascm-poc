@@ -17,11 +17,13 @@ class OutcomeLedger:
         "email_sent", "customer_reply", "meeting_booked", "qualified_opportunity",
         "conversion", "experiment_reviewed", "experiment_stopped",
     }
-    SOURCES = {"operator", "sales_agent", "sales_agent_reply_classifier", "publisher", "system", "api", "test"}
+    SOURCES = {"operator", "sales_agent", "sales_agent_reply_classifier", "publisher", "continuous_gtm_engine", "founder_prompt", "system", "api", "test"}
     METRIC_KEYS = {
         "sentiment", "reply_count", "meeting_count", "qualified_opportunity_count",
         "conversion_count", "revenue_amount", "currency", "channel",
         "days_to_reply", "response_time_hours", "source_system",
+        "product_configured", "intent_scan_status", "reviewed_event",
+        "review_note_recorded", "review_note_length",
     }
     SENTIMENTS = {"interested", "not_interested", "neutral", "positive", "negative", "out_of_office", "unknown"}
 
@@ -58,10 +60,18 @@ class OutcomeLedger:
                 if not isinstance(value, str) or value.strip().lower() not in self.SENTIMENTS:
                     raise ValueError("sentiment must be a supported coarse label")
                 safe_metrics[key] = value.strip().lower()
-            elif key in {"currency", "channel", "source_system"}:
+            elif key in {"product_configured", "review_note_recorded"}:
+                if not isinstance(value, bool):
+                    raise ValueError(f"{key} must be a boolean")
+                safe_metrics[key] = value
+            elif key in {"currency", "channel", "source_system", "intent_scan_status"}:
                 if not isinstance(value, str) or not value.strip() or len(value.strip()) > 64:
                     raise ValueError(f"{key} must be a short categorical label")
                 safe_metrics[key] = value.strip()
+            elif key == "reviewed_event":
+                if not isinstance(value, str) or value not in self.EVENT_TYPES:
+                    raise ValueError("reviewed_event must be a known event type")
+                safe_metrics[key] = value
             else:
                 if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                     raise ValueError(f"{key} must be a finite numeric metric")
@@ -144,7 +154,7 @@ def main():
     parser.add_argument("--project-path", default=".", help="Project root containing .ascm_history")
     parser.add_argument("--event", required=True, choices=sorted(OutcomeLedger.EVENT_TYPES))
     parser.add_argument("--experiment-id", required=True)
-    parser.add_argument("--source", default="operator")
+    parser.add_argument("--source", default="operator", choices=sorted(OutcomeLedger.SOURCES))
     parser.add_argument("--metrics-json", default="{}", help="JSON object with privacy-safe event metrics")
     parser.add_argument("--no-notify", action="store_true", help="Suppress the desktop notification")
     parser.add_argument("--prompt-review", action="store_true", help="Open a prompt to review the recorded outcome")
