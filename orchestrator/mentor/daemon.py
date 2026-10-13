@@ -177,6 +177,11 @@ class UniversalASCMDaemon:
                 "context_confidence": confidence,
                 "evidence_event_ids": evidence_ids,
                 "inference_rationale": inferred.get("rationale", ""),
+                # Carry founder-confirmed context into every decision, without promoting
+                # inferred activity hypotheses into confirmed facts.
+                "target_customer": context.get("target_customer"),
+                "constraints": list(context.get("constraints") or []),
+                "preferences": dict(context.get("preferences") or {}),
             }
             # Pass only signals supported by context or an explicit persisted founder fact.
             if context.get("next_milestone"):
