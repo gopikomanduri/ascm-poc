@@ -190,6 +190,27 @@ class InterventionQualityTrackerTests(unittest.TestCase):
             self.assertEqual(sparse["positive_feedback_rate"], 0.0)
             self.assertEqual(sparse["reviewed"], 1)
 
+    def test_feedback_is_immutable_after_first_rating(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tracker = InterventionQualityTracker(tmp)
+            shown = tracker.record_shown(
+                session_id="session-immutable",
+                project_id="project-a",
+                recommendation={"recommended_path": "reuse", "confidence": "medium"},
+            )
+            tracker.record_feedback(
+                feedback="helpful",
+                intervention_id=shown["intervention_id"],
+            )
+            with self.assertRaisesRegex(ValueError, "already has feedback"):
+                tracker.record_feedback(
+                    feedback="incorrect",
+                    intervention_id=shown["intervention_id"],
+                )
+            report = tracker.report("session-immutable")
+            self.assertEqual(report["feedback_counts"]["helpful"], 1)
+            self.assertEqual(report["feedback_counts"]["incorrect"], 0)
+
     def test_feedback_rejects_unknown_labels(self):
         with tempfile.TemporaryDirectory() as tmp:
             tracker = InterventionQualityTracker(tmp)
