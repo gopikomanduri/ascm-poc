@@ -113,13 +113,16 @@ async def ingest_outcome(request: Request) -> dict[str, Any]:
             return {"status": "duplicate_ignored", "source_event_id": event["source_event_id"]}
 
         ledger = OutcomeLedger(project_path)
-        stored = ledger.record(
-            event["event_type"],
-            experiment_id=event["experiment_id"],
-            occurred_at=event["occurred_at"],
-            metrics=event["metrics"],
-            source="api",
-        )
+        try:
+            stored = ledger.record(
+                event["event_type"],
+                experiment_id=event["experiment_id"],
+                occurred_at=event["occurred_at"],
+                metrics=event["metrics"],
+                source="api",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
         # Persist only opaque provider event IDs, never request bodies or customer data.
         seen.add(scoped_id)
         temp = dedupe_path.with_suffix(".tmp")
