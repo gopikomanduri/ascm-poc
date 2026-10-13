@@ -55,7 +55,8 @@ jobs:
       - name: Run ASCM deterministic security gate and CICO review
         env:
           PYTHONPATH: .
-          ASCM_CICO_AGENT_CMD: ${{ secrets.ASCM_CICO_AGENT_CMD }}
+          ASCM_CICO_AGENT_CMD: '["python", "-m", "orchestrator.security.gemini_review_adapter"]'
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         shell: bash
         run: |
           mkdir -p security-artifacts
@@ -66,7 +67,7 @@ jobs:
           status=$?
           set -e
           echo "$status" > security-artifacts/ascm-security-gate-status.txt
-          echo "CICO CLI review attempted; final gate requires a successful structured response." >> "$GITHUB_STEP_SUMMARY"
+          echo "Gemini-backed CICO-compatible review attempted; final gate requires a successful structured response." >> "$GITHUB_STEP_SUMMARY"
       - name: Run Bandit against changed Python files
         shell: bash
         run: |
