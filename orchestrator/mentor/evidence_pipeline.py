@@ -407,7 +407,10 @@ class InterventionQualityTracker:
             "feedback_counts": counts,
             "by_recommended_path": by_path,
             "by_evidence_profile": by_evidence_profile,
-            "feedback_coverage": round(len(reviewed) / len(events), 4) if events else None,
+            # Coverage measures reviewed interventions out of those actually shown.
+            # Failed/unconfirmed delivery attempts cannot be rated by the founder and
+            # should not depress session feedback coverage.
+            "feedback_coverage": round(len(reviewed) / len(shown), 4) if shown else None,
             "positive_feedback_rate": round(helpful / total, 4) if total else None,
             "negative_feedback_rate": round(not_helpful / total, 4) if total else None,
             "measurement_note": "Rates use only explicit reviewed feedback; unreviewed interventions are not counted as success or failure.",
