@@ -93,7 +93,7 @@ class FounderIntelligenceTests(unittest.TestCase):
         )
         paths = {item["path"]: item["score"] for item in result["ranked_paths"]}
         self.assertLess(paths["reuse"], paths["build"])
-        self.assertIn("verified_reuse_fit_and_license", result["missing_evidence"])
+        self.assertIn("human_verified_reuse_fit_license_security_and_cost", result["missing_evidence"])
 
     def test_verified_demand_and_readiness_support_bounded_launch(self):
         result = self.engine.evaluate(
