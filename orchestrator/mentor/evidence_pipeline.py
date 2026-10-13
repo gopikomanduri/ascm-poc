@@ -284,6 +284,7 @@ class InterventionQualityTracker:
         evidence_event_ids: list[str] | None = None,
         intervention_id: str | None = None,
         evidence_summary: dict[str, Any] | None = None,
+        delivery_confirmed: bool = True,
     ) -> dict[str, Any]:
         # Keep only coarse evidence-source metadata. Do not copy task text, customer
         # notes, repository descriptions, URLs, or raw evidence into this ledger.
@@ -294,7 +295,8 @@ class InterventionQualityTracker:
             "intervention_id": intervention_id or str(uuid.uuid4()),
             "session_id": str(session_id)[:128],
             "project_id": str(project_id or "")[:128],
-            "shown_at": _now().isoformat(),
+            "attempted_at": _now().isoformat(),
+            "delivery_confirmed": bool(delivery_confirmed),
             "recommended_path": str(recommendation.get("recommended_path", "undetermined"))[:80],
             "confidence": str(recommendation.get("confidence", "unknown"))[:24],
             "evidence_event_ids": [str(item)[:128] for item in (evidence_event_ids or [])[:50]],
@@ -325,11 +327,13 @@ class InterventionQualityTracker:
             if intervention_id and item.get("intervention_id") == intervention_id:
                 target = item
                 break
-            if not intervention_id and item.get("feedback") is None:
+            if not intervention_id and item.get("feedback") is None and item.get("delivery_confirmed", True):
                 target = item
                 break
         if target is None:
             raise ValueError("No matching unreviewed intervention found")
+        if target.get("delivery_confirmed", True) is not True:
+            raise ValueError("Cannot rate an intervention whose delivery was not confirmed")
         target["feedback"] = feedback
         target["feedback_at"] = _now().isoformat()
         # Store only length, never the note itself; avoid capturing customer or source details.
@@ -345,7 +349,9 @@ class InterventionQualityTracker:
         events = self._read()
         if session_id:
             events = [e for e in events if e.get("session_id") == session_id]
-        reviewed = [e for e in events if e.get("feedback") in FEEDBACK_LABELS]
+        shown = [e for e in events if e.get("delivery_confirmed", True) is True]
+        delivery_unconfirmed = [e for e in events if e.get("delivery_confirmed", True) is not True]
+        reviewed = [e for e in shown if e.get("feedback") in FEEDBACK_LABELS]
         counts = {label: sum(e.get("feedback") == label for e in reviewed) for label in sorted(FEEDBACK_LABELS)}
         helpful = counts["helpful"] + counts["accepted"] + counts["acted_on"]
         not_helpful = counts["not_helpful"] + counts["dismissed"] + counts["incorrect"]
@@ -367,7 +373,7 @@ class InterventionQualityTracker:
         # Report how feedback varies with evidence coverage without treating a missing
         # signal as negative demand or counting unreviewed interventions as failures.
         by_evidence_profile: dict[str, dict[str, Any]] = {}
-        for item in events:
+        for item in shown:
             snapshot = item.get("evidence_snapshot") if isinstance(item.get("evidence_snapshot"), dict) else {}
             customer_state = "demand_verified" if snapshot.get("customer_demand_verified") is True else (
                 "customer_events_no_threshold" if int(snapshot.get("customer_event_count", 0) or 0) > 0
@@ -393,9 +399,11 @@ class InterventionQualityTracker:
 
         return {
             "session_id": session_id,
-            "interventions_shown": len(events),
+            "interventions_attempted": len(events),
+            "interventions_shown": len(shown),
+            "delivery_unconfirmed": len(delivery_unconfirmed),
             "interventions_reviewed": len(reviewed),
-            "unreviewed": len(events) - len(reviewed),
+            "unreviewed": len(shown) - len(reviewed),
             "feedback_counts": counts,
             "by_recommended_path": by_path,
             "by_evidence_profile": by_evidence_profile,
