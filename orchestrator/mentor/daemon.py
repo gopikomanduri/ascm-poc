@@ -314,7 +314,9 @@ class UniversalASCMDaemon:
                 action=decision.get("recommended_path", "recommend"),
                 details=audit_details,
             )
-            CrossPlatformNotifier.notify(title, message[:1000], app_name="ASCM Mentor")
+            delivery_confirmed = CrossPlatformNotifier.notify(
+                title, message[:1000], app_name="ASCM Mentor"
+            )
             tracker = getattr(self, "intervention_tracker", None)
             if tracker is None:
                 tracker = InterventionQualityTracker(getattr(self, "repo_path", self.history_dir.parent))
@@ -327,6 +329,7 @@ class UniversalASCMDaemon:
                 },
                 evidence_event_ids=evidence_ids,
                 intervention_id=intervention_id,
+                delivery_confirmed=bool(delivery_confirmed),
                 evidence_summary={
                     "customer": {
                         "event_count": customer_summary.get("event_count", 0)
