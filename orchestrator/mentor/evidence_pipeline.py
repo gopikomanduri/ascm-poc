@@ -311,6 +311,8 @@ class InterventionQualityTracker:
             "outcome_note_length": 0,
         }
         events = self._read()
+        if any(item.get("intervention_id") == intervention["intervention_id"] for item in events):
+            raise ValueError("intervention_id must be unique")
         events.append(intervention)
         _atomic_write(self.path, events[-5000:])
         return intervention
@@ -321,6 +323,8 @@ class InterventionQualityTracker:
     ) -> dict[str, Any]:
         if feedback not in FEEDBACK_LABELS:
             raise ValueError(f"feedback must be one of: {', '.join(sorted(FEEDBACK_LABELS))}")
+        if not isinstance(outcome_note, str):
+            raise ValueError("outcome_note must be a string; note content is never persisted")
         events = self._read()
         target = None
         for item in reversed(events):
@@ -334,6 +338,8 @@ class InterventionQualityTracker:
             raise ValueError("No matching unreviewed intervention found")
         if target.get("delivery_confirmed", True) is not True:
             raise ValueError("Cannot rate an intervention whose delivery was not confirmed")
+        if target.get("feedback") in FEEDBACK_LABELS:
+            raise ValueError("This intervention already has feedback; ratings are immutable to protect measurement integrity")
         target["feedback"] = feedback
         target["feedback_at"] = _now().isoformat()
         # Store only length, never the note itself; avoid capturing customer or source details.
