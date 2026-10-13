@@ -135,6 +135,15 @@ class NextBestActionEngine:
             raise ValueError("evidence must be a dictionary")
         context = self.context_store.load()
         goal = context.get("current_goal")
+        # Explicit founder-confirmed context is the default for every entry point
+        # (daemon, CLI, tests, and future API callers); caller evidence may refine it.
+        evidence = dict(evidence)
+        evidence.setdefault("target_customer", context.get("target_customer"))
+        evidence.setdefault("milestone", context.get("next_milestone"))
+        evidence.setdefault("constraints", context.get("constraints") or [])
+        evidence.setdefault("preferences", context.get("preferences") or {})
+        if context.get("current_task"):
+            evidence.setdefault("task_description", context["current_task"])
         actions = []
 
         def add(action_type: str, title: str, rationale: str, benefit: str,
