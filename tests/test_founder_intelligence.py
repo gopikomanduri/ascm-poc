@@ -38,6 +38,10 @@ class FounderIntelligenceTests(unittest.TestCase):
                     "license": "MIT",
                     "archived": False,
                     "suitability_score": 78,
+                    "feature_fit_verified": True,
+                    "license_compatible": True,
+                    "security_reviewed": True,
+                    "integration_cost_estimated": True,
                 }],
                 "milestone": "Working sign-in",
                 "customer_evidence": "Three customer interviews",
@@ -46,6 +50,31 @@ class FounderIntelligenceTests(unittest.TestCase):
         paths = {item["path"]: item["score"] for item in result["ranked_paths"]}
         self.assertGreater(paths["reuse"], paths["build"])
         self.assertEqual(result["recommended_path"], "reuse")
+
+    def test_public_metadata_alone_does_not_establish_reuse_suitability(self):
+        result = self.engine.evaluate(
+            goal="Ship authentication",
+            observation="code_activity",
+            evidence={
+                "task_description": "Implement authentication",
+                "milestone": "Working sign-in",
+                "customer_evidence": "Three customer interviews",
+                "reuse_candidates": [{
+                    "name": "popular auth library",
+                    "license": "MIT",
+                    "archived": False,
+                    "suitability_score": 92,
+                }],
+            },
+        )
+        paths = {item["path"]: item["score"] for item in result["ranked_paths"]}
+        self.assertLess(paths["reuse"], paths["build"])
+        self.assertIn(
+            "human_verified_reuse_fit_license_security_and_cost",
+            result["missing_evidence"],
+        )
+        reuse = next(item for item in result["ranked_paths"] if item["path"] == "reuse")
+        self.assertIn("research leads, not suitable alternatives", reuse["reason"])
 
     def test_weak_reuse_metadata_does_not_claim_suitable_alternative(self):
         result = self.engine.evaluate(
