@@ -87,6 +87,13 @@ class OutcomeWebhookTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse((self.root / ".ascm_history" / "gtm_outcomes.json").exists())
 
+    def test_invalid_normalized_metric_is_a_client_error_not_server_error(self):
+        payload = self._payload()
+        payload["metrics"]["sentiment"] = "customer wrote a long free-form message"
+        response = self._post(payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse((self.root / ".ascm_history" / "gtm_outcomes.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
