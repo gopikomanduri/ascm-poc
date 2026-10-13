@@ -140,6 +140,9 @@ def review_request(request: Any, repo_root: Path, api_key: str | None = None) ->
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Gemini-backed structured ASCM security review")
+    # Match the CICO CLI invocation appended by orchestrator.security.cico_gate.
+    parser.add_argument("agent", choices=["agent"])
+    parser.add_argument("operation", choices=["review"])
     parser.add_argument("--input", default="-", help="JSON request file, or - for stdin")
     parser.add_argument("--repo", required=True, help="Repository root to review")
     args = parser.parse_args(argv)
