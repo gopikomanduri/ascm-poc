@@ -102,19 +102,19 @@ class FounderIntelligenceEngine:
         reuse_candidates = evidence.get("reuse_candidates")
         if not reuse_candidates:
             missing.append("reuse_candidates")
-        elif isinstance(reuse_candidates, list) and any(
-            isinstance(item, dict) and (
-                item.get("archived") is True
-                or str(item.get("license", "")).lower() in {"", "not detected", "none", "unknown"}
-                or (isinstance(item.get("suitability_score"), (int, float)) and item.get("suitability_score", 0) < 65)
-            ) for item in reuse_candidates
-        ) and not any(
-            isinstance(item, dict) and item.get("archived") is not True
-            and str(item.get("license", "")).lower() not in {"", "not detected", "none", "unknown"}
-            and isinstance(item.get("suitability_score"), (int, float))
-            and item.get("suitability_score", 0) >= 65 for item in reuse_candidates
-        ):
-            missing.append("verified_reuse_fit_and_license")
+        # Public metadata can prioritize candidates, but cannot verify suitability.
+        # Require explicit human-reviewed fit, license, security, and integration-cost evidence.
+        verified_reuse = isinstance(reuse_candidates, list) and any(
+            isinstance(item, dict)
+            and item.get("archived") is not True
+            and item.get("feature_fit_verified") is True
+            and item.get("license_compatible") is True
+            and item.get("security_reviewed") is True
+            and item.get("integration_cost_estimated") is True
+            for item in reuse_candidates
+        )
+        if reuse_candidates and not verified_reuse:
+            missing.append("human_verified_reuse_fit_license_security_and_cost")
         if not evidence.get("milestone"):
             missing.append("measurable_milestone")
 
@@ -135,17 +135,30 @@ class FounderIntelligenceEngine:
             signal("build", 10, "Insufficient confirmed context to conclude that more implementation is the right move.")
 
         if reuse_candidates:
-            scored = [item for item in reuse_candidates if isinstance(item, dict) and isinstance(item.get("suitability_score"), (int, float))] if isinstance(reuse_candidates, list) else []
-            credible = [item for item in scored if item.get("archived") is not True
-                        and str(item.get("license", "")).lower() not in {"", "not detected", "none", "unknown"}
-                        and item.get("suitability_score", 0) >= 65]
-            if credible:
-                score = min(80, int(max(item.get("suitability_score", 0) for item in credible)))
-                signal("reuse", score, "At least one public candidate has relatively stronger maintenance/license metadata; feature fit, security, compatibility, and total integration cost still require review.", "reuse_candidates")
-            elif scored:
-                signal("reuse", 35, "Public candidates were found, but available metadata does not establish a credible reuse option. Check feature fit, license, maintenance, and security before treating reuse as suitable.", "reuse_candidates")
+            candidates = [item for item in reuse_candidates if isinstance(item, dict)] if isinstance(reuse_candidates, list) else []
+            verified = [
+                item for item in candidates
+                if item.get("archived") is not True
+                and item.get("feature_fit_verified") is True
+                and item.get("license_compatible") is True
+                and item.get("security_reviewed") is True
+                and item.get("integration_cost_estimated") is True
+            ]
+            if verified:
+                score = min(85, int(max(item.get("suitability_score", 70) for item in verified)))
+                signal("reuse", score, "A candidate has explicit fit, license, security, and integration-cost review recorded; validate it in a small proof of concept before committing.", "reuse_candidates")
             else:
-                signal("reuse", 65, "Reuse candidates were supplied but their suitability metadata is incomplete; inspect feature fit, license, maintenance, security, and integration cost before deciding.", "reuse_candidates")
+                metadata_candidates = [
+                    item for item in candidates
+                    if item.get("archived") is not True
+                    and str(item.get("license", "")).lower() not in {"", "not detected", "none", "unknown"}
+                    and isinstance(item.get("suitability_score"), (int, float))
+                    and item.get("suitability_score", 0) >= 65
+                ]
+                if metadata_candidates:
+                    signal("reuse", 55, "Public metadata surfaced promising candidates, but no candidate has verified feature fit, license compatibility, security review, and integration-cost estimate. Treat these as research leads, not suitable alternatives.", "reuse_candidates")
+                else:
+                    signal("reuse", 30, "Public candidates were found, but available metadata does not establish a strong option. Review feature fit, license, maintenance, security, and integration cost before deciding.", "reuse_candidates")
         else:
             signal("reuse", 25, "Reuse has not been evaluated; this is a check to perform, not evidence that a suitable tool exists.")
 
