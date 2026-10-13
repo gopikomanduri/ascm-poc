@@ -28,6 +28,31 @@ class InterventionDeliveryTrackingTests(unittest.TestCase):
                     feedback="helpful", intervention_id="attempt-not-delivered"
                 )
 
+    def test_feedback_coverage_excludes_unconfirmed_delivery_attempts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tracker = InterventionQualityTracker(tmp)
+            tracker.record_shown(
+                session_id="session-coverage",
+                project_id="project-a",
+                recommendation={"recommended_path": "reuse", "confidence": "medium"},
+                intervention_id="delivered",
+                delivery_confirmed=True,
+            )
+            tracker.record_shown(
+                session_id="session-coverage",
+                project_id="project-a",
+                recommendation={"recommended_path": "build", "confidence": "low"},
+                intervention_id="not-delivered",
+                delivery_confirmed=False,
+            )
+            tracker.record_feedback(feedback="helpful", intervention_id="delivered")
+
+            report = tracker.report("session-coverage")
+            self.assertEqual(report["interventions_attempted"], 2)
+            self.assertEqual(report["interventions_shown"], 1)
+            self.assertEqual(report["delivery_unconfirmed"], 1)
+            self.assertEqual(report["feedback_coverage"], 1.0)
+
     def test_confirmed_delivery_can_be_rated_and_is_counted_separately(self):
         with tempfile.TemporaryDirectory() as tmp:
             tracker = InterventionQualityTracker(tmp)
