@@ -179,5 +179,64 @@ class FounderIntelligenceDaemonIntegrationTests(unittest.TestCase):
             self.assertIn("--project-path", notify.call_args.args[1])
 
 
+class FounderEvidenceDeliveryIntegrationTests(unittest.TestCase):
+    def test_daemon_collects_evidence_and_tracks_unconfirmed_notification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            daemon = UniversalASCMDaemon.__new__(UniversalASCMDaemon)
+            daemon.repo_path = Path(tmp)
+            daemon.history_dir = Path(tmp) / ".ascm_history"
+            daemon.history_dir.mkdir()
+            daemon.audit_logger = mock.Mock()
+            daemon.context_fusion = _FakeFusion({
+                "task_hypothesis": "Build invoice automation",
+                "confidence": 0.91,
+                "evidence_event_ids": ["edit-7", "terminal-2"],
+                "rationale": "Recent edits and terminal signals align.",
+                "project_id": "project-invoice",
+            })
+            decision = {
+                "recommended_path": "customer_validate",
+                "confidence": "medium",
+                "ranked_paths": [{"path": "customer_validate", "score": 75}],
+                "missing_evidence": [],
+            }
+            daemon.mentor = _FakeDecisionMentor(
+                "Validate invoice automation demand",
+                {"actions": [], "founder_decision": decision},
+            )
+            daemon.evidence_sources = mock.Mock(return_value=None)
+            daemon.evidence_sources.collect.return_value = {
+                "customer_evidence": None,
+                "user_demand_verified": False,
+                "customer_evidence_summary": {
+                    "event_count": 0,
+                    "user_demand_verified": False,
+                    "customer_evidence": None,
+                },
+                "reuse_candidates": [],
+                "reuse_evidence_summary": {"enabled": False, "candidate_count": 0},
+            }
+            daemon.intervention_tracker = mock.Mock()
+
+            with mock.patch(
+                "orchestrator.mentor.daemon.CrossPlatformNotifier.notify",
+                return_value=False,
+            ):
+                daemon._prompt_for_founder_context(
+                    {"filesystem_activity": {"recently_edited_files": []}}, {}, 200000
+                )
+
+            daemon.evidence_sources.collect.assert_called_once_with("Build invoice automation")
+            self.assertEqual(daemon.mentor.received[1]["user_demand_verified"], False)
+            self.assertEqual(
+                daemon.intervention_tracker.record_shown.call_args.kwargs["delivery_confirmed"],
+                False,
+            )
+            self.assertEqual(
+                daemon.intervention_tracker.record_shown.call_args.kwargs["evidence_summary"]["customer"]["event_count"],
+                0,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
