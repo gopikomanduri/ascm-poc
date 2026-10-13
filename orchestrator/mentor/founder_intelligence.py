@@ -168,7 +168,7 @@ class FounderIntelligenceEngine:
         else:
             signal("launch_or_sell", 15, "Launch readiness has not been verified; do not infer that the product is ready to sell.")
 
-        if explicit_stop_signal or (tests_failed and repeated_failures):
+        if explicit_stop_signal or repeated_failures:
             signal("pause_or_stop", 75, "An explicit stop signal or repeated failures warrants a deliberate pause and review.", "explicit_stop_signal" if explicit_stop_signal else "repeated_failures")
         else:
             signal("pause_or_stop", 20, "No explicit stop evidence was supplied; stopping is an option to review, not a conclusion.")
@@ -189,7 +189,15 @@ class FounderIntelligenceEngine:
                 )
         ranked = sorted(enumerate(signals), key=lambda pair: (-pair[1]["score"], pair[0]))
         top = ranked[0][1]
-        confidence = "low" if missing else ("high" if top["evidence_key"] and top["score"] >= 75 else "medium")
+        # confidence = "low" if missing else ("high" if top["evidence_key"] and top["score"] >= 75 else "medium")
+
+        if top["evidence_key"] and top["score"] >= 75:
+            confidence = "high"
+        elif missing:
+            confidence = "low"
+        else:
+            confidence = "medium"
+
         return {
             "goal": normalized_goal,
             "observation": observation,

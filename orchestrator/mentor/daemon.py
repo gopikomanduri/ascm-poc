@@ -209,6 +209,20 @@ class UniversalASCMDaemon:
             if not decision and not actions:
                 return
 
+
+            customer_summary = recommendation_evidence.get(
+                "customer_evidence_summary", {}
+            )
+            reuse_summary = recommendation_evidence.get(
+                "reuse_evidence_summary", {}
+            )
+            repositories = recommendation_evidence.get("reuse_candidates", [])
+
+
+
+
+
+
             # Approximate a working session using a 30-minute idle boundary, while
             # persisting the ID so daemon restarts do not automatically split a session.
             previous_session_activity = float(state.get("last_working_session_activity_at", 0) or 0)
@@ -233,8 +247,8 @@ class UniversalASCMDaemon:
                     if missing else ""
                 )
                 title = "ASCM Founder Intelligence: " + recommended_path.replace("_", " ").title()
-                customer_summary = recommendation_evidence.get("customer_evidence_summary", {})
-                reuse_summary = recommendation_evidence.get("reuse_evidence_summary", {})
+                # customer_summary = recommendation_evidence.get("customer_evidence_summary", {})
+                # reuse_summary = recommendation_evidence.get("reuse_evidence_summary", {})
                 customer_signal = (
                     customer_summary.get("customer_evidence")
                     if isinstance(customer_summary, dict) else None
@@ -244,7 +258,7 @@ class UniversalASCMDaemon:
                     if customer_signal else
                     "Customer evidence: no matching feature-tagged outcomes; demand remains unknown."
                 )
-                repositories = recommendation_evidence.get("reuse_candidates", [])
+                # repositories = recommendation_evidence.get("reuse_candidates", [])
                 if repositories:
                     candidate_line = "Reuse candidates (heuristic): " + "; ".join(
                         f"{str(item.get('name', 'unknown'))[:70]} score {item.get('suitability_score', '?')}/100"

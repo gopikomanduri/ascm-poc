@@ -114,7 +114,15 @@ class AuditLoggerTests(unittest.TestCase):
             record = json.loads(jsonl_content.strip())
             self.assertNotIn("alice@company.com", json.dumps(record))
             self.assertIn("pii_redacted", record["metadata"])
-            self.assertGreater(record["metadata"]["pii_redacted"]["EMAIL"], 0)
+            # self.assertGreater(record["metadata"]["pii_redacted"]["EMAIL"], 0)
+
+            self.assertTrue(record["metadata"]["pii_redacted"])
+            self.assertIn(
+                "EMAIL",
+                record["metadata"]["pii_redacted_categories"],
+            )
+
+
 
     def test_log_llm_interaction(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

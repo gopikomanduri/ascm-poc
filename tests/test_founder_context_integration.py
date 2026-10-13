@@ -13,7 +13,7 @@ class WorkspaceContextIntegrationTests(unittest.TestCase):
             engine = NextBestActionEngine(root)
             self.assertEqual(engine.founder_intelligence.project_path, root.resolve())
             history = root / ".ascm_history"
-            history.mkdir()
+            history.mkdir(exist_ok=True)
             (history / "intervention_quality.json").write_text(json.dumps([
                 {"recommended_path": "build", "feedback": "helpful", "delivery_confirmed": True}
                 for _ in range(8)

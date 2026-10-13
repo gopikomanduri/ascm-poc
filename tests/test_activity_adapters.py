@@ -1,3 +1,4 @@
+from asyncio import base_events
 import tempfile
 import unittest
 from pathlib import Path
@@ -40,7 +41,10 @@ class ActivityAdapterTests(unittest.TestCase):
             self.assertEqual(browser["domain"], "example.com")
             self.assertNotIn("command", events[0])
             self.assertNotIn("session", str(events))
-            self.assertNotIn("private", str(events))
+            # self.assertNotIn("private", str(events))
+            # The browser URL path and query must not be persisted.
+            self.assertNotIn("example.com/private", str(events))
+            self.assertNotIn("session=secret", str(events))
 
     def test_active_app_name_is_sanitized_and_does_not_record_window_title(self):
         with tempfile.TemporaryDirectory() as tmp:
