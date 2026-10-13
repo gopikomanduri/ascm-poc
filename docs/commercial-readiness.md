@@ -140,7 +140,7 @@ python -m orchestrator.gtm.strategy.outcome_ledger --event feature_request \
 
 ## Measure intervention quality in real work sessions
 
-The daemon records each intervention attempt with an intervention ID, a daemon-session ID, project ID, recommended path, confidence, and evidence event IDs. It does not store free-form feedback notes; if a note is supplied, only its character count is retained.
+The daemon records each intervention attempt with an intervention ID, a working-session ID, project ID, recommended path, confidence, and evidence event IDs. It separately records whether the OS notification adapter confirmed delivery. An attempt whose delivery is not confirmed remains visible in the attempt count but is excluded from the shown/reviewed denominators and cannot be rated as though the founder saw it. A successful adapter return is a delivery signal, not proof that the founder read the notification. It does not store free-form feedback notes; if a note is supplied, only its character count is retained.
 
 The notification includes copyable commands. Example:
 
@@ -156,7 +156,7 @@ python -m orchestrator.mentor.evidence_pipeline --report
 python -m orchestrator.mentor.evidence_pipeline --report --session-id SESSION_ID
 ```
 
-Quality reports separate the number of intervention attempts from explicit feedback and report positive/negative feedback rates only over rated interventions, both overall and grouped by recommended path. Unreviewed interventions are not treated as success or failure. The labels `helpful`, `accepted`, and `acted_on` count as positive feedback; `not_helpful`, `dismissed`, and `incorrect` count as negative feedback. This first version measures explicit founder feedback, not causal impact or long-term customer outcomes; review labels consistently and compare multiple sessions before tuning ranking rules.
+Quality reports separate intervention attempts, adapter-confirmed deliveries, delivery-unconfirmed attempts, and explicit feedback. Positive/negative feedback rates use only rated interventions with confirmed delivery, both overall and grouped by recommended path. Unreviewed interventions are not treated as success or failure. The labels `helpful`, `accepted`, and `acted_on` count as positive feedback; `not_helpful`, `dismissed`, and `incorrect` count as negative feedback. This first version measures explicit founder feedback, not causal impact or long-term customer outcomes; review labels consistently and compare multiple sessions before tuning ranking rules.
 
 Evidence and intervention records remain local under `.ascm_history`, use restrictive file permissions where supported, and are bounded to the latest 5,000 intervention records. The tracker is a single-process JSON-backed MVP and is not a tamper-proof audit system. No remote customer CRM is queried and no customer data is scraped; connect provider event adapters only with explicit credentials, consent, and privacy review.
 
