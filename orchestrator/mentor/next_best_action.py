@@ -118,7 +118,8 @@ class NextBestActionEngine:
         self.context_store = FounderContextStore(self.project_path)
         self.proposals_path = self.history_dir / "action_proposals.json"
         self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
-        self.founder_intelligence = FounderIntelligenceEngine()
+        # Keep evidence learning scoped to this workspace; never fall back to another cwd ledger.
+        self.founder_intelligence = FounderIntelligenceEngine(self.project_path)
 
     def recommend(
         self,
