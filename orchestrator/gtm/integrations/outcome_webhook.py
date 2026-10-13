@@ -7,6 +7,7 @@ for TLS, provider access controls, or deployment-level rate limiting.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -22,6 +23,7 @@ from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 
 router = APIRouter(prefix="/integrations/gtm", tags=["gtm-outcomes"])
 app = FastAPI(title="ASCM GTM Outcome Ingestion", version="1.0.0")
+_ingest_lock = asyncio.Lock()
 
 
 @app.get("/healthz")
@@ -101,36 +103,40 @@ async def ingest_outcome(request: Request) -> dict[str, Any]:
     history = project_path / ".ascm_history"
     history.mkdir(parents=True, exist_ok=True)
     dedupe_path = history / "webhook_source_event_ids.json"
-    seen = _seen_ids(dedupe_path)
-    scoped_id = event["source_event_id"]
-    if scoped_id in seen:
-        return {"status": "duplicate_ignored", "source_event_id": scoped_id}
+    # Namespace provider IDs to avoid collisions across CRM/email systems. Serialize
+    # the check-write sequence within this process to make retries idempotent.
+    provider = str(event["metrics"].get("source_system", "default"))[:64]
+    scoped_id = f"{provider}:{event['source_event_id']}"
+    async with _ingest_lock:
+        seen = _seen_ids(dedupe_path)
+        if scoped_id in seen:
+            return {"status": "duplicate_ignored", "source_event_id": event["source_event_id"]}
 
-    ledger = OutcomeLedger(project_path)
-    stored = ledger.record(
-        event["event_type"],
-        experiment_id=event["experiment_id"],
-        occurred_at=event["occurred_at"],
-        metrics=event["metrics"],
-        source="api",
-    )
-    # Persist only opaque provider event IDs, never request bodies or customer data.
-    seen.add(scoped_id)
-    temp = dedupe_path.with_suffix(".tmp")
-    temp.write_text(json.dumps(sorted(seen)[-10000:]), encoding="utf-8")
-    try:
-        temp.chmod(0o600)
-        history.chmod(0o700)
-    except OSError:
-        pass
-    temp.replace(dedupe_path)
-    try:
-        dedupe_path.chmod(0o600)
-    except OSError:
-        pass
+        ledger = OutcomeLedger(project_path)
+        stored = ledger.record(
+            event["event_type"],
+            experiment_id=event["experiment_id"],
+            occurred_at=event["occurred_at"],
+            metrics=event["metrics"],
+            source="api",
+        )
+        # Persist only opaque provider event IDs, never request bodies or customer data.
+        seen.add(scoped_id)
+        temp = dedupe_path.with_suffix(".tmp")
+        temp.write_text(json.dumps(sorted(seen)[-10000:]), encoding="utf-8")
+        try:
+            temp.chmod(0o600)
+            history.chmod(0o700)
+        except OSError:
+            pass
+        temp.replace(dedupe_path)
+        try:
+            dedupe_path.chmod(0o600)
+        except OSError:
+            pass
     return {
         "status": "recorded",
-        "source_event_id": scoped_id,
+        "source_event_id": event["source_event_id"],
         "event_id": stored["event_id"],
         "event_type": stored["event_type"],
     }
