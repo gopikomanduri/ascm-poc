@@ -16,11 +16,18 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 
 from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 
 router = APIRouter(prefix="/integrations/gtm", tags=["gtm-outcomes"])
+app = FastAPI(title="ASCM GTM Outcome Ingestion", version="1.0.0")
+app.include_router(router)
+
+
+@app.get("/healthz")
+def healthz() -> dict[str, str]:
+    return {"status": "ok"}
 _EVENT_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _ALLOWED_METRICS = {
     "sentiment", "reply_count", "meeting_count", "qualified_opportunity_count",
