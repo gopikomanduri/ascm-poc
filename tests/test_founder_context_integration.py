@@ -35,17 +35,11 @@ class WorkspaceContextIntegrationTests(unittest.TestCase):
                 constraints=["No paid ads before validation"],
                 preferences={"communication_style": "concise"},
             )
-            context = engine.context_store.load()
-            evidence = {
-                "task_description": "Validate invoice automation",
-                "target_customer": context["target_customer"],
-                "milestone": context["next_milestone"],
-                "constraints": context["constraints"],
-                "preferences": context["preferences"],
-            }
-            decision = engine.founder_intelligence.evaluate(
-                goal=context["current_goal"], observation="code_activity", evidence=evidence
+            result = engine.recommend(
+                observation="code_activity",
+                evidence={"task_description": "Validate invoice automation"},
             )
+            decision = result["founder_decision"]
             self.assertEqual(decision["founder_context"]["target_customer"], "Finance operations leaders")
             self.assertEqual(decision["founder_context"]["constraints"], ["No paid ads before validation"])
             self.assertEqual(decision["founder_context"]["milestone"], "Five discovery calls")
