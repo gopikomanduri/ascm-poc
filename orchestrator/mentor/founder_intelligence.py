@@ -197,6 +197,13 @@ class FounderIntelligenceEngine:
             "recommended_path": top["path"] if normalized_goal else "clarify_goal",
             "confidence": confidence if normalized_goal else "low",
             "missing_evidence": missing,
+            "founder_context": {
+                "target_customer": evidence.get("target_customer"),
+                "milestone": evidence.get("milestone"),
+                "constraints": list(evidence.get("constraints") or []) if isinstance(evidence.get("constraints") or [], list) else [],
+                "preferences": dict(evidence.get("preferences") or {}) if isinstance(evidence.get("preferences") or {}, dict) else {},
+                "task_description": task if isinstance(task, str) else None,
+            },
             "requires_founder_input": not normalized_goal,
             "learning_adjustments_applied": {key: value for key, value in adjustments.items()},
             "execution_performed": False,
