@@ -112,12 +112,12 @@ class FounderContextStore:
 class NextBestActionEngine:
     """Rank explainable recommendations from explicit context and observed evidence."""
 
-    def __init__(self, project_path: str | Path = "."):
+    def __init__(self, project_path: str | Path = ".", audit_logger: AuditLogger | None = None):
         self.project_path = Path(project_path).resolve()
         self.history_dir = self.project_path / ".ascm_history"
         self.context_store = FounderContextStore(self.project_path)
         self.proposals_path = self.history_dir / "action_proposals.json"
-        self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
+        self.audit_logger = audit_logger or AuditLogger(log_dir=str(self.history_dir / "audit"))
         # Keep evidence learning scoped to this workspace; never fall back to another cwd ledger.
         self.founder_intelligence = FounderIntelligenceEngine(self.project_path)
 
