@@ -22,7 +22,6 @@ from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 
 router = APIRouter(prefix="/integrations/gtm", tags=["gtm-outcomes"])
 app = FastAPI(title="ASCM GTM Outcome Ingestion", version="1.0.0")
-app.include_router(router)
 
 
 @app.get("/healthz")
@@ -135,3 +134,7 @@ async def ingest_outcome(request: Request) -> dict[str, Any]:
         "event_id": stored["event_id"],
         "event_type": stored["event_type"],
     }
+
+
+# Register after the router endpoint is declared above.
+app.include_router(router)
