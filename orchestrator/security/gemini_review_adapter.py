@@ -45,11 +45,14 @@ def _git_diff(repo_root: Path, base: str, head: str) -> str:
             raise ReviewError("Review scope contains an invalid Git ref.")
         if len(ref) > 200 or any(ch.isspace() for ch in ref):
             raise ReviewError("Review scope contains an invalid Git ref.")
-    result = subprocess.run(
-        ["git", "diff", "--no-ext-diff", "--unified=3", f"{base}...{head}", "--"],
-        cwd=str(repo_root), capture_output=True, text=True, timeout=30, check=False,
-        shell=False,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--no-ext-diff", "--unified=3", f"{base}...{head}", "--"],
+            cwd=str(repo_root), capture_output=True, text=True, timeout=30, check=False,
+            shell=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ReviewError("Unable to obtain the requested Git diff.") from exc
     if result.returncode:
         raise ReviewError("Unable to obtain the requested Git diff.")
     diff = result.stdout
