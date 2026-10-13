@@ -111,7 +111,7 @@ jobs:
               report = {}
               failures.append("deterministic security report missing or invalid")
           if report.get("cico", {}).get("status") != "completed":
-              failures.append("CICO review did not complete; configure the ASCM_CICO_AGENT_CMD secret")
+              failures.append("CICO-compatible review did not complete; configure the GEMINI_API_KEY Actions secret and verify provider quota/access")
           elif report["cico"].get("passed") is not True:
               failures.append("CICO review reported findings or did not pass")
           high = [f for f in report.get("deterministic_findings", []) if f.get("severity") == "HIGH"]
