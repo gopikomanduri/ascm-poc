@@ -95,6 +95,11 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
     except ImportError as exc:
         raise ReviewError("google-genai is not installed in the workflow environment.") from exc
 
+    # google-genai can prefer GOOGLE_API_KEY when both provider variables
+    # are present in the runner environment. This adapter's contract is to use
+    # the explicitly supplied GEMINI_API_KEY, so remove the conflicting fallback
+    # before constructing the client. The key is never logged or persisted.
+    os.environ.pop("GOOGLE_API_KEY", None)
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
