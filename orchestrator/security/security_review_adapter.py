@@ -16,7 +16,7 @@ from typing import Any
 
 MAX_DIFF_CHARS = 60_000
 MAX_FINDINGS = 200
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.8-flash"
 
 SYSTEM_INSTRUCTIONS = """You are a security reviewer for a software change.
 Review the supplied unified Git diff for concrete security vulnerabilities.
