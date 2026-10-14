@@ -13,7 +13,7 @@ with Gemini. No external review CLI or separate agent is required.
 
 ## Optional model selection
 
-The adapter defaults to `gemini-2.5-flash`. To change it, set
+The adapter defaults to `gemini-3.8-flash`. To change it, set
 `ASCM_SECURITY_REVIEW_MODEL` to a model available to the configured API key.
 
 ## Privacy and failure behavior
