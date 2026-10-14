@@ -6,15 +6,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from orchestrator.security.cico_gate import run_cico, scan_paths
+from orchestrator.security.security_gate import run_model_review, scan_paths
 
 
-class CICOSecurityGateTests(unittest.TestCase):
-    def test_detects_shell_true_and_never_executes_code(self):
+class SecurityGateTests(unittest.TestCase):
+    def test_detects_shell_true_without_executing_code(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            source = root / "unsafe.py"
-            source.write_text("import subprocess\nsubprocess.run(user_input, shell=True)\n")
+            (root / "unsafe.py").write_text("import subprocess\nsubprocess.run(user_input, shell=True)\n")
             findings = scan_paths([Path("unsafe.py")], root)
             self.assertIn("subprocess_shell_true", [item["rule"] for item in findings])
 
@@ -32,31 +31,32 @@ class CICOSecurityGateTests(unittest.TestCase):
             findings = scan_paths([Path(outside) / "file.py"], Path(tmp))
             self.assertIn("path_escape", [item["rule"] for item in findings])
 
-    def test_reports_cico_as_unavailable_when_not_configured(self):
+    def test_requires_gemini_key_for_model_review(self):
         with patch.dict(os.environ, {}, clear=True):
-            result = run_cico([Path("example.py")], Path.cwd())
+            result = run_model_review([Path("example.py")], Path.cwd())
             self.assertEqual(result["status"], "not_configured")
-            self.assertIsNone(result["passed"])
+            self.assertFalse(result["passed"])
 
-
-    def test_cico_structured_review_blocks_high_severity_finding(self):
+    def test_structured_review_blocks_high_severity_finding(self):
         script = (
             "import json,sys; json.load(sys.stdin); "
-            "print(json.dumps({'version':1,'ok':True,'operation':'review','status':'completed',"
+            "print(json.dumps({'ok':True,'operation':'review',"
             "'data':{'findings':[{'severity':8,'category':'security','title':'Unsafe flow',"
-            "'summary':'Potential injection','filePath':'src/example.py'}]},'warnings':[]}))"
+            "'summary':'Potential injection','filePath':'src/example.py'}]}}))"
         )
-        with patch.dict(os.environ, {"ASCM_CICO_AGENT_CMD": json.dumps([sys.executable, "-c", script])}):
-            result = run_cico([], Path.cwd())
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}), patch(
+            "orchestrator.security.security_gate.subprocess.run",
+            return_value=type("Result", (), {"returncode": 0, "stdout": json.dumps({
+                "ok": True, "operation": "review", "data": {"findings": [{
+                    "severity": 8, "category": "security", "title": "Unsafe flow",
+                    "summary": "Potential injection", "filePath": "src/example.py"
+                }]}
+            }), "stderr": ""})()
+        ):
+            result = run_model_review([], Path.cwd())
         self.assertEqual(result["status"], "completed")
         self.assertFalse(result["passed"])
         self.assertEqual(result["blocking_finding_count"], 1)
-
-    def test_cico_command_configuration_must_be_json_array(self):
-        with patch.dict(os.environ, {"ASCM_CICO_AGENT_CMD": "cico security --json"}):
-            result = run_cico([], Path.cwd())
-            self.assertEqual(result["status"], "configuration_error")
-            self.assertFalse(result["passed"])
 
 
 if __name__ == "__main__":

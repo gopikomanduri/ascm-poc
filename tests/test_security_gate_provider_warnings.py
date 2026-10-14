@@ -4,10 +4,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from orchestrator.security import cico_gate
+from orchestrator.security import security_gate
 
 
-class CICOProviderWarningTests(unittest.TestCase):
+class SecurityReviewProviderWarningTests(unittest.TestCase):
     def test_provider_warnings_are_redacted_and_preserved(self):
         response = {
             "ok": True,
@@ -19,12 +19,12 @@ class CICOProviderWarningTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(
-                "os.environ", {"ASCM_CICO_AGENT_CMD": '["fake-cico"]'}, clear=False
-            ), mock.patch.object(cico_gate.subprocess, "run", return_value=completed), mock.patch(
+                "os.environ", {"GEMINI_API_KEY": 'test-key'}, clear=False
+            ), mock.patch.object(security_gate.subprocess, "run", return_value=completed), mock.patch(
                 "orchestrator.security.pii_scrubber.PIIScrubber.scrub",
                 side_effect=lambda value: "redacted:" + value,
             ):
-                result = cico_gate.run_cico([], Path(tmp))
+                result = security_gate.run_model_review([], Path(tmp))
 
         self.assertEqual(result["status"], "completed")
         self.assertEqual(
@@ -43,9 +43,9 @@ class CICOProviderWarningTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(
-                "os.environ", {"ASCM_CICO_AGENT_CMD": '["fake-cico"]'}, clear=False
-            ), mock.patch.object(cico_gate.subprocess, "run", return_value=completed):
-                result = cico_gate.run_cico([], Path(tmp))
+                "os.environ", {"GEMINI_API_KEY": 'test-key'}, clear=False
+            ), mock.patch.object(security_gate.subprocess, "run", return_value=completed):
+                result = security_gate.run_model_review([], Path(tmp))
 
         self.assertEqual(result["provider_warnings"], [])
 

@@ -39,7 +39,7 @@ jobs:
         run: python tools/mr_bench.py --task T01
 
   security-review:
-    name: Security Review (Static + Dependency + CICO Agent)
+    name: Security Review (Static + Dependency + Gemini)
     runs-on: ubuntu-latest
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -58,21 +58,21 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install bandit pip-audit
-      - name: Run ASCM deterministic security gate and CICO review
+      - name: Run ASCM deterministic security gate and Gemini review
         env:
           PYTHONPATH: .
-          ASCM_CICO_AGENT_CMD: ${{ secrets.ASCM_CICO_AGENT_CMD }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         shell: bash
         run: |
           mkdir -p security-artifacts
           set +e
-          python -m orchestrator.security.cico_gate \
+          python -m orchestrator.security.security_gate \
             --git-base "origin/${GITHUB_BASE_REF:-main}" \
-            --report security-artifacts/ascm-security-report.json --require-cico
+            --report security-artifacts/ascm-security-report.json --require-model-review
           status=$?
           set -e
           echo "$status" > security-artifacts/ascm-security-gate-status.txt
-          echo "CICO CLI review attempted; final gate requires a successful structured response." >> "$GITHUB_STEP_SUMMARY"
+          echo "Gemini-backed security review attempted; final gate requires a successful structured response." >> "$GITHUB_STEP_SUMMARY"
       - name: Run Bandit against changed Python files
         shell: bash
         run: |
@@ -115,10 +115,17 @@ jobs:
           except (OSError, json.JSONDecodeError):
               report = {}
               failures.append("deterministic security report missing or invalid")
-          if report.get("cico", {}).get("status") != "completed":
-              failures.append("CICO review did not complete; configure the ASCM_CICO_AGENT_CMD secret")
-          elif report["cico"].get("passed") is not True:
-              failures.append("CICO review reported findings or did not pass")
+          review = report.get("security_review", {})
+          if review.get("status") != "completed":
+              failures.append(f"model-assisted review did not complete (status={review.get('status', 'missing')}).")
+              issues = review.get("issues", [])
+              if isinstance(issues, list):
+                  for issue in issues[:3]:
+                      failures.append(f"Security review diagnostic: {str(issue)[:1000]}")
+              if not issues:
+                  failures.append("Check GEMINI_API_KEY validity, model access, and provider quota in the security report artifact.")
+          elif review.get("passed") is not True:
+              failures.append("Security review reported blocking findings; inspect the security report artifact.")
           high = [f for f in report.get("deterministic_findings", []) if f.get("severity") == "HIGH"]
           if high:
               failures.append(f"{len(high)} high-severity deterministic finding(s)")
@@ -131,7 +138,7 @@ jobs:
               for failure in failures:
                   print(f"- {failure}")
               raise SystemExit(1)
-          print("Security release gates passed, including a completed CICO review.")
+          print("Security release gates passed, including a completed Gemini review.")
           PY
       - name: Upload security evidence
         if: always()
