@@ -110,10 +110,17 @@ jobs:
           except (OSError, json.JSONDecodeError):
               report = {}
               failures.append("deterministic security report missing or invalid")
-          if report.get("cico", {}).get("status") != "completed":
-              failures.append("CICO-compatible review did not complete; configure the GEMINI_API_KEY Actions secret and verify provider quota/access")
-          elif report["cico"].get("passed") is not True:
-              failures.append("CICO review reported findings or did not pass")
+          cico = report.get("cico", {})
+          if cico.get("status") != "completed":
+              failures.append(f"CICO-compatible review did not complete (status={cico.get('status', 'missing')}).")
+              issues = cico.get("issues", [])
+              if isinstance(issues, list):
+                  for issue in issues[:3]:
+                      failures.append(f"CICO diagnostic: {str(issue)[:1000]}")
+              if not issues:
+                  failures.append("Check GEMINI_API_KEY validity, model access, and provider quota in the security report artifact.")
+          elif cico.get("passed") is not True:
+              failures.append("CICO review reported blocking findings; inspect the security report artifact.")
           high = [f for f in report.get("deterministic_findings", []) if f.get("severity") == "HIGH"]
           if high:
               failures.append(f"{len(high)} high-severity deterministic finding(s)")
