@@ -107,11 +107,15 @@ def run_cico(paths: list[Path], repo_root: Path, timeout: int = 180) -> dict[str
         if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
             return {"status": "configuration_error", "passed": False,
                     "issues": ["ASCM_CICO_AGENT_CMD must be a non-empty JSON array of strings."]}
+    elif os.environ.get("GEMINI_API_KEY", "").strip():
+        # ASCM ships its own Gemini-compatible adapter. A separate
+        # ASCM_CICO_AGENT_CMD secret is not required when the API key exists.
+        command = [sys.executable, "-m", "orchestrator.security.gemini_review_adapter"]
     elif shutil.which("cico"):
         command = ["cico"]
     else:
         return {"status": "not_configured", "passed": None,
-                "issues": ["CICO CLI is not available; configure ASCM_CICO_AGENT_CMD or install/configure the CICO CLI."]}
+                "issues": ["No review provider is configured. Set GEMINI_API_KEY for the bundled Gemini adapter, or configure ASCM_CICO_AGENT_CMD for a custom CICO-compatible reviewer."]}
 
     base_branch = os.environ.get("GITHUB_BASE_REF", "main").strip() or "main"
     base_ref = f"origin/{base_branch}"
