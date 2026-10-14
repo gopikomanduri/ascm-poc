@@ -94,6 +94,24 @@ def test_explicit_gemini_key_wins_over_google_api_key(monkeypatch):
     assert "GOOGLE_API_KEY" not in __import__("os").environ
 
 
+
+def test_provider_error_includes_sanitized_status(monkeypatch):
+    class FakeClientError(Exception):
+        code = 429
+        message = "quota exceeded for request"
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            raise FakeClientError("quota exceeded for request")
+
+    fake_genai = SimpleNamespace(Client=lambda **kwargs: SimpleNamespace(models=FakeModels()))
+    monkeypatch.setitem(sys.modules, "google", SimpleNamespace(genai=fake_genai))
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    with pytest.raises(adapter.ReviewError, match=r"status=429.*quota exceeded"):
+        adapter._request_review("diff --git ...", "test-secret-key", "gemini-2.5-flash")
+
+
 def test_model_failure_does_not_expose_provider_exception(monkeypatch, tmp_path):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     with (
