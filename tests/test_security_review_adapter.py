@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from orchestrator.security import gemini_review_adapter as adapter
+from orchestrator.security import security_review_adapter as adapter
 
 
 def _request():
