@@ -87,7 +87,7 @@ def test_explicit_gemini_key_wins_over_google_api_key(monkeypatch):
     monkeypatch.setitem(sys.modules, "google", SimpleNamespace(genai=fake_genai))
     monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
 
-    result = adapter._request_review("diff --git ...", "intended-gemini-key", "gemini-2.5-flash")
+    result = adapter._request_review("diff --git ...", "intended-gemini-key", "gemini-3.8-flash")
 
     assert result == {"findings": []}
     assert captured["api_key"] == "intended-gemini-key"
@@ -109,7 +109,7 @@ def test_provider_error_includes_sanitized_status(monkeypatch):
     monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
 
     with pytest.raises(adapter.ReviewError, match=r"status=429.*quota exceeded"):
-        adapter._request_review("diff --git ...", "test-secret-key", "gemini-2.5-flash")
+        adapter._request_review("diff --git ...", "test-secret-key", "gemini-3.8-flash")
 
 
 def test_model_failure_does_not_expose_provider_exception(monkeypatch, tmp_path):
