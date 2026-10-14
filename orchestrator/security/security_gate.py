@@ -1,8 +1,6 @@
 """Security gate for changed ASCM files.
 
-Runs deterministic local checks on every CI change and invokes model-assisted security review's structured
-branch-review CLI. ASCM_model-assisted security review_AGENT_CMD may override the executable via a JSON
-array (never shell-evaluated). The report records whether model-assisted security review actually ran.
+Runs deterministic local checks and a Gemini-backed structured review.
 """
 from __future__ import annotations
 
@@ -11,7 +9,6 @@ import ast
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -96,19 +93,16 @@ def scan_paths(paths: list[Path], repo_root: Path) -> list[dict[str, Any]]:
 
 
 def run_model_review(paths: list[Path], repo_root: Path, timeout: int = 180) -> dict[str, Any]:
-    """Run the configured Gemini-backed structured review of the branch diff."""
+    """Run the Gemini-backed structured security review for the branch diff."""
     if not os.environ.get("GEMINI_API_KEY", "").strip():
         return {"status": "not_configured", "passed": False,
                 "issues": ["GEMINI_API_KEY is not configured for the security review."]}
-
     base_branch = os.environ.get("GITHUB_BASE_REF", "main").strip() or "main"
     request = {
         "version": 1,
         "repo": str(repo_root.resolve()),
-        "source": {
-            "kind": "repository",
-            "scope": {"type": "branch", "base": f"origin/{base_branch}", "head": "HEAD"},
-        },
+        "source": {"kind": "repository", "scope": {
+            "type": "branch", "base": f"origin/{base_branch}", "head": "HEAD"}},
         "options": {"trustRepositoryConfig": False},
     }
     command = [sys.executable, "-m", "orchestrator.security.security_review_adapter"]
@@ -144,9 +138,7 @@ def run_model_review(paths: list[Path], repo_root: Path, timeout: int = 180) -> 
     if not isinstance(findings, list):
         return {"status": "invalid_response", "passed": False,
                 "issues": ["Security review response did not include a findings list."]}
-
-    normalized = []
-    blocking = []
+    normalized, blocking = [], []
     for finding in findings[:200]:
         if not isinstance(finding, dict):
             continue
@@ -155,13 +147,10 @@ def run_model_review(paths: list[Path], repo_root: Path, timeout: int = 180) -> 
             score = int(severity) if not isinstance(severity, bool) else 0
         except (TypeError, ValueError, OverflowError):
             score = 0
-        item = {
-            "severity": score,
-            "category": str(finding.get("category", "unknown"))[:80],
-            "title": str(finding.get("title", "Untitled finding"))[:240],
-            "summary": str(finding.get("summary", ""))[:1200],
-            "filePath": str(finding.get("filePath", ""))[:500],
-        }
+        item = {"severity": score, "category": str(finding.get("category", "unknown"))[:80],
+                "title": str(finding.get("title", "Untitled finding"))[:240],
+                "summary": str(finding.get("summary", ""))[:1200],
+                "filePath": str(finding.get("filePath", ""))[:500]}
         normalized.append(item)
         if score >= 7:
             blocking.append(item)
@@ -174,14 +163,13 @@ def run_model_review(paths: list[Path], repo_root: Path, timeout: int = 180) -> 
     except Exception:
         safe_issues = [f"Security review reported {len(normalized)} finding(s); details omitted because redaction was unavailable."]
         safe_warnings = []
-    return {
-        "status": "completed", "passed": not blocking, "issues": safe_issues,
-        "finding_count": len(normalized), "blocking_finding_count": len(blocking),
-        "severity_threshold": 7, "provider_warnings": safe_warnings,
-    }
+    return {"status": "completed", "passed": not blocking, "issues": safe_issues,
+            "finding_count": len(normalized), "blocking_finding_count": len(blocking),
+            "severity_threshold": 7, "provider_warnings": safe_warnings}
+
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="ASCM deterministic and model-assisted security review security gate")
+    parser = argparse.ArgumentParser(description="ASCM deterministic and model-assisted security gate")
     parser.add_argument("--git-base", default="")
     parser.add_argument("--paths", nargs="*", default=[])
     parser.add_argument("--report", default=".ascm_history/security/security-report.json")
@@ -191,24 +179,23 @@ def main(argv=None) -> int:
     try:
         paths = [Path(item) for item in args.paths] if args.paths else _changed_paths(args.git_base) if args.git_base else []
         findings = scan_paths(paths, root)
-        security_review = run_model_review(paths, root)
+        review = run_model_review(paths, root)
     except Exception as exc:
         print(f"Security gate failed to complete: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
-
     blocking = [item for item in findings if item["severity"] == "HIGH"]
-    security_review_blocking = security_review.get("passed") is False
+    review_blocking = review.get("passed") is False
     report = {
         "schema_version": 1,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "scanner": "ASCM-SecurityGate",
         "files_scanned": [str(path) for path in paths],
         "deterministic_findings": findings,
-        "security_review": security_review,
-        "status": "failed" if blocking or security_review_blocking or (args.require_model_review and security_review["status"] != "completed") else "passed_with_review_unavailable" if security_review["status"] != "completed" else "passed",
+        "security_review": review,
+        "status": "failed" if blocking or review_blocking or (args.require_model_review and review["status"] != "completed") else "passed_with_review_unavailable" if review["status"] != "completed" else "passed",
         "notes": [
             "Static checks are not a substitute for manual threat modeling or a full SAST/DAST program.",
-            "model-assisted security review is reported as unavailable unless the configured command actually runs and returns a valid result.",
+            "Model-assisted review is reported as unavailable unless the configured reviewer returns a valid result.",
         ],
     }
     report_path = (root / args.report).resolve()
@@ -219,30 +206,24 @@ def main(argv=None) -> int:
         return 2
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-
-    # Audit records contain counts and agent status only, not scanned source or raw findings.
     try:
         from orchestrator.security.audit_logger import AuditLogger
         audit = AuditLogger(log_dir=str(root / ".ascm_history" / "audit"))
         audit.log_security_event("REVIEW_COMPLETED", {
             "files_scanned": len(paths), "finding_count": len(findings),
-            "high_severity_count": len(blocking), "security_review_status": security_review["status"],
+            "high_severity_count": len(blocking), "security_review_status": review["status"],
             "gate_status": report["status"], "report": str(report_path.relative_to(root)),
         }, severity="ERROR" if report["status"] == "failed" else "INFO")
     except Exception as exc:
         print(f"Warning: structured audit log could not be written ({type(exc).__name__}).", file=sys.stderr)
-
     print(json.dumps({
         "status": report["status"], "files_scanned": len(paths),
         "finding_count": len(findings), "high_severity_count": len(blocking),
-        "finding_summary": [
-            {"severity": item["severity"], "rule": item["rule"], "path": item["path"],
-             "line": item.get("line")} for item in findings
-        ],
-        "security_review_status": security_review["status"], "report": str(report_path),
+        "finding_summary": [{"severity": item["severity"], "rule": item["rule"],
+                             "path": item["path"], "line": item.get("line")} for item in findings],
+        "security_review_status": review["status"], "report": str(report_path),
     }, indent=2))
     return 1 if report["status"] == "failed" else 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
