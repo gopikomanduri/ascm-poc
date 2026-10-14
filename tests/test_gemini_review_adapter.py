@@ -1,6 +1,8 @@
 """Regression tests for the Gemini-backed structured security reviewer."""
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
+import sys
 
 import pytest
 
@@ -67,6 +69,29 @@ def test_malformed_model_payload_is_rejected(payload):
 def test_git_refs_cannot_be_passed_as_options(tmp_path):
     with pytest.raises(adapter.ReviewError, match="invalid Git ref"):
         adapter._git_diff(tmp_path, "--upload-pack=malicious", "HEAD")
+
+
+def test_explicit_gemini_key_wins_over_google_api_key(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "wrong-provider-key")
+    captured = {}
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            return SimpleNamespace(text='{"findings": []}')
+
+    def fake_client(*, api_key):
+        captured["api_key"] = api_key
+        return SimpleNamespace(models=FakeModels())
+
+    fake_genai = SimpleNamespace(Client=fake_client)
+    monkeypatch.setitem(sys.modules, "google", SimpleNamespace(genai=fake_genai))
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    result = adapter._request_review("diff --git ...", "intended-gemini-key", "gemini-2.5-flash")
+
+    assert result == {"findings": []}
+    assert captured["api_key"] == "intended-gemini-key"
+    assert "GOOGLE_API_KEY" not in __import__("os").environ
 
 
 def test_model_failure_does_not_expose_provider_exception(monkeypatch, tmp_path):
