@@ -55,7 +55,6 @@ jobs:
       - name: Run ASCM deterministic security gate and CICO review
         env:
           PYTHONPATH: .
-          ASCM_CICO_AGENT_CMD: '["python", "-m", "orchestrator.security.gemini_review_adapter"]'
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         shell: bash
         run: |
