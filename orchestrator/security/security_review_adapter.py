@@ -108,9 +108,20 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
             config={"response_mime_type": "application/json"},
         )
     except Exception as exc:
-        # Avoid echoing provider exceptions because they can contain request
-        # metadata. The CI report needs the failure type, not raw provider text.
-        raise ReviewError(f"Gemini review request failed ({type(exc).__name__}).") from exc
+        # Provider errors often include the actionable HTTP status (for example
+        # 400 invalid model, 403 permission, or 429 quota). Preserve only a short,
+        # scrubbed diagnostic; never log request headers, credentials, or payloads.
+        status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+        detail = getattr(exc, "message", None) or str(exc)
+        try:
+            from orchestrator.security.pii_scrubber import PIIScrubber
+            safe_detail = PIIScrubber.scrub(str(detail))[:400]
+        except Exception:
+            safe_detail = "provider diagnostic omitted because redaction was unavailable"
+        status_text = f", status={status}" if isinstance(status, (int, str)) else ""
+        raise ReviewError(
+            f"Gemini review request failed ({type(exc).__name__}{status_text}): {safe_detail}"
+        ) from exc
 
     text = getattr(response, "text", None)
     if not isinstance(text, str) or not text.strip():
