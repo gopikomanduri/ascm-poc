@@ -132,7 +132,7 @@ jobs:
               for failure in failures:
                   print(f"- {failure}")
               raise SystemExit(1)
-          print("Security release gates passed, including a completed Security review.")
+          print("Security release gates passed, including a completed Gemini review.")
           PY
       - name: Upload security evidence
         if: always()
