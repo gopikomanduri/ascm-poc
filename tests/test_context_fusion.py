@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from orchestrator.mentor.context_fusion import ContextFusionEngine
+from orchestrator.mentor.context_fusion import ContextFusionEngine, _now as _now_for_test
 
 
 class ContextFusionEngineTests(unittest.TestCase):
@@ -78,6 +78,37 @@ class ContextFusionEngineTests(unittest.TestCase):
             engine.record_terminal_event(cwd=project_a, command_category="build_or_run", exit_code=0)
             engine.record_terminal_event(cwd=project_b, command_category="python_tests", exit_code=1)
             self.assertEqual(engine.latest_project_path(), project_b.resolve())
+
+    def test_ide_activation_and_browser_signals_are_recent_but_not_confident_intent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "project"
+            project.mkdir()
+            subprocess.run(["git", "init", "-q", str(project)], check=True)
+            engine = ContextFusionEngine(root)
+            activated = engine.record_project_activation(project_path=project)
+            self.assertTrue(engine.has_recent_activity())
+            context = engine.infer_context(project)
+            self.assertEqual(context["task_hypothesis"], "Project workspace activated; task intent is unconfirmed")
+            self.assertLess(context["confidence"], 0.60)
+            self.assertEqual(context["evidence_event_ids"], [activated["event_id"]])
+
+            engine.record_browser_domain(cwd=project, domain="docs.python.org")
+            self.assertTrue(engine.has_recent_activity())
+            context = engine.infer_context(project)
+            self.assertLess(context["confidence"], 0.60)
+            self.assertIn("intent is unconfirmed", context["task_hypothesis"])
+
+    def test_recent_activity_rejects_stale_events(self):
+        from datetime import timedelta
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            engine = ContextFusionEngine(root)
+            event = engine.record_terminal_event(cwd=root, command_category="python_tests", exit_code=0)
+            payload = json.loads(engine.events_path.read_text().splitlines()[0])
+            payload["timestamp"] = (_now_for_test() - timedelta(minutes=10)).isoformat()
+            engine.events_path.write_text(json.dumps(payload) + "\\n", encoding="utf-8")
+            self.assertFalse(engine.has_recent_activity(within_seconds=60))
 
     def test_rejects_files_outside_configured_workspace(self):
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
