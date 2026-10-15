@@ -309,8 +309,7 @@ class ProactiveDaemonPromptTests(unittest.TestCase):
                 notify.call_args.args[0],
             )
             self.assertIn(
-                "Top paths: simplify: 80/100; "
-                "customer_validate: 75/100; reuse: 60/100",
+                "Alternatives: simplify, customer_validate, reuse",
                 notify.call_args.args[1],
             )
 
