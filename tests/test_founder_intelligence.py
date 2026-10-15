@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -284,7 +285,7 @@ class FounderEvidenceDeliveryIntegrationTests(unittest.TestCase):
                 for _ in range(4)
             ]
             (history / "intervention_quality.json").write_text(
-                __import__("json").dumps(records), encoding="utf-8"
+                json.dumps(records), encoding="utf-8"
             )
             adjustments = _feedback_adjustments(tmp)
         self.assertNotIn("build", adjustments)
