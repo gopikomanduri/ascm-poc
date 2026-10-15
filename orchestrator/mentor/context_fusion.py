@@ -300,7 +300,7 @@ class ContextFusionEngine:
         )
         recent = [
             event for event in ordered
-            if now - (_parse_time(event["timestamp"]) or now) <= timedelta(minutes=30)
+            if timedelta(0) <= now - (_parse_time(event["timestamp"]) or now) <= timedelta(minutes=30)
         ]
         edits = [e for e in recent if e.get("event_type") == "file_changed"]
         tests = [e for e in recent if e.get("event_type") in {"test_passed", "test_failed"}]
