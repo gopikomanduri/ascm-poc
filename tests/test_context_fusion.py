@@ -99,6 +99,16 @@ class ContextFusionEngineTests(unittest.TestCase):
             self.assertLess(context["confidence"], 0.60)
             self.assertIn("Browsing", context["task_hypothesis"])\n            self.assertIn("browser_domain_seen", [event["event_type"] for event in engine._read_events()])
 
+    def test_passive_app_or_browser_events_do_not_trigger_goal_prompt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            engine = ContextFusionEngine(root)
+            engine.record_browser_domain(cwd=root, domain="docs.python.org")
+            self.assertTrue(engine.has_recent_activity())
+            self.assertFalse(engine.has_recent_actionable_activity())
+            engine.record_terminal_event(cwd=root, command_category="python_tests", exit_code=0)
+            self.assertTrue(engine.has_recent_actionable_activity())
+
     def test_recent_activity_rejects_stale_events(self):
         from datetime import timedelta
         with tempfile.TemporaryDirectory() as tmp:
