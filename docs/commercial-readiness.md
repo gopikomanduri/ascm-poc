@@ -55,46 +55,31 @@ Follow [the opt-in browser extension instructions](../browser_extension/README.m
 
 The local JSONL files are useful audit evidence, not tamper-proof or centralized audit storage. Commercial deployments should export events to a protected append-only store, define retention/deletion controls, and document incident response. Do not put customer content or secrets into event details.
 
-## Security gate and CICO integration
+## Security review and CI gate
 
-The pull-request workflow integrates the CICO security-review adapter through GitHub Actions and exposes the same gate as a local CLI. Every run also performs deterministic ASCM checks, Bandit scans of changed Python files, a pip-audit dependency scan, and uploads machine-readable evidence. The Docker build is blocked unless the security release gates pass.
+The pull-request workflow runs the repository-owned ASCM security gate. It combines deterministic secret/static checks, Bandit, pip-audit, and a required structured Gemini review. If the required model review is unavailable, malformed, or fails, the gate fails closed. The exact gate implementation lives in `orchestrator/security/security_gate.py`; CI evidence is attached to the pull request workflow run.
 
-The adapter accepts `ASCM_CICO_AGENT_CMD` as a JSON array containing the CICO executable and any fixed arguments. It appends the structured review arguments (`agent review --input - --repo <repo>`) and sends a versioned JSON request on stdin. Commands are never shell-evaluated. CICO must return a valid structured review envelope; findings with severity 7/10 or higher block the gate. The adapter records normalized, redacted findings and status metadata, not raw provider output.
+Configure the GitHub Actions secret `GEMINI_API_KEY` in repository settings. Never put credentials in source files, workflow YAML, comments, or artifacts. The model review supplements—not replaces—deterministic checks, human review, threat modeling, or penetration testing.
 
-**GitHub integration:** configure the repository Actions secret `ASCM_CICO_AGENT_CMD` with a JSON array that invokes the installed CICO CLI/adapter. The exact executable and its provider credentials depend on your CICO deployment; ASCM does not invent a CICO binary or assume provider credentials. If CICO is absent, misconfigured, exits unsuccessfully, or returns an invalid response, the required CI gate fails closed. Never store credentials in source files, workflow YAML, comments, or artifacts.
+## Four founder-readiness gates
 
-**Local CLI:**
+ASCM is a local-first founder beta, not a hosted multi-tenant authorization service. Treat the following as required acceptance gates rather than assuming a feature is complete because its module exists.
 
-```bash
-# Review changed files against main and write an evidence report
-ASCM_CICO_AGENT_CMD='["/path/to/cico"]' \
-  python -m orchestrator.security.cico_gate --git-base origin/main \
-  --report .ascm_history/security/security-report.json --require-cico
+1. **Proactive context awareness:** verify that workspace-scoped file, test, terminal, IDE, foreground-app, and browser signals are opt-in/configured as documented; infer a task only from recent, project-matched evidence; keep hypotheses separate from founder-confirmed goals; suppress low-confidence or stale recommendations; and confirm opt-out stops collection.
+2. **Evidence-connected GTM:** record task-scoped customer events in the local outcome ledger or deliver normalized events through the authenticated webhook. The webhook requires a high-entropy `ASCM_OUTCOME_WEBHOOK_SECRET`, a fresh timestamp, and an HMAC signature. Provider integrations must map events into the normalized schema; CRM/email/social subscriptions are not automatically provisioned. GitHub reuse discovery is opt-in, and metadata candidates are not endorsements.
+3. **Outcome learning:** only explicit founder feedback on adapter-confirmed delivered interventions may influence rankings. Missing or false delivery confirmation is ineligible. Feedback is immutable, adjustments are bounded, and a minimum sample is required. Run the 30-day real-session evaluation before claiming recommendations improve outcomes; self-reported feedback is not causal proof.
+4. **Local persistence and action safety:** local history uses restrictive permissions and atomic replacement where implemented. Local JSON ledgers are not transactional multi-process databases or tamper-proof audit stores. Approved local execution is disabled by default, allowlisted, timeout-bounded, and requires a signed approval bound to the proposal ID and action type. The signing key is stored locally; this does not defend against an attacker controlling the same OS account. Do not expose local proposal files or executor APIs as a remote authorization boundary.
 
-# Scan an explicit file list (the command still runs the configured CICO review)
-ASCM_CICO_AGENT_CMD='["/path/to/cico"]' \
-  python -m orchestrator.security.cico_gate --paths orchestrator/security/cico_gate.py
-```
+## Release gates still required for hosted/commercial production
 
-The executable must implement the documented adapter contract. Until the real CICO entry point is configured and a successful structured response is observed, the integration is not considered validated and the security release gate remains blocked.
-
-## Release gates still required for a commercial launch
-
-- Configure the approved CICO agent runner in GitHub Actions and verify a completed CICO review.
-- Triage and remediate every high/medium finding from Bandit and pip-audit; pin and review dependencies, including transitive dependencies.
-- Add threat-model review and external penetration testing/DAST for any web/API endpoints; current CI is not a DAST scan.
-- Validate installer/uninstaller behavior on supported macOS, Linux desktop/systemd, and Windows versions. Browser native-host auto-registration is currently macOS/Linux only.
+- Add a transactional persistence layer with migration, concurrency, recovery, backup, and restore testing before multiple processes or users write shared state.
+- Add identity-backed server-side authorization and tenant isolation before any hosted or remote action execution; local signed approvals are not a substitute.
 - Add centralized, access-controlled audit export, retention/deletion controls, customer consent/export controls, and a privacy policy.
-- Add multi-user identity and server-side authorization before any remote action execution. Local proposal approval files are not a production authorization boundary.
-- Add operational monitoring, crash recovery tests, backups, restore drills, and incident response procedures.
+- Add threat-model review and external penetration testing/DAST for web/API endpoints; current CI is not a DAST scan.
+- Validate installer/uninstaller behavior on supported macOS, Linux desktop/systemd, and Windows versions, including permission and headless-session behavior.
 - Review licensing and third-party notices, package provenance, signed releases, SBOM, vulnerability response SLA, and supported-version policy.
-- Run end-to-end tests on actual desktop environments, including headless Linux, Wayland, macOS permissions, Windows startup, shell-hook opt-out, and browser native messaging.
+- Add operational monitoring, crash recovery tests, incident response procedures, and documented support boundaries.
 - Complete product-specific legal/privacy review before collecting activity telemetry from customers or employees.
-
-To remove the OS login service without deleting local history, run `python -m orchestrator.mentor.daemon --repo /absolute/path/to/workspace --uninstall`. The terminal hooks and browser extension are separately opt-in and must be removed/disabled independently.
-
-The PR must remain unmerged until its latest CI run is green, CICO is actually invoked, findings are triaged, and a human review approves the release.
-
 
 ## Approved local action execution (opt-in)
 
