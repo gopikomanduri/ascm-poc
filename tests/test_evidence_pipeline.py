@@ -83,6 +83,29 @@ class EvidenceSourceConnectorTests(unittest.TestCase):
             self.assertEqual(billing["event_count"], 1)
             self.assertEqual(billing["evidence_event_ids"], ["billing-demand"])
 
+    def test_product_feature_key_and_aliases_scope_customer_demand(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".ascm_product.json").write_text(json.dumps({
+                "feature_key": "invoice-automation",
+                "feature_aliases": ["billing workflow"],
+            }), encoding="utf-8")
+            history = root / ".ascm_history"
+            history.mkdir()
+            now = datetime.now(timezone.utc).isoformat()
+            (history / "gtm_outcomes.json").write_text(json.dumps([
+                {"event_id": "alias-demand", "event_type": "pilot_commitment",
+                 "occurred_at": now, "metrics": {"feature_key": "billing workflow"}},
+                {"event_id": "other-demand", "event_type": "conversion",
+                 "occurred_at": now, "metrics": {"feature_key": "analytics"}},
+            ]), encoding="utf-8")
+            evidence = EvidenceSourceConnector(root).collect("Implement an unfamiliar internal component")
+        summary = evidence["customer_evidence_summary"]
+        self.assertEqual(summary["feature_scope"], "invoice-automation")
+        self.assertEqual(summary["event_count"], 1)
+        self.assertTrue(summary["user_demand_verified"])
+        self.assertEqual(summary["evidence_event_ids"], ["alias-demand"])
+
     def test_relevance_rank_contributes_to_candidate_triage_score(self):
         recent = datetime.now(timezone.utc).isoformat()
         base = {
