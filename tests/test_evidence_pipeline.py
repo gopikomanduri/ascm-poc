@@ -218,5 +218,28 @@ class InterventionQualityTrackerTests(unittest.TestCase):
                 tracker.record_feedback(feedback="great", intervention_id="missing")
 
 
+    def test_legacy_or_unconfirmed_delivery_cannot_be_rated_or_counted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tracker = InterventionQualityTracker(tmp)
+            tracker.path.parent.mkdir(parents=True, exist_ok=True)
+            tracker.path.write_text(json.dumps([
+                {"intervention_id": "legacy", "session_id": "s", "feedback": None},
+                {"intervention_id": "not-delivered", "session_id": "s",
+                 "delivery_confirmed": False, "feedback": None},
+                {"intervention_id": "delivered", "session_id": "s",
+                 "delivery_confirmed": True, "feedback": None},
+            ]), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "delivery was not confirmed"):
+                tracker.record_feedback(feedback="helpful", intervention_id="legacy")
+            with self.assertRaisesRegex(ValueError, "delivery was not confirmed"):
+                tracker.record_feedback(feedback="helpful", intervention_id="not-delivered")
+            result = tracker.record_feedback(feedback="helpful", intervention_id="delivered")
+            self.assertEqual(result["intervention_id"], "delivered")
+            report = tracker.report("s")
+            self.assertEqual(report["interventions_shown"], 1)
+            self.assertEqual(report["delivery_unconfirmed"], 2)
+            self.assertEqual(report["interventions_reviewed"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
