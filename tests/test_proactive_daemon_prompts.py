@@ -4,7 +4,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from orchestrator.mentor.daemon import UniversalASCMDaemon\nfrom orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
+from orchestrator.mentor.daemon import UniversalASCMDaemon
+from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 
 
 class FakeContext:
