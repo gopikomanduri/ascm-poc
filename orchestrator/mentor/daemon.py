@@ -230,9 +230,10 @@ class UniversalASCMDaemon:
                 review = build_session_review(
                     goal, task, recent_events,
                     {
-                        "tests_failed": "test failure" in task.lower() or "failed test" in task.lower(),
+                        "tests_failed": failed_tests >= 1 or "test failure" in task.lower() or "failed test" in task.lower(),
                         "repeated_failures": failed_tests >= 2,
-                        "customer_evidence": None,
+                        "scope_risk": recommendation_evidence.get("scope_risk") is True,
+                        "customer_evidence": recommendation_evidence.get("customer_evidence"),
                     },
                 )
                 recommendation_evidence["session_review"] = review
