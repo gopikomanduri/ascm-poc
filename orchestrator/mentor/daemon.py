@@ -365,6 +365,12 @@ class UniversalASCMDaemon:
             )
             return
 
+        # App/browser metadata alone must not interrupt the founder with a goal prompt.
+        # Ask only after recent project work or an explicit IDE workspace activation.
+        signal_window = max(120, int(self.poll_interval_sec) * 2)
+        if not self.context_fusion.has_recent_actionable_activity(signal_window):
+            return
+
         # A missing goal changes every recommendation, so this is a worthwhile clarification.
         last_prompt = float(state.get("last_founder_context_prompt_at", 0) or 0)
         if current_time - last_prompt < 14400:
@@ -373,7 +379,7 @@ class UniversalASCMDaemon:
         file_names = ", ".join(Path(item).name for item in recent_files[-3:]) or "recent code files"
         title = "ASCM Mentor: What outcome are you pursuing?"
         question = (
-            f"I noticed code edits in {file_names}, but I don't yet know the outcome you're pursuing. "
+            f"I noticed recent project activity ({file_names}), but I don't yet know the outcome you're pursuing. "
             "What meaningful result should this work achieve? I'll use that goal to guide next-step recommendations."
         )
 
