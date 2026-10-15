@@ -331,12 +331,12 @@ class InterventionQualityTracker:
             if intervention_id and item.get("intervention_id") == intervention_id:
                 target = item
                 break
-            if not intervention_id and item.get("feedback") is None and item.get("delivery_confirmed", True):
+            if not intervention_id and item.get("feedback") is None and item.get("delivery_confirmed") is True:
                 target = item
                 break
         if target is None:
             raise ValueError("No matching unreviewed intervention found")
-        if target.get("delivery_confirmed", True) is not True:
+        if target.get("delivery_confirmed") is not True:
             raise ValueError("Cannot rate an intervention whose delivery was not confirmed")
         if target.get("feedback") in FEEDBACK_LABELS:
             raise ValueError("This intervention already has feedback; ratings are immutable to protect measurement integrity")
@@ -355,8 +355,8 @@ class InterventionQualityTracker:
         events = self._read()
         if session_id:
             events = [e for e in events if e.get("session_id") == session_id]
-        shown = [e for e in events if e.get("delivery_confirmed", True) is True]
-        delivery_unconfirmed = [e for e in events if e.get("delivery_confirmed", True) is not True]
+        shown = [e for e in events if e.get("delivery_confirmed") is True]
+        delivery_unconfirmed = [e for e in events if e.get("delivery_confirmed") is not True]
         reviewed = [e for e in shown if e.get("feedback") in FEEDBACK_LABELS]
         counts = {label: sum(e.get("feedback") == label for e in reviewed) for label in sorted(FEEDBACK_LABELS)}
         helpful = counts["helpful"] + counts["accepted"] + counts["acted_on"]
