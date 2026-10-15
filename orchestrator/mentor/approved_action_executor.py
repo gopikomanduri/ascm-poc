@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from orchestrator.security.audit_logger import AuditLogger
+from orchestrator.mentor.approval_security import verify_approval
 
 ALLOWED_ACTIONS = {"inspect_git_status", "run_pytest"}
 
@@ -39,6 +40,8 @@ class ApprovedActionExecutor:
             raise KeyError("Unknown proposal ID")
         if proposal.get("status") != "approved":
             raise PermissionError("Proposal must be explicitly approved before execution")
+        if not verify_approval(self.workspace, proposal):
+            raise PermissionError("Approval is missing, stale, or not bound to this exact proposal; review and approve it again")
         if proposal.get("execution_status") not in (None, "not_started"):
             raise ValueError("Proposal has already been executed or attempted")
         action = proposal.get("action_type")
