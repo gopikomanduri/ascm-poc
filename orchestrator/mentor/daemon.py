@@ -371,8 +371,17 @@ class UniversalASCMDaemon:
         # App/browser metadata alone must not interrupt the founder with a goal prompt.
         # Ask only after recent project work or an explicit IDE workspace activation.
         signal_window = max(120, int(getattr(self, "poll_interval_sec", 30)) * 2)
-        if not self.context_fusion.has_recent_actionable_activity(signal_window):
-            return
+        actionable_check = getattr(self.context_fusion, "has_recent_actionable_activity", None)
+        if callable(actionable_check):
+            if not actionable_check(signal_window):
+                return
+        else:
+            # Compatibility for injected/test context adapters that expose only the
+            # original inference API; filesystem evidence still gates interruptions.
+            recent_files = activity.get("filesystem_activity", {}).get("recently_edited_files", [])
+            terminal_check = getattr(self.context_fusion, "has_recent_terminal_activity", None)
+            if not recent_files and not (callable(terminal_check) and terminal_check(signal_window)):
+                return
 
         # A missing goal changes every recommendation, so this is a worthwhile clarification.
         last_prompt = float(state.get("last_founder_context_prompt_at", 0) or 0)
