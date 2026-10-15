@@ -477,7 +477,11 @@ class UniversalASCMDaemon:
             pending = state.get("pending_gtm_outcomes", [])
             if not isinstance(pending, list):
                 pending = []
-            known_ids = {item.get("event_id") for item in pending if isinstance(item, dict)}
+            pending = [
+                item for item in pending
+                if isinstance(item, dict) and isinstance(item.get("event_id"), str)
+            ]
+            known_ids = {item["event_id"] for item in pending}
             for event in reversed(new_events):
                 if event["event_id"] in known_ids:
                     continue
@@ -496,7 +500,14 @@ class UniversalASCMDaemon:
             self._save_daemon_state(state)
 
         pending = state.get("pending_gtm_outcomes", [])
-        if not isinstance(pending, list) or not pending:
+        if not isinstance(pending, list):
+            pending = []
+        pending = [
+            item for item in pending
+            if isinstance(item, dict) and isinstance(item.get("event_id"), str)
+        ]
+        state["pending_gtm_outcomes"] = pending
+        if not pending:
             return
         last_notice = float(state.get("last_gtm_outcome_notice_at", 0) or 0)
         if current_time - last_notice < 300:
