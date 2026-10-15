@@ -498,7 +498,15 @@ class UniversalASCMDaemon:
                     logger.warning("[Daemon] Milestone detector failed safely: %s", type(exc).__name__)
 
                 # Proactively ask in a native desktop dialog and persist the response; no CLI interaction required.
-                if combined["actively_coding_now"] or self.context_fusion.has_recent_terminal_activity():
+                # React to every supported signal source, not only filesystem edits or
+                # terminal hooks. Adapter events remain metadata-only and are subject to
+                # the same persisted notification cooldowns and confidence thresholds.
+                signal_window = max(120, int(self.poll_interval_sec) * 2)
+                if (
+                    combined["actively_coding_now"]
+                    or self.context_fusion.has_recent_terminal_activity(signal_window)
+                    or self.context_fusion.has_recent_activity(signal_window)
+                ):
                     self._prompt_for_founder_context(activity, daemon_state, current_time)
 
                 if self.suggester:
