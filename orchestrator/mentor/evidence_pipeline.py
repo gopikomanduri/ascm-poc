@@ -412,6 +412,16 @@ class InterventionQualityTracker:
         shown = [e for e in events if e.get("delivery_confirmed") is True]
         delivery_unconfirmed = [e for e in events if e.get("delivery_confirmed") is not True]
         reviewed = [e for e in shown if e.get("feedback") in FEEDBACK_LABELS]
+        # An old unanswered intervention is surfaced for follow-up, never silently
+        # counted as negative feedback or as evidence the recommendation was useful.
+        now = _now()
+        overdue_unreviewed = []
+        for item in shown:
+            if item.get("feedback") in FEEDBACK_LABELS:
+                continue
+            attempted = _parse_time(item.get("attempted_at"))
+            if attempted and (now - attempted) >= timedelta(hours=24):
+                overdue_unreviewed.append(item)
         counts = {label: sum(e.get("feedback") == label for e in reviewed) for label in sorted(FEEDBACK_LABELS)}
         helpful = counts["helpful"] + counts["accepted"] + counts["acted_on"]
         not_helpful = counts["not_helpful"] + counts["dismissed"] + counts["incorrect"]
@@ -464,6 +474,8 @@ class InterventionQualityTracker:
             "delivery_unconfirmed": len(delivery_unconfirmed),
             "interventions_reviewed": len(reviewed),
             "unreviewed": len(shown) - len(reviewed),
+            "overdue_unreviewed_24h": len(overdue_unreviewed),
+            "overdue_intervention_ids": [str(item.get("intervention_id")) for item in overdue_unreviewed[-100:]],
             "feedback_counts": counts,
             "by_recommended_path": by_path,
             "by_evidence_profile": by_evidence_profile,
