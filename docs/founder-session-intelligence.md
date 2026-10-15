@@ -9,7 +9,8 @@ ASCM's mentor now has a session-level review layer that keeps three concepts dis
 ## What it does
 
 - Summarizes recent signal coverage and highlights absent adapters without interpreting absence as inactivity.
-- Compares the observed task with the stated goal using a deliberately weak token-overlap heuristic.
+- Compares the observed task with the stated goal using transparent concept groups plus lexical overlap; sparse descriptions are not enough to trigger a goal-drift challenge. This reduces obvious synonym false positives but is not a semantic model.
+- Keeps public repository search results as research leads. A candidate is eligible for a reuse recommendation only after explicit founder review records feature fit, license compatibility, security review, and integration-cost estimate for that exact repository.
 - Surfaces a goal-drift challenge when task/goal overlap is low and matching customer evidence is absent.
 - Prioritizes inspecting the smallest failing slice when recent test failures or repeated failures are observed.
 - Carries the alignment status, similarity, and active source types into recommendation audit metadata.
@@ -28,6 +29,8 @@ Coverage is limited to signals from installed and enabled adapters. A missing br
 ## Measuring whether advice helps
 
 Each recommendation gets an intervention ID and working-session ID. Delivery confirmation is recorded separately from usefulness feedback. The notification offers `helpful` and `not_helpful` feedback commands and a session report command. Only explicitly rated, confirmed-delivered interventions qualify for the bounded feedback adjustments in the decision engine.
+
+Session reports flag interventions that remain unrated after 24 hours for follow-up. They remain unreviewed—not automatically negative—and never count as success.
 
 Do not claim that the mentor improves founder outcomes based on notification counts or self-reported ratings alone. Review session reports and conduct the 30-day real-session evaluation, including ignored/dismissed interventions, false positives, missed goal drift, and whether founders acted on the advice.
 
