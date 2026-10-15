@@ -92,7 +92,7 @@ def test_daemon_surfaces_goal_drift_session_coverage_and_usefulness_feedback():
         assert "Mentor challenge: Possible goal drift" in message
         assert "Observed sources this session" in message
         assert "--feedback helpful" in message
-        assert "--feedback not_helpful" in message
+        assert "not_helpful instead of helpful" in message
         assert daemon.mentor.evidence["goal_alignment"]["alignment_status"] == "challenge"
         assert daemon.mentor.evidence["session_signal_coverage"]["cross_signal_context"] is True
         details = daemon.audit_logger.log_event.call_args.kwargs["details"]
