@@ -97,7 +97,7 @@ def assess_goal_alignment(goal: str | None, observed_task: str | None, evidence:
         severity = "challenge"
         challenge = (
             "Possible goal drift: the observed work has little wording overlap with the stated goal, "
-            "and matching customer evidence is missing. Before more implementation, verify the customer "
+            "and matching customer evidence is missing. Before more implementation, run a small customer-validation experiment to verify the customer "
             "problem and the smallest outcome that would prove progress."
         )
     elif weak_alignment:
