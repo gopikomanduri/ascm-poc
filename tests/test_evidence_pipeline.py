@@ -125,6 +125,38 @@ class EvidenceSourceConnectorTests(unittest.TestCase):
             self.assertFalse(result["enabled"])
             self.assertEqual(result["repositories"], [])
 
+    def test_founder_review_unlocks_only_the_exact_reuse_candidate(self):
+        from orchestrator.mentor.reuse_review import ReuseReviewLedger
+        candidate = {
+            "name": "acme/auth-lib",
+            "url": "https://github.com/acme/auth-lib",
+            "description": "auth library",
+            "stars": 120,
+            "archived": False,
+            "license": "MIT",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+            "os.environ", {"ASCM_ENABLE_REUSE_DISCOVERY": "1"}, clear=False
+        ), mock.patch(
+            "orchestrator.mentor.reuse_advisor.GitHubRepositoryAdvisor.search",
+            return_value={"repositories": [candidate], "query": "authentication", "error": None},
+        ):
+            before = EvidenceSourceConnector(tmp).reuse_candidates("authentication")
+            self.assertFalse(before["repositories"][0]["feature_fit_verified"])
+            ReuseReviewLedger(tmp).record(
+                candidate["url"], feature_fit_verified=True,
+                license_compatible=True, security_reviewed=True,
+                integration_cost_estimated=True,
+            )
+            after = EvidenceSourceConnector(tmp).reuse_candidates("authentication")
+        reviewed = after["repositories"][0]
+        self.assertTrue(reviewed["feature_fit_verified"])
+        self.assertTrue(reviewed["license_compatible"])
+        self.assertTrue(reviewed["security_reviewed"])
+        self.assertTrue(reviewed["integration_cost_estimated"])
+        self.assertTrue(reviewed["human_review"]["review_complete"])
+
     def test_repository_suitability_penalizes_archived_and_unknown_license(self):
         repo = {
             "name": "org/project", "stars": 10000, "archived": True,
