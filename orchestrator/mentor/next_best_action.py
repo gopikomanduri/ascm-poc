@@ -12,6 +12,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from orchestrator.mentor.approval_security import sign_approval
 from typing import Any, Dict, Iterable, Optional
 
 from orchestrator.security.audit_logger import AuditLogger
@@ -362,6 +363,10 @@ class NextBestActionEngine:
                 proposal["status"] = "approved" if approved else "rejected"
                 proposal["decision_by"] = actor
                 proposal["decided_at"] = _utc_now()
+                if approved:
+                    proposal["approval_signature"] = sign_approval(self.project_path, proposal)
+                else:
+                    proposal.pop("approval_signature", None)
                 temp = self.proposals_path.with_suffix(".tmp")
                 temp.write_text(json.dumps(proposals, indent=2), encoding="utf-8")
                 try:
