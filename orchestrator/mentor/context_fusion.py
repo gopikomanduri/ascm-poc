@@ -248,6 +248,27 @@ class ContextFusionEngine:
                 return True
         return False
 
+    def has_recent_actionable_activity(self, within_seconds: int = 120) -> bool:
+        """Recent project work that justifies a founder-goal prompt.
+
+        App switches and browser domains alone are deliberately excluded from
+        interruptive goal prompts; file, test, terminal, and IDE project signals
+        are sufficient to make the question relevant.
+        """
+        now = _now()
+        horizon = max(0, int(within_seconds))
+        actionable = {"file_changed", "test_passed", "test_failed", "terminal_command", "project_activated"}
+        for event in reversed(self._read_events()):
+            if event.get("event_type") not in actionable:
+                continue
+            timestamp = _parse_time(event.get("timestamp"))
+            if timestamp is None:
+                continue
+            age = (now - timestamp).total_seconds()
+            if 0 <= age <= horizon:
+                return True
+        return False
+
     def infer_context(self, project_path: str | Path | None = None) -> Dict[str, Any]:
         """Infer a task hypothesis for one project, or return hypotheses for all observed projects."""
         events = self._read_events()
