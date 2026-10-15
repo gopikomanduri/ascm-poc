@@ -117,7 +117,7 @@ class ContextFusionEngineTests(unittest.TestCase):
             engine = ContextFusionEngine(root)
             event = engine.record_terminal_event(cwd=root, command_category="python_tests", exit_code=0)
             payload = json.loads(engine.events_path.read_text().splitlines()[0])
-            payload["timestamp"] = (_now_for_test() - timedelta(minutes=10)).isoformat()
+            payload["timestamp"] = (_now_for_test() - timedelta(minutes=60)).isoformat()
             engine.events_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
             self.assertFalse(engine.has_recent_activity(within_seconds=60))
             self.assertIsNone(engine.infer_context(root)["task_hypothesis"])
