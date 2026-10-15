@@ -101,12 +101,7 @@ The first deterministic fusion rules are intentionally conservative:
 - If no founder goal is recorded, the daemon may ask for that goal because it
   materially changes which next action is appropriate.
 
-This is a first event-correlation layer, not full desktop-wide awareness yet.
-The daemon currently receives filesystem events from its configured workspace;
-terminal/test-result, active-window, and browser adapters still need to be added
-before ASCM can reliably correlate all applications and all independent workspaces.
-Hypotheses are persisted separately from founder-confirmed context and are not
-written into the confirmed task field.
+This is a first event-correlation layer, not full desktop-wide awareness. The implementation has privacy-minimized event entry points for filesystem changes, test results, active-app transitions, IDE project activation, browser hostnames, and terminal command categories. Coverage depends on each adapter being installed/enabled and correctly associating its event with a project inside the configured workspace. It does not reliably infer project identity from every foreground window, especially on all Wayland setups, and it does not capture browser page content. The daemon only recommends when recent, project-matched evidence meets its confidence threshold. Hypotheses remain separate from founder-confirmed context and are never written into the confirmed task field.
 
 
 ## Founder beta safety boundary
