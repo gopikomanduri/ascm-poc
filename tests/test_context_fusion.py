@@ -97,7 +97,8 @@ class ContextFusionEngineTests(unittest.TestCase):
             self.assertTrue(engine.has_recent_activity())
             context = engine.infer_context(project)
             self.assertLess(context["confidence"], 0.60)
-            self.assertIn("Browsing", context["task_hypothesis"])\n            self.assertIn("browser_domain_seen", [event["event_type"] for event in engine._read_events()])
+            self.assertIn("Browsing", context["task_hypothesis"])
+            self.assertIn("browser_domain_seen", [event["event_type"] for event in engine._read_events()])
 
     def test_passive_app_or_browser_events_do_not_trigger_goal_prompt(self):
         with tempfile.TemporaryDirectory() as tmp:
