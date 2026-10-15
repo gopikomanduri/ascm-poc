@@ -80,6 +80,54 @@ class OutcomeWebhookTests(unittest.TestCase):
         self.assertEqual(self._post(self._payload(), signature_override="0" * 64).status_code, 401)
         self.assertEqual(self._post(self._payload(), timestamp=int(time.time()) - 600).status_code, 401)
 
+    def test_signed_provider_native_event_is_mapped_without_persisting_raw_payload(self):
+        history = self.root / ".ascm_history"
+        history.mkdir(parents=True, exist_ok=True)
+        (history / "gtm_provider_mappings.json").write_text(json.dumps({
+            "sample_crm": {
+                "source_event_id": "event.id",
+                "event_type": {"path": "event.type", "values": {"reply": "customer_reply"}},
+                "experiment_id": "event.experiment",
+                "occurred_at": "event.created_at",
+                "metrics": {
+                    "sentiment": {"path": "event.sentiment", "values": {"interested": "interested"}},
+                    "feature_key": "event.feature",
+                    "channel": {"literal": "email"},
+                },
+            }
+        }), encoding="utf-8")
+        payload = {
+            "provider": "sample_crm",
+            "provider_payload": {
+                "event": {
+                    "id": "provider-event-1",
+                    "type": "reply",
+                    "experiment": "invoice-pilot",
+                    "created_at": "2026-10-15T00:00:00Z",
+                    "sentiment": "interested",
+                    "feature": "invoice automation",
+                    "email": "private@example.com",
+                    "message": "private customer text",
+                }
+            },
+        }
+        response = self._post(payload)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "recorded")
+        saved = (history / "gtm_outcomes.json").read_text(encoding="utf-8")
+        self.assertIn("invoice automation", saved)
+        self.assertNotIn("private@example.com", saved)
+        self.assertNotIn("private customer text", saved)
+        self.assertIn('"source_system": "sample_crm"', saved)
+
+    def test_provider_payload_requires_server_owned_mapping(self):
+        response = self._post({
+            "provider": "unconfigured_crm",
+            "provider_payload": {"id": "evt-1", "type": "reply"},
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse((self.root / ".ascm_history" / "gtm_outcomes.json").exists())
+
     def test_unknown_fields_that_could_contain_customer_text_are_rejected(self):
         payload = self._payload()
         payload["metrics"]["customer_message"] = "private customer message"
