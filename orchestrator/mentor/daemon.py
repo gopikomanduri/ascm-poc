@@ -22,7 +22,9 @@ import uuid
 import shlex
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from datetime import datetime, timezone
 
+from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 from orchestrator.mentor.notifier import CrossPlatformNotifier
 from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
 from orchestrator.mentor.file_watcher import ActivityAwareMonitor
@@ -61,6 +63,7 @@ class UniversalASCMDaemon:
         self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
         self.evidence_sources = EvidenceSourceConnector(self.repo_path)
         self.intervention_tracker = InterventionQualityTracker(self.repo_path)
+        self.outcome_ledger = OutcomeLedger(self.repo_path)
         # One daemon process approximates one working session; reports can filter by this ID.
         self.working_session_id = uuid.uuid4().hex
         self.milestone_detector = MilestoneDetector(self.repo_path, audit_logger=self.audit_logger)
@@ -427,6 +430,107 @@ class UniversalASCMDaemon:
             app_name="ASCM Mentor",
         )
 
+    def _process_new_gtm_outcomes(self, state, current_time):
+        """Notify on newly ingested customer outcomes without retaining customer content."""
+        ledger = getattr(self, "outcome_ledger", None)
+        if ledger is None:
+            ledger = OutcomeLedger(getattr(self, "repo_path", self.history_dir.parent))
+        outcome_types = {
+            "customer_reply", "customer_interview", "feature_request", "pilot_commitment",
+            "waitlist_signup", "meeting_booked", "qualified_opportunity", "conversion",
+        }
+        recent = [
+            event for event in ledger.recent_events(limit=50)
+            if isinstance(event, dict) and event.get("event_type") in outcome_types
+            and isinstance(event.get("event_id"), str)
+        ]
+        if not recent:
+            return
+        latest_id = recent[0]["event_id"]
+        last_seen = state.get("last_seen_gtm_outcome_event_id")
+        new_events = []
+        if last_seen:
+            for event in recent:
+                if event.get("event_id") == last_seen:
+                    break
+                new_events.append(event)
+        else:
+            # On first start, avoid replaying old history. Surface only a genuinely
+            # fresh customer outcome that arrived in the last five minutes.
+            try:
+                occurred = datetime.fromisoformat(str(recent[0].get("occurred_at", "")).replace("Z", "+00:00"))
+                if occurred.tzinfo is not None and (datetime.now(timezone.utc) - occurred).total_seconds() <= 300:
+                    new_events = [recent[0]]
+            except ValueError:
+                pass
+        if new_events:
+            state["last_seen_gtm_outcome_event_id"] = latest_id
+            pending = state.get("pending_gtm_outcomes", [])
+            if not isinstance(pending, list):
+                pending = []
+            known_ids = {item.get("event_id") for item in pending if isinstance(item, dict)}
+            for event in reversed(new_events):
+                if event["event_id"] in known_ids:
+                    continue
+                metrics = event.get("metrics") if isinstance(event.get("metrics"), dict) else {}
+                # Copy only controlled categorical metadata. Never pass arbitrary payloads
+                # or customer messages to notification/audit logs.
+                pending.append({
+                    "event_id": event["event_id"],
+                    "event_type": event["event_type"],
+                    "experiment_id": str(event.get("experiment_id") or "unassigned")[:128],
+                    "feature_key": str(metrics.get("feature_key") or "")[:64],
+                    "source_system": str(metrics.get("source_system") or event.get("source") or "unknown")[:64],
+                })
+                known_ids.add(event["event_id"])
+            state["pending_gtm_outcomes"] = pending[-20:]
+            self._save_daemon_state(state)
+
+        pending = state.get("pending_gtm_outcomes", [])
+        if not isinstance(pending, list) or not pending:
+            return
+        last_notice = float(state.get("last_gtm_outcome_notice_at", 0) or 0)
+        if current_time - last_notice < 300:
+            return
+        counts = {}
+        for item in pending:
+            kind = item.get("event_type", "outcome")
+            counts[kind] = counts.get(kind, 0) + 1
+        summary = ", ".join(f"{kind.replace('_', ' ')}: {count}" for kind, count in sorted(counts.items()))
+        next_step = {
+            "customer_reply": "Review the coarse sentiment and decide whether a founder-approved follow-up is warranted.",
+            "customer_interview": "Capture problem frequency and what the customer currently does instead.",
+            "feature_request": "Validate recurrence and willingness to pay before expanding scope.",
+            "pilot_commitment": "Confirm pilot scope, success criteria, and next checkpoint.",
+            "waitlist_signup": "Check activation intent and ask what outcome would make the product valuable.",
+            "meeting_booked": "Prepare discovery questions tied to the target customer's workflow.",
+            "qualified_opportunity": "Confirm owner, next step, and expected decision date.",
+            "conversion": "Attribute the conversion to the experiment and review whether the result is repeatable.",
+        }
+        action = next((next_step.get(item.get("event_type")) for item in reversed(pending)
+                       if next_step.get(item.get("event_type"))), "Review the recorded evidence and choose a human-approved next step.")
+        title = "ASCM GTM Intelligence: Customer evidence received"
+        message = (
+            f"New verified GTM outcome(s): {summary}. "
+            f"Experiments: {', '.join(sorted({item.get('experiment_id', 'unassigned') for item in pending})[:4])}. "
+            f"Next step: {action} No message content was captured and no external action was taken."
+        )
+        delivered = CrossPlatformNotifier.notify(title, message[:1000], app_name="ASCM GTM Intelligence")
+        self.audit_logger.log_event(
+            "GTM_OUTCOME_NOTIFICATION", agent="GTM_INTELLIGENCE",
+            action="CUSTOMER_EVIDENCE_RECEIVED",
+            details={
+                "event_count": len(pending),
+                "event_types": sorted(counts),
+                "event_ids": [item.get("event_id") for item in pending],
+                "delivery_confirmed": bool(delivered),
+            },
+        )
+        state["last_gtm_outcome_notice_at"] = current_time
+        if delivered:
+            state["pending_gtm_outcomes"] = []
+        self._save_daemon_state(state)
+
     def run_daemon_loop(self):
         """Infinite monitoring loop running quietly in the background."""
         self._configure_file_logging()
@@ -489,6 +593,11 @@ class UniversalASCMDaemon:
                 )
 
                 current_time = time.time()
+                try:
+                    self._process_new_gtm_outcomes(daemon_state, current_time)
+                except Exception as exc:
+                    # Evidence notification failures must not stop activity monitoring.
+                    logger.warning("[Daemon] GTM outcome processing failed safely: %s", type(exc).__name__)
 
                 # Detect new commits without reading commit messages or source diffs.
                 try:
