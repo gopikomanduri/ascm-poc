@@ -323,10 +323,10 @@ class UniversalASCMDaemon:
                 )
                 challenge_line = ("Mentor challenge: " + challenge + " ") if challenge else ""
                 message = (
-                    f"Goal: {goal}. Observed (not confirmed intent): {task} ({confidence:.0%}). "
+                    f"Goal: {goal}. Observed activity (not confirmed intent): {task} ({confidence:.0%}). "
                     f"Alignment: {alignment.get('alignment_status', 'unknown') if isinstance(alignment, dict) else 'unknown'}. "
                     f"{challenge_line}{coverage_line}"
-                    f"Next best path: {recommended_path.replace('_', ' ')}. "
+                    f"Next best path: {recommended_path.replace('_', ' ')}. Top paths: {path_summary or 'no ranked paths'}. "
                     f"{customer_line} {candidate_line}{missing_summary} "
                     f"Heuristic advice only; confirm before changing course. No action was executed."
                 )
