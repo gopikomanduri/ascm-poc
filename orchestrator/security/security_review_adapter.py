@@ -47,7 +47,7 @@ def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = N
             raise ReviewError("Review scope contains an invalid Git ref.")
     try:
         result = subprocess.run(
-            ["git", "diff", "--no-ext-diff", "--unified=3", f"{base}...{head}", "--", *(paths or [])],
+            ["git", "diff", "--no-ext-diff", "--unified=3", f"{base}...{head}", "--", *[f":(literal){path}" for path in (paths or [])]],
             cwd=str(repo_root), capture_output=True, text=True, timeout=30, check=False,
             shell=False,
         )
