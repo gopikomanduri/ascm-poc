@@ -235,11 +235,35 @@ class EvidenceSourceConnector:
                 "error": f"Repository discovery failed: {type(exc).__name__}",
                 "caveat": "No candidate was inferred because public repository discovery failed.",
             }
-        repositories = [
-            self._score_repository({**item, "search_rank": rank})
-            for rank, item in enumerate(result.get("repositories", []))
-            if isinstance(item, dict)
-        ]
+        # Metadata search results stay unverified until a founder records a
+        # review against the exact canonical repository URL.
+        from orchestrator.mentor.reuse_review import ReuseReviewLedger
+        reviews = ReuseReviewLedger(self.project_path).all()
+        repositories = []
+        for rank, item in enumerate(result.get("repositories", [])):
+            if not isinstance(item, dict):
+                continue
+            candidate = self._score_repository({**item, "search_rank": rank})
+            url = candidate.get("url")
+            review = reviews.get(url) if isinstance(url, str) else None
+            if isinstance(review, dict):
+                for flag in (
+                    "feature_fit_verified", "license_compatible",
+                    "security_reviewed", "integration_cost_estimated",
+                ):
+                    candidate[flag] = review.get(flag) is True
+                candidate["human_review"] = {
+                    "reviewer": review.get("reviewer"),
+                    "reviewed_at": review.get("reviewed_at"),
+                    "review_complete": review.get("review_complete") is True,
+                }
+            else:
+                candidate["feature_fit_verified"] = False
+                candidate["license_compatible"] = False
+                candidate["security_reviewed"] = False
+                candidate["integration_cost_estimated"] = False
+                candidate["human_review"] = {"review_complete": False}
+            repositories.append(candidate)
         repositories.sort(key=lambda item: item["suitability_score"], reverse=True)
         return {
             "source": "github_public_search",
