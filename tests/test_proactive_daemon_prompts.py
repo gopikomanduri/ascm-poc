@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from orchestrator.mentor.daemon import UniversalASCMDaemon
+from orchestrator.mentor.daemon import UniversalASCMDaemon\nfrom orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 
 
 class FakeContext:
@@ -79,6 +79,56 @@ class ProactiveDaemonPromptTests(unittest.TestCase):
         daemon.context_fusion = FakeContextFusion()
         daemon.audit_logger = mock.Mock()
         return daemon
+
+    def test_new_gtm_customer_outcome_triggers_privacy_safe_proactive_follow_up(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            daemon = UniversalASCMDaemon.__new__(UniversalASCMDaemon)
+            daemon.repo_path = root
+            daemon.history_dir = root / ".ascm_history"
+            daemon.history_dir.mkdir(parents=True, exist_ok=True)
+            daemon.outcome_ledger = OutcomeLedger(root)
+            daemon.audit_logger = mock.Mock()
+            daemon.outcome_ledger.record(
+                "customer_reply", experiment_id="invoice-pilot",
+                metrics={"sentiment": "interested", "feature_key": "invoice automation",
+                         "source_system": "crm"},
+            )
+            state = {}
+            with mock.patch(
+                "orchestrator.mentor.daemon.CrossPlatformNotifier.notify", return_value=True
+            ) as notify:
+                daemon._process_new_gtm_outcomes(state, 10000)
+            notify.assert_called_once()
+            self.assertIn("customer reply: 1", notify.call_args.args[1].lower())
+            self.assertIn("invoice-pilot", notify.call_args.args[1])
+            self.assertEqual(state["pending_gtm_outcomes"], [])
+            self.assertTrue(state["last_seen_gtm_outcome_event_id"])
+            daemon.audit_logger.log_event.assert_called_once()
+            self.assertEqual(daemon.audit_logger.log_event.call_args.args[0], "GTM_OUTCOME_NOTIFICATION")
+
+    def test_failed_gtm_notification_is_retained_for_rate_limited_retry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            daemon = UniversalASCMDaemon.__new__(UniversalASCMDaemon)
+            daemon.repo_path = root
+            daemon.history_dir = root / ".ascm_history"
+            daemon.history_dir.mkdir(parents=True, exist_ok=True)
+            daemon.outcome_ledger = OutcomeLedger(root)
+            daemon.audit_logger = mock.Mock()
+            daemon.outcome_ledger.record(
+                "pilot_commitment", experiment_id="pilot-2",
+                metrics={"feature_key": "billing"},
+            )
+            state = {}
+            with mock.patch(
+                "orchestrator.mentor.daemon.CrossPlatformNotifier.notify", return_value=False
+            ) as notify:
+                daemon._process_new_gtm_outcomes(state, 10000)
+                self.assertEqual(len(state["pending_gtm_outcomes"]), 1)
+                daemon._process_new_gtm_outcomes(state, 10100)
+            self.assertEqual(notify.call_count, 1)
+            self.assertEqual(len(state["pending_gtm_outcomes"]), 1)
 
     def test_first_observed_edit_prompts_and_persists_goal_without_cli(self):
         with tempfile.TemporaryDirectory() as tmp:
