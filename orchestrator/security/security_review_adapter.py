@@ -37,7 +37,7 @@ class ReviewError(RuntimeError):
     """A review could not be completed safely."""
 
 
-def _git_diff(repo_root: Path, base: str, head: str) -> str:
+def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = None) -> str:
     # Ref names are passed as argv (never through a shell) and constrained so
     # untrusted request data cannot become an option or arbitrary command.
     for ref in (base, head):
@@ -47,7 +47,7 @@ def _git_diff(repo_root: Path, base: str, head: str) -> str:
             raise ReviewError("Review scope contains an invalid Git ref.")
     try:
         result = subprocess.run(
-            ["git", "diff", "--no-ext-diff", "--unified=3", f"{base}...{head}", "--"],
+            ["git", "diff", "--no-ext-diff", "--unified=3", f"{base}...{head}", "--", *(paths or [])],
             cwd=str(repo_root), capture_output=True, text=True, timeout=30, check=False,
             shell=False,
         )
@@ -61,6 +61,75 @@ def _git_diff(repo_root: Path, base: str, head: str) -> str:
             f"Diff exceeds the {MAX_DIFF_CHARS}-character review limit; split the change."
         )
     return diff
+
+
+def _changed_paths(repo_root: Path, base: str, head: str) -> list[str]:
+    """List changed repository paths without invoking a shell."""
+    result = subprocess.run(
+        ["git", "diff", "--name-only", "--diff-filter=ACMR", f"{base}...{head}", "--"],
+        cwd=str(repo_root), capture_output=True, text=True, timeout=30, check=False,
+        shell=False,
+    )
+    if result.returncode:
+        raise ReviewError("Unable to list changed paths for batched review.")
+    paths = []
+    for value in result.stdout.splitlines():
+        path = Path(value)
+        if not value or path.is_absolute() or ".." in path.parts or "\x00" in value:
+            raise ReviewError("Changed path list contains an invalid repository path.")
+        paths.append(value)
+    return paths
+
+
+def _batched_review(
+    repo_root: Path, base: str, head: str, api_key: str, model: str,
+) -> list[dict[str, Any]]:
+    """Review an oversized PR in bounded path batches; never silently skip files."""
+    paths = _changed_paths(repo_root, base, head)
+    if not paths:
+        return []
+    findings: list[dict[str, Any]] = []
+
+    def review_group(group: list[str]) -> None:
+        try:
+            diff = _git_diff(repo_root, base, head, group)
+        except ReviewError as exc:
+            if "exceeds the" not in str(exc):
+                raise
+            if len(group) == 1:
+                raise ReviewError(
+                    f"Changed file {group[0]!r} exceeds the per-file security review limit."
+                ) from None
+            midpoint = len(group) // 2
+            review_group(group[:midpoint])
+            review_group(group[midpoint:])
+            return
+        if not diff.strip():
+            return
+        payload = _request_review(diff, api_key, model)
+        findings.extend(_normalize_findings(payload))
+        if len(findings) > MAX_FINDINGS:
+            del findings[MAX_FINDINGS:]
+
+    # Greedy grouping limits provider calls while ensuring every changed path is reviewed.
+    batch: list[str] = []
+    for path in paths:
+        candidate = batch + [path]
+        try:
+            _git_diff(repo_root, base, head, candidate)
+        except ReviewError as exc:
+            if "exceeds the" not in str(exc):
+                raise
+            if batch:
+                review_group(batch)
+            batch = [path]
+            # Validate a single file now so oversized files fail closed explicitly.
+            _git_diff(repo_root, base, head, batch)
+        else:
+            batch = candidate
+    if batch:
+        review_group(batch)
+    return findings
 
 
 def _normalize_findings(payload: Any) -> list[dict[str, Any]]:
@@ -148,12 +217,18 @@ def review_request(request: Any, repo_root: Path, api_key: str | None = None) ->
     if not key.strip():
         raise ReviewError("GEMINI_API_KEY is not configured for the workflow.")
 
-    diff = _git_diff(repo_root, base, head)
-    if not diff.strip():
-        findings: list[dict[str, Any]] = []
+    model = os.environ.get("ASCM_SECURITY_REVIEW_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    try:
+        diff = _git_diff(repo_root, base, head)
+    except ReviewError as exc:
+        if "exceeds the" not in str(exc):
+            raise
+        findings = _batched_review(repo_root, base, head, key, model)
     else:
-        model = os.environ.get("ASCM_SECURITY_REVIEW_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
-        findings = _normalize_findings(_request_review(diff, key, model))
+        if not diff.strip():
+            findings = []
+        else:
+            findings = _normalize_findings(_request_review(diff, key, model))
     return {"ok": True, "operation": "review", "data": {"findings": findings}}
 
 
