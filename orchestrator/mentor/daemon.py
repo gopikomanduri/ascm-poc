@@ -33,6 +33,7 @@ from orchestrator.mentor.activity_adapters import ActiveWindowAdapter
 from orchestrator.mentor.milestone_detector import MilestoneDetector
 from orchestrator.security.audit_logger import AuditLogger
 from orchestrator.mentor.evidence_pipeline import EvidenceSourceConnector, InterventionQualityTracker
+from orchestrator.mentor.session_intelligence import build_session_review
 
 logger = logging.getLogger("ASCMDaemon")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -205,6 +206,45 @@ class UniversalASCMDaemon:
                 recommendation_evidence["evidence_source_errors"] = [type(exc).__name__]
                 logger.debug("Evidence source collection skipped: %s", type(exc).__name__)
 
+            # Separate observed activity from founder intent and evaluate the working-session evidence.
+            # Only recent events are used; raw paths/domains/commands are not copied into the review.
+            try:
+                raw_events = self.context_fusion._read_events()
+                recent_events = []
+                for event in raw_events:
+                    stamp = event.get("timestamp")
+                    if not isinstance(stamp, str):
+                        continue
+                    try:
+                        observed_at = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+                        if observed_at.tzinfo is None:
+                            continue
+                        age_seconds = current_time - observed_at.timestamp()
+                    except (ValueError, TypeError, OverflowError):
+                        continue
+                    if 0 <= age_seconds <= 1800:
+                        recent_events.append(event)
+                failed_tests = sum(
+                    event.get("event_type") == "test_failed" for event in recent_events
+                )
+                review = build_session_review(
+                    goal, task, recent_events,
+                    {
+                        "tests_failed": "test failure" in task.lower() or "failed test" in task.lower(),
+                        "repeated_failures": failed_tests >= 2,
+                        "customer_evidence": None,
+                    },
+                )
+                recommendation_evidence["session_review"] = review
+                alignment = review.get("goal_alignment", {})
+                recommendation_evidence["goal_alignment"] = alignment
+                if alignment.get("alignment_status") in {"challenge", "review"}:
+                    recommendation_evidence["scope_risk"] = True
+                recommendation_evidence["session_signal_coverage"] = review.get("session", {})
+            except Exception as exc:
+                # Observability quality must not block the rest of the mentor loop.
+                logger.debug("Session review skipped: %s", type(exc).__name__)
+
             recommendation = self.mentor.recommend_next_action("code_activity", recommendation_evidence)
             decision = recommendation.get("founder_decision") or {}
             ranked_paths = decision.get("ranked_paths", [])
@@ -271,13 +311,26 @@ class UniversalASCMDaemon:
                     candidate_line = "Open-source search disabled; no conclusion that alternatives do not exist."
                 else:
                     candidate_line = "No usable public repository candidates returned; this is not proof none exist."
+                alignment = recommendation_evidence.get("goal_alignment", {})
+                challenge = alignment.get("challenge_prompt") if isinstance(alignment, dict) else None
+                session_coverage = recommendation_evidence.get("session_signal_coverage", {})
+                active_sources = session_coverage.get("active_sources", []) if isinstance(session_coverage, dict) else []
+                coverage_line = (
+                    "Observed sources this session: " + ", ".join(active_sources) + ". "
+                    if active_sources else
+                    "Cross-app session evidence is incomplete; missing signals do not imply inactivity. "
+                )
+                challenge_line = ("Mentor challenge: " + challenge + " ") if challenge else ""
                 message = (
-                    f"Goal: {goal}. Current signal: {task} (activity confidence {confidence:.0%}). "
+                    f"Goal: {goal}. Observed activity (not confirmed intent): {task} "
+                    f"(activity confidence {confidence:.0%}). "
+                    f"Goal alignment: {alignment.get('alignment_status', 'unknown') if isinstance(alignment, dict) else 'unknown'}. "
+                    f"{challenge_line}{coverage_line}"
                     f"Recommended path: {recommended_path.replace('_', ' ')} "
                     f"(decision confidence: {decision_confidence}). "
                     f"Top paths: {path_summary or 'no ranked paths'}. "
                     f"{customer_line} {candidate_line}"
-                    f"{missing_summary} This is advice only; no action was executed."
+                    f"{missing_summary} This is heuristic advice only; confirm the goal before changing course. No action was executed."
                 )
                 audit_details = {
                     "project_id": inferred.get("project_id"),
@@ -297,6 +350,10 @@ class UniversalASCMDaemon:
                     ),
                     "reuse_candidate_count": len(repositories) if isinstance(repositories, list) else 0,
                     "recommendation_title": title,
+                    "goal_alignment": alignment.get("alignment_status", "unknown") if isinstance(alignment, dict) else "unknown",
+                    "goal_similarity": alignment.get("heuristic_similarity") if isinstance(alignment, dict) else None,
+                    "session_sources": active_sources,
+                    "session_event_count": session_coverage.get("event_count", 0) if isinstance(session_coverage, dict) else 0,
                 }
             else:
                 first = actions[0]
@@ -321,8 +378,10 @@ class UniversalASCMDaemon:
             ).resolve()
             project_arg = f"--project-path {shlex.quote(str(workspace_for_feedback))}"
             feedback_footer = (
-                f"Session: {session_id}. Feedback: python -m orchestrator.mentor.evidence_pipeline "
-                f"{project_arg} --feedback helpful --intervention-id {intervention_id}. "
+                f"Session: {session_id}. Rate useful: python -m orchestrator.mentor.evidence_pipeline "
+                f"{project_arg} --feedback helpful --intervention-id {intervention_id}; "
+                f"not useful: python -m orchestrator.mentor.evidence_pipeline "
+                f"{project_arg} --feedback not_helpful --intervention-id {intervention_id}. "
                 f"Session report: python -m orchestrator.mentor.evidence_pipeline "
                 f"{project_arg} --report --session-id {session_id}"
             )
