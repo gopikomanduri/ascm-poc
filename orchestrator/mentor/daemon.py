@@ -323,15 +323,12 @@ class UniversalASCMDaemon:
                 )
                 challenge_line = ("Mentor challenge: " + challenge + " ") if challenge else ""
                 message = (
-                    f"Goal: {goal}. Observed activity (not confirmed intent): {task} "
-                    f"(activity confidence {confidence:.0%}). "
-                    f"Goal alignment: {alignment.get('alignment_status', 'unknown') if isinstance(alignment, dict) else 'unknown'}. "
+                    f"Goal: {goal}. Observed (not confirmed intent): {task} ({confidence:.0%}). "
+                    f"Alignment: {alignment.get('alignment_status', 'unknown') if isinstance(alignment, dict) else 'unknown'}. "
                     f"{challenge_line}{coverage_line}"
-                    f"Recommended path: {recommended_path.replace('_', ' ')} "
-                    f"(decision confidence: {decision_confidence}). "
-                    f"Top paths: {path_summary or 'no ranked paths'}. "
-                    f"{customer_line} {candidate_line}"
-                    f"{missing_summary} This is heuristic advice only; confirm the goal before changing course. No action was executed."
+                    f"Next best path: {recommended_path.replace('_', ' ')}. "
+                    f"{customer_line} {candidate_line}{missing_summary} "
+                    f"Heuristic advice only; confirm before changing course. No action was executed."
                 )
                 audit_details = {
                     "project_id": inferred.get("project_id"),
@@ -379,11 +376,10 @@ class UniversalASCMDaemon:
             ).resolve()
             project_arg = f"--project-path {shlex.quote(str(workspace_for_feedback))}"
             feedback_footer = (
-                f"Session: {session_id}. Rate useful: python -m orchestrator.mentor.evidence_pipeline "
-                f"{project_arg} --feedback helpful --intervention-id {intervention_id}; "
-                f"not useful: python -m orchestrator.mentor.evidence_pipeline "
-                f"{project_arg} --feedback not_helpful --intervention-id {intervention_id}. "
-                f"Session report: python -m orchestrator.mentor.evidence_pipeline "
+                f"Session: {session_id}. Rate: python -m orchestrator.mentor.evidence_pipeline "
+                f"{project_arg} --feedback helpful --intervention-id {intervention_id} "
+                f"(use not_helpful instead of helpful if this was irrelevant). "
+                f"Report: python -m orchestrator.mentor.evidence_pipeline "
                 f"{project_arg} --report --session-id {session_id}"
             )
             # Keep the actionable feedback/report commands intact even when the
