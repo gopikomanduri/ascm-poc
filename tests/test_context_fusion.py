@@ -120,6 +120,11 @@ class ContextFusionEngineTests(unittest.TestCase):
             payload["timestamp"] = (_now_for_test() - timedelta(minutes=10)).isoformat()
             engine.events_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
             self.assertFalse(engine.has_recent_activity(within_seconds=60))
+            self.assertIsNone(engine.infer_context(root)["task_hypothesis"])
+            payload["timestamp"] = (_now_for_test() + timedelta(hours=1)).isoformat()
+            engine.events_path.write_text(json.dumps(payload) + "\\n", encoding="utf-8")
+            self.assertFalse(engine.has_recent_activity(within_seconds=60))
+            self.assertIsNone(engine.infer_context(root)["task_hypothesis"])
 
     def test_rejects_files_outside_configured_workspace(self):
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
