@@ -107,3 +107,10 @@ terminal/test-result, active-window, and browser adapters still need to be added
 before ASCM can reliably correlate all applications and all independent workspaces.
 Hypotheses are persisted separately from founder-confirmed context and are not
 written into the confirmed task field.
+
+
+## Founder beta safety boundary
+
+ASCM's first founder beta is single-user and local-first. Approval signatures bind consent to the exact proposal and help reject stale or casually edited local records, but the key is owned by the same operating-system account. This is not protection against a compromised account, a multi-user authorization mechanism, or permission to expose the executor over a network. Approved execution remains disabled by default and limited to the fixed allowlist.
+
+Before inviting founders, run the workspace-scoped activity/opt-out checks, authenticated GTM webhook replay and signature tests, delivery-confirmed learning regression tests, and signed-approval tampering tests. Treat the 30-day intervention review as the evidence gate for any claim that recommendations improve founder outcomes.
