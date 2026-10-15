@@ -97,7 +97,7 @@ class ContextFusionEngineTests(unittest.TestCase):
             self.assertTrue(engine.has_recent_activity())
             context = engine.infer_context(project)
             self.assertLess(context["confidence"], 0.60)
-            self.assertIn("intent is unconfirmed", context["task_hypothesis"])
+            self.assertIn("Browsing", context["task_hypothesis"])\n            self.assertIn("browser_domain_seen", [event["event_type"] for event in engine._read_events()])
 
     def test_recent_activity_rejects_stale_events(self):
         from datetime import timedelta
