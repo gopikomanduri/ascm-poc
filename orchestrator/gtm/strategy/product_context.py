@@ -20,6 +20,9 @@ class ProductContext:
     sender_name: str = "Founder"
     tone: str = "Clear, candid, evidence-based"
     goals: List[str] = field(default_factory=list)
+    # Stable evidence key plus explicit aliases for matching customer outcomes to this feature.
+    feature_key: str = ""
+    feature_aliases: List[str] = field(default_factory=list)
 
     @classmethod
     def load(cls, project_path: Path) -> "ProductContext":
@@ -42,7 +45,9 @@ class ProductContext:
         for key in ("product_name", "product_thesis", "icp_description", "milestone_name", "sender_name", "tone"):
             if key in payload and (not isinstance(payload[key], str) or not payload[key].strip()):
                 raise ValueError(f"{key} must be a non-empty string")
-        for key in ("domain_keywords", "channels", "goals"):
+        if "feature_key" in payload and (not isinstance(payload["feature_key"], str) or len(payload["feature_key"].strip()) > 64):
+            raise ValueError("feature_key must be a string of at most 64 characters")
+        for key in ("domain_keywords", "channels", "goals", "feature_aliases"):
             if key in payload and (not isinstance(payload[key], list) or any(not isinstance(v, str) or not v.strip() for v in payload[key])):
                 raise ValueError(f"{key} must be a list of non-empty strings")
         return cls(**payload)
