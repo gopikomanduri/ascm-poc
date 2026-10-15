@@ -30,3 +30,7 @@ Coverage is limited to signals from installed and enabled adapters. A missing br
 Each recommendation gets an intervention ID and working-session ID. Delivery confirmation is recorded separately from usefulness feedback. The notification offers `helpful` and `not_helpful` feedback commands and a session report command. Only explicitly rated, confirmed-delivered interventions qualify for the bounded feedback adjustments in the decision engine.
 
 Do not claim that the mentor improves founder outcomes based on notification counts or self-reported ratings alone. Review session reports and conduct the 30-day real-session evaluation, including ignored/dismissed interventions, false positives, missed goal drift, and whether founders acted on the advice.
+
+## Suggested manual acceptance run
+
+For each supported desktop, use a disposable workspace and explicitly enable the relevant adapters. Perform a short sequence that includes an IDE/project activation, a file edit, a terminal test run, a passing and failing test result, and opt-in browser research. Confirm that events correlate to the correct project, old/future events do not affect the current review, raw content is absent from persisted summaries, and disabling an adapter stops its events. Record false-positive prompts and feedback rates. This checklist is not evidence that these platform runs have already been performed.
