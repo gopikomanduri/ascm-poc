@@ -37,6 +37,50 @@ Example payload:
 
 Only categorical/numeric metrics allowed by OutcomeLedger are accepted. Unknown keys—including message bodies, names, email addresses, and arbitrary notes—are rejected. The adapter stores only the normalized outcome and an opaque source-event ID for deduplication. Repeated IDs are acknowledged as \`duplicate_ignored\`.
 
+## Provider-native payload mapping
+
+The endpoint can also accept a signed envelope containing `provider` and `provider_payload`. The server reads the mapping from `.ascm_history/gtm_provider_mappings.json`; senders cannot choose mapping paths. Example:
+
+```json
+{
+  "sample_crm": {
+    "source_event_id": "event.id",
+    "event_type": {
+      "path": "event.type",
+      "values": { "reply": "customer_reply", "meeting": "meeting_booked" }
+    },
+    "experiment_id": "event.ascm_experiment_id",
+    "occurred_at": "event.created_at",
+    "metrics": {
+      "sentiment": {
+        "path": "event.ascm_sentiment",
+        "values": { "interested": "interested", "negative": "negative" }
+      },
+      "feature_key": "event.ascm_feature_key",
+      "channel": { "literal": "email" }
+    }
+  }
+}
+```
+
+Each provider mapping must use stable opaque event IDs, an experiment ID, a valid ASCM event type or explicit event-type mapping, and only allowlisted metric fields. Missing optional metrics are omitted. Do not map message bodies, names, email addresses, or free-form customer text. Provider names are normalized to the `source_system` metric for deduplication. The sample above is a mapping template, not a claim that a vendor subscription has already been configured.
+
+To make task-specific demand attribution robust, set `feature_key` and `feature_aliases` in `.ascm_product.json`. Only outcome events with a matching key/alias count when this is configured; unrelated or untagged events remain excluded.
+
+To record a human-reviewed reuse decision for a public repository candidate:
+
+```bash
+python -m orchestrator.mentor.reuse_review \
+  --project-path . \
+  --repository-url https://github.com/owner/repository \
+  --feature-fit-verified yes \
+  --license-compatible yes \
+  --security-reviewed yes \
+  --integration-cost-estimated yes
+```
+
+All four checks must be explicitly recorded as `yes` before the candidate can qualify as human-reviewed reuse evidence. A negative or missing check keeps it ineligible.
+
 ## Provider mapping checklist
 
 For each CRM/email/social provider, configure its own automation to map provider events to this schema and assign stable opaque IDs. Do not forward raw message content. Map replies to coarse sentiment labels, and map a feature request to a short controlled \`feature_key\`. Test signature creation against the exact bytes sent by the provider or its automation service. Store secrets in the deployment secret manager, rotate them, and scope each sender to permitted event types.
