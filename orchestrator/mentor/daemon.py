@@ -367,7 +367,7 @@ class UniversalASCMDaemon:
 
         # App/browser metadata alone must not interrupt the founder with a goal prompt.
         # Ask only after recent project work or an explicit IDE workspace activation.
-        signal_window = max(120, int(self.poll_interval_sec) * 2)
+        signal_window = max(120, int(getattr(self, "poll_interval_sec", 30)) * 2)
         if not self.context_fusion.has_recent_actionable_activity(signal_window):
             return
 
