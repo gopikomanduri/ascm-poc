@@ -97,6 +97,19 @@ async def ingest_outcome(request: Request) -> dict[str, Any]:
         payload = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError):
         raise HTTPException(status_code=400, detail="Invalid JSON") from None
+    # Provider-native envelopes are mapped by operator-owned configuration. The
+    # sender cannot choose field mappings, and raw provider payloads are never stored.
+    if isinstance(payload, dict) and ("provider" in payload or "provider_payload" in payload):
+        if set(payload) != {"provider", "provider_payload"}:
+            raise HTTPException(status_code=400, detail="Provider envelope must contain only provider and provider_payload")
+        project_path = Path(os.getenv("ASCM_WATCH_PATH") or ".").resolve()
+        try:
+            from orchestrator.gtm.integrations.provider_mappers import (
+                ProviderMappingError, map_provider_event,
+            )
+            payload = map_provider_event(project_path, payload["provider"], payload["provider_payload"])
+        except ProviderMappingError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
     event = _safe_payload(payload)
 
     project_path = Path(os.getenv("ASCM_WATCH_PATH") or ".").resolve()
