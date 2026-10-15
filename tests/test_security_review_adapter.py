@@ -34,6 +34,30 @@ def test_review_returns_structured_envelope_for_empty_diff(monkeypatch, tmp_path
     assert result == {"ok": True, "operation": "review", "data": {"findings": []}}
 
 
+def test_oversized_review_is_batched_by_changed_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    calls = []
+
+    def fake_diff(repo_root, base, head, paths=None):
+        if paths is None:
+            raise adapter.ReviewError("Diff exceeds the 60000-character review limit; split the change.")
+        if len(paths) > 1:
+            raise adapter.ReviewError("Diff exceeds the 60000-character review limit; split the change.")
+        return "diff for " + paths[0]
+
+    with (
+        patch.object(adapter, "_git_diff", side_effect=fake_diff),
+        patch.object(adapter, "_changed_paths", return_value=["a.py", "b.py", "c.py"]),
+        patch.object(adapter, "_request_review", side_effect=lambda diff, key, model: (
+            calls.append(diff) or {"findings": []}
+        )),
+    ):
+        result = adapter.review_request(_request(), tmp_path)
+
+    assert result == {"ok": True, "operation": "review", "data": {"findings": []}}
+    assert calls == ["diff for a.py", "diff for b.py", "diff for c.py"]
+
+
 def test_review_normalizes_valid_findings(monkeypatch, tmp_path):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     finding = {
