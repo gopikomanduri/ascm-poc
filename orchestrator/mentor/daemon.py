@@ -321,12 +321,13 @@ class UniversalASCMDaemon:
                     if active_sources else
                     "Cross-app session evidence is incomplete; missing signals do not imply inactivity. "
                 )
-                challenge_line = ("Mentor challenge: " + challenge + " ") if challenge else ""
+                challenge_line = ("Mentor challenge: " + challenge[:150] + " ") if challenge else ""
+                alternative_summary = ", ".join(str(item.get("path")) for item in top_paths if isinstance(item, dict))
                 message = (
                     f"Goal: {goal}. Observed activity (not confirmed intent): {task} ({confidence:.0%}). "
-                    f"Alignment: {alignment.get('alignment_status', 'unknown') if isinstance(alignment, dict) else 'unknown'}. "
+                    f"Goal alignment: {alignment.get('alignment_status', 'unknown') if isinstance(alignment, dict) else 'unknown'}. "
                     f"{challenge_line}{coverage_line}"
-                    f"Next best path: {recommended_path.replace('_', ' ')}. Top paths: {path_summary or 'no ranked paths'}. "
+                    f"Next best path: {recommended_path.replace('_', ' ')}. Alternatives: {alternative_summary or 'not established'}. "
                     f"{customer_line} {candidate_line}{missing_summary} "
                     f"Heuristic advice only; confirm before changing course. No action was executed."
                 )
