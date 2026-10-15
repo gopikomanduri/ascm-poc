@@ -91,13 +91,19 @@ class EvidenceSourceConnector:
         return bool(key_tokens) and key_tokens.issubset(task_tokens)
 
     def customer_demand_evidence(
-        self, window_days: int = 90, task_description: str | None = None
+        self, window_days: int = 90, task_description: str | None = None,
+        feature_key: str | None = None, feature_aliases: list[str] | None = None,
     ) -> dict[str, Any]:
         """Summarize recent recorded outcomes, optionally scoped to an explicitly tagged feature.
 
         A daemon task must not inherit demand from unrelated features in the same workspace.
         When task_description is supplied, only events with a matching metrics.feature_key count.
         """
+        aliases = [feature_key, *(feature_aliases or [])]
+        aliases = {
+            re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+            for value in aliases if isinstance(value, str) and value.strip()
+        }
         events = _read_json(self.history_dir / "gtm_outcomes.json", [])
         if not isinstance(events, list):
             events = []
@@ -110,9 +116,15 @@ class EvidenceSourceConnector:
             occurred = _parse_time(event.get("occurred_at"))
             if not occurred or occurred < cutoff:
                 continue
-            if task_description is not None:
-                metrics = event.get("metrics") if isinstance(event.get("metrics"), dict) else {}
-                if not self._feature_key_matches(metrics.get("feature_key"), task_description):
+            metrics = event.get("metrics") if isinstance(event.get("metrics"), dict) else {}
+            recorded_key = metrics.get("feature_key")
+            if aliases:
+                normalize_key = lambda value: re.sub(r"[^a-z0-9]+", " ", value.lower()).strip() if isinstance(value, str) else ""
+                if normalize_key(recorded_key) not in aliases:
+                    eligible_unscoped += 1
+                    continue
+            elif task_description is not None:
+                if not self._feature_key_matches(recorded_key, task_description):
                     eligible_unscoped += 1
                     continue
             recent.append(event)
@@ -144,7 +156,8 @@ class EvidenceSourceConnector:
         return {
             "source": "local_gtm_outcome_ledger",
             "window_days": window_days,
-            "feature_scope": task_description,
+            "feature_scope": feature_key or task_description,
+            "configured_feature_aliases": sorted(aliases),
             "event_count": len(recent),
             "unscoped_or_unmatched_events_ignored": eligible_unscoped,
             "event_counts": counts,
@@ -235,11 +248,35 @@ class EvidenceSourceConnector:
                 "error": f"Repository discovery failed: {type(exc).__name__}",
                 "caveat": "No candidate was inferred because public repository discovery failed.",
             }
-        repositories = [
-            self._score_repository({**item, "search_rank": rank})
-            for rank, item in enumerate(result.get("repositories", []))
-            if isinstance(item, dict)
-        ]
+        # Metadata search results stay unverified until a founder records a
+        # review against the exact canonical repository URL.
+        from orchestrator.mentor.reuse_review import ReuseReviewLedger
+        reviews = ReuseReviewLedger(self.project_path).all()
+        repositories = []
+        for rank, item in enumerate(result.get("repositories", [])):
+            if not isinstance(item, dict):
+                continue
+            candidate = self._score_repository({**item, "search_rank": rank})
+            url = candidate.get("url")
+            review = reviews.get(url) if isinstance(url, str) else None
+            if isinstance(review, dict):
+                for flag in (
+                    "feature_fit_verified", "license_compatible",
+                    "security_reviewed", "integration_cost_estimated",
+                ):
+                    candidate[flag] = review.get(flag) is True
+                candidate["human_review"] = {
+                    "reviewer": review.get("reviewer"),
+                    "reviewed_at": review.get("reviewed_at"),
+                    "review_complete": review.get("review_complete") is True,
+                }
+            else:
+                candidate["feature_fit_verified"] = False
+                candidate["license_compatible"] = False
+                candidate["security_reviewed"] = False
+                candidate["integration_cost_estimated"] = False
+                candidate["human_review"] = {"review_complete": False}
+            repositories.append(candidate)
         repositories.sort(key=lambda item: item["suitability_score"], reverse=True)
         return {
             "source": "github_public_search",
@@ -251,7 +288,24 @@ class EvidenceSourceConnector:
         }
 
     def collect(self, task_description: str) -> dict[str, Any]:
-        demand = self.customer_demand_evidence(task_description=task_description)
+        # A founder-configured feature key is more reliable than string-matching
+        # inferred task text. Without one, retain conservative task/feature matching.
+        feature_key = None
+        feature_aliases: list[str] = []
+        try:
+            from orchestrator.gtm.strategy.product_context import ProductContext
+            product = ProductContext.load(self.project_path)
+            feature_key = product.feature_key.strip() or None
+            feature_aliases = list(product.feature_aliases)
+        except (OSError, ValueError):
+            # A broken optional config must not turn unrelated customer outcomes into evidence.
+            feature_key = None
+            feature_aliases = []
+        demand = self.customer_demand_evidence(
+            task_description=task_description,
+            feature_key=feature_key,
+            feature_aliases=feature_aliases,
+        )
         reuse = self.reuse_candidates(task_description) if task_description.strip() else {
             "source": "github_public_search", "enabled": False, "repositories": [],
             "caveat": "No task description was available; no search was attempted.",
@@ -331,12 +385,12 @@ class InterventionQualityTracker:
             if intervention_id and item.get("intervention_id") == intervention_id:
                 target = item
                 break
-            if not intervention_id and item.get("feedback") is None and item.get("delivery_confirmed", True):
+            if not intervention_id and item.get("feedback") is None and item.get("delivery_confirmed") is True:
                 target = item
                 break
         if target is None:
             raise ValueError("No matching unreviewed intervention found")
-        if target.get("delivery_confirmed", True) is not True:
+        if target.get("delivery_confirmed") is not True:
             raise ValueError("Cannot rate an intervention whose delivery was not confirmed")
         if target.get("feedback") in FEEDBACK_LABELS:
             raise ValueError("This intervention already has feedback; ratings are immutable to protect measurement integrity")
@@ -355,8 +409,8 @@ class InterventionQualityTracker:
         events = self._read()
         if session_id:
             events = [e for e in events if e.get("session_id") == session_id]
-        shown = [e for e in events if e.get("delivery_confirmed", True) is True]
-        delivery_unconfirmed = [e for e in events if e.get("delivery_confirmed", True) is not True]
+        shown = [e for e in events if e.get("delivery_confirmed") is True]
+        delivery_unconfirmed = [e for e in events if e.get("delivery_confirmed") is not True]
         reviewed = [e for e in shown if e.get("feedback") in FEEDBACK_LABELS]
         counts = {label: sum(e.get("feedback") == label for e in reviewed) for label in sorted(FEEDBACK_LABELS)}
         helpful = counts["helpful"] + counts["accepted"] + counts["acted_on"]

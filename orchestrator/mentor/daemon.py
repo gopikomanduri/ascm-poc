@@ -22,7 +22,9 @@ import uuid
 import shlex
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from datetime import datetime, timezone
 
+from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 from orchestrator.mentor.notifier import CrossPlatformNotifier
 from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
 from orchestrator.mentor.file_watcher import ActivityAwareMonitor
@@ -61,6 +63,7 @@ class UniversalASCMDaemon:
         self.audit_logger = AuditLogger(log_dir=str(self.history_dir / "audit"))
         self.evidence_sources = EvidenceSourceConnector(self.repo_path)
         self.intervention_tracker = InterventionQualityTracker(self.repo_path)
+        self.outcome_ledger = OutcomeLedger(self.repo_path)
         # One daemon process approximates one working session; reports can filter by this ID.
         self.working_session_id = uuid.uuid4().hex
         self.milestone_detector = MilestoneDetector(self.repo_path, audit_logger=self.audit_logger)
@@ -365,6 +368,21 @@ class UniversalASCMDaemon:
             )
             return
 
+        # App/browser metadata alone must not interrupt the founder with a goal prompt.
+        # Ask only after recent project work or an explicit IDE workspace activation.
+        signal_window = max(120, int(getattr(self, "poll_interval_sec", 30)) * 2)
+        actionable_check = getattr(self.context_fusion, "has_recent_actionable_activity", None)
+        if callable(actionable_check):
+            if not actionable_check(signal_window):
+                return
+        else:
+            # Compatibility for injected/test context adapters that expose only the
+            # original inference API; filesystem evidence still gates interruptions.
+            recent_files = activity.get("filesystem_activity", {}).get("recently_edited_files", [])
+            terminal_check = getattr(self.context_fusion, "has_recent_terminal_activity", None)
+            if not recent_files and not (callable(terminal_check) and terminal_check(signal_window)):
+                return
+
         # A missing goal changes every recommendation, so this is a worthwhile clarification.
         last_prompt = float(state.get("last_founder_context_prompt_at", 0) or 0)
         if current_time - last_prompt < 14400:
@@ -373,7 +391,7 @@ class UniversalASCMDaemon:
         file_names = ", ".join(Path(item).name for item in recent_files[-3:]) or "recent code files"
         title = "ASCM Mentor: What outcome are you pursuing?"
         question = (
-            f"I noticed code edits in {file_names}, but I don't yet know the outcome you're pursuing. "
+            f"I noticed recent project activity ({file_names}), but I don't yet know the outcome you're pursuing. "
             "What meaningful result should this work achieve? I'll use that goal to guide next-step recommendations."
         )
 
@@ -420,6 +438,118 @@ class UniversalASCMDaemon:
             f"I'll use this goal for future recommendations. Suggested first step: {next_step[:350]}",
             app_name="ASCM Mentor",
         )
+
+    def _process_new_gtm_outcomes(self, state, current_time):
+        """Notify on newly ingested customer outcomes without retaining customer content."""
+        ledger = getattr(self, "outcome_ledger", None)
+        if ledger is None:
+            ledger = OutcomeLedger(getattr(self, "repo_path", self.history_dir.parent))
+        outcome_types = {
+            "customer_reply", "customer_interview", "feature_request", "pilot_commitment",
+            "waitlist_signup", "meeting_booked", "qualified_opportunity", "conversion",
+        }
+        recent = [
+            event for event in ledger.recent_events(limit=50)
+            if isinstance(event, dict) and event.get("event_type") in outcome_types
+            and isinstance(event.get("event_id"), str)
+        ]
+        if not recent:
+            return
+        latest_id = recent[0]["event_id"]
+        last_seen = state.get("last_seen_gtm_outcome_event_id")
+        new_events = []
+        if last_seen:
+            for event in recent:
+                if event.get("event_id") == last_seen:
+                    break
+                new_events.append(event)
+        else:
+            # On first start, avoid replaying old history. Surface only a genuinely
+            # fresh customer outcome that arrived in the last five minutes.
+            try:
+                occurred = datetime.fromisoformat(str(recent[0].get("occurred_at", "")).replace("Z", "+00:00"))
+                if occurred.tzinfo is not None and (datetime.now(timezone.utc) - occurred).total_seconds() <= 300:
+                    new_events = [recent[0]]
+            except ValueError:
+                pass
+        if new_events:
+            state["last_seen_gtm_outcome_event_id"] = latest_id
+            pending = state.get("pending_gtm_outcomes", [])
+            if not isinstance(pending, list):
+                pending = []
+            pending = [
+                item for item in pending
+                if isinstance(item, dict) and isinstance(item.get("event_id"), str)
+            ]
+            known_ids = {item["event_id"] for item in pending}
+            for event in reversed(new_events):
+                if event["event_id"] in known_ids:
+                    continue
+                metrics = event.get("metrics") if isinstance(event.get("metrics"), dict) else {}
+                # Copy only controlled categorical metadata. Never pass arbitrary payloads
+                # or customer messages to notification/audit logs.
+                pending.append({
+                    "event_id": event["event_id"],
+                    "event_type": event["event_type"],
+                    "experiment_id": str(event.get("experiment_id") or "unassigned")[:128],
+                    "feature_key": str(metrics.get("feature_key") or "")[:64],
+                    "source_system": str(metrics.get("source_system") or event.get("source") or "unknown")[:64],
+                })
+                known_ids.add(event["event_id"])
+            state["pending_gtm_outcomes"] = pending[-20:]
+            self._save_daemon_state(state)
+
+        pending = state.get("pending_gtm_outcomes", [])
+        if not isinstance(pending, list):
+            pending = []
+        pending = [
+            item for item in pending
+            if isinstance(item, dict) and isinstance(item.get("event_id"), str)
+        ]
+        state["pending_gtm_outcomes"] = pending
+        if not pending:
+            return
+        last_notice = float(state.get("last_gtm_outcome_notice_at", 0) or 0)
+        if current_time - last_notice < 300:
+            return
+        counts = {}
+        for item in pending:
+            kind = item.get("event_type", "outcome")
+            counts[kind] = counts.get(kind, 0) + 1
+        summary = ", ".join(f"{kind.replace('_', ' ')}: {count}" for kind, count in sorted(counts.items()))
+        next_step = {
+            "customer_reply": "Review the coarse sentiment and decide whether a founder-approved follow-up is warranted.",
+            "customer_interview": "Capture problem frequency and what the customer currently does instead.",
+            "feature_request": "Validate recurrence and willingness to pay before expanding scope.",
+            "pilot_commitment": "Confirm pilot scope, success criteria, and next checkpoint.",
+            "waitlist_signup": "Check activation intent and ask what outcome would make the product valuable.",
+            "meeting_booked": "Prepare discovery questions tied to the target customer's workflow.",
+            "qualified_opportunity": "Confirm owner, next step, and expected decision date.",
+            "conversion": "Attribute the conversion to the experiment and review whether the result is repeatable.",
+        }
+        action = next((next_step.get(item.get("event_type")) for item in reversed(pending)
+                       if next_step.get(item.get("event_type"))), "Review the recorded evidence and choose a human-approved next step.")
+        title = "ASCM GTM Intelligence: Customer evidence received"
+        message = (
+            f"New verified GTM outcome(s): {summary}. "
+            f"Experiments: {', '.join(sorted({item.get('experiment_id', 'unassigned') for item in pending})[:4])}. "
+            f"Next step: {action} No message content was captured and no external action was taken."
+        )
+        delivered = CrossPlatformNotifier.notify(title, message[:1000], app_name="ASCM GTM Intelligence")
+        self.audit_logger.log_event(
+            "GTM_OUTCOME_NOTIFICATION", agent="GTM_INTELLIGENCE",
+            action="CUSTOMER_EVIDENCE_RECEIVED",
+            details={
+                "event_count": len(pending),
+                "event_types": sorted(counts),
+                "event_ids": [item.get("event_id") for item in pending],
+                "delivery_confirmed": bool(delivered),
+            },
+        )
+        state["last_gtm_outcome_notice_at"] = current_time
+        if delivered:
+            state["pending_gtm_outcomes"] = []
+        self._save_daemon_state(state)
 
     def run_daemon_loop(self):
         """Infinite monitoring loop running quietly in the background."""
@@ -483,6 +613,11 @@ class UniversalASCMDaemon:
                 )
 
                 current_time = time.time()
+                try:
+                    self._process_new_gtm_outcomes(daemon_state, current_time)
+                except Exception as exc:
+                    # Evidence notification failures must not stop activity monitoring.
+                    logger.warning("[Daemon] GTM outcome processing failed safely: %s", type(exc).__name__)
 
                 # Detect new commits without reading commit messages or source diffs.
                 try:
@@ -498,7 +633,15 @@ class UniversalASCMDaemon:
                     logger.warning("[Daemon] Milestone detector failed safely: %s", type(exc).__name__)
 
                 # Proactively ask in a native desktop dialog and persist the response; no CLI interaction required.
-                if combined["actively_coding_now"] or self.context_fusion.has_recent_terminal_activity():
+                # React to every supported signal source, not only filesystem edits or
+                # terminal hooks. Adapter events remain metadata-only and are subject to
+                # the same persisted notification cooldowns and confidence thresholds.
+                signal_window = max(120, int(self.poll_interval_sec) * 2)
+                if (
+                    combined["actively_coding_now"]
+                    or self.context_fusion.has_recent_terminal_activity(signal_window)
+                    or self.context_fusion.has_recent_activity(signal_window)
+                ):
                     self._prompt_for_founder_context(activity, daemon_state, current_time)
 
                 if self.suggester:

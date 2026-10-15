@@ -34,7 +34,7 @@ def _feedback_adjustments(project_path: str | Path | None = None) -> dict[str, d
         return {}
     counts: dict[str, dict[str, int]] = {}
     for record in records:
-        if not isinstance(record, dict) or record.get("delivery_confirmed", True) is not True:
+        if not isinstance(record, dict) or record.get("delivery_confirmed") is not True:
             continue
         path_name = record.get("recommended_path")
         feedback = record.get("feedback")
