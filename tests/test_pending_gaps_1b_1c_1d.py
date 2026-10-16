@@ -37,7 +37,12 @@ class ReuseRecommendationGateTests(unittest.TestCase):
 
             def evaluate(**kwargs):
                 seen.update(kwargs["evidence"])
-                return {"recommended_path": "customer_validate", "ranked_paths": [], "missing_evidence": []}
+                return {
+                    "recommended_path": "customer_validate",
+                    "ranked_paths": [],
+                    "missing_evidence": [],
+                    "requires_founder_input": False,
+                }
 
             engine.founder_intelligence.evaluate = evaluate
             candidate = {
