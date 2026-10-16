@@ -28,8 +28,10 @@ class _Fusion:
         }
 
     def _read_events(self):
+        # Keep the fixture timestamp strictly in the past: ISO-8601 microsecond
+        # rounding can otherwise make a same-second event appear slightly future-dated.
         stamp = __import__("datetime").datetime.fromtimestamp(
-            self.now, __import__("datetime").timezone.utc
+            self.now - 1, __import__("datetime").timezone.utc
         ).isoformat()
         return [
             {"event_id": "edit-1", "timestamp": stamp, "event_type": "file_changed", "project_id": "project-a"},
