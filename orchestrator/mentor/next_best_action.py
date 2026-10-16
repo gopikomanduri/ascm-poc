@@ -12,6 +12,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from orchestrator.mentor.approval_security import sign_approval
 from typing import Any, Dict, Iterable, Optional
 
 from orchestrator.security.audit_logger import AuditLogger
@@ -138,6 +139,37 @@ class NextBestActionEngine:
         # Explicit founder-confirmed context is the default for every entry point
         # (daemon, CLI, tests, and future API callers); caller evidence may refine it.
         evidence = dict(evidence)
+        # Public repository metadata is research-only until the founder has explicitly
+        # verified fit, license, security, and integration cost for that exact URL.
+        candidates = evidence.get("reuse_candidates")
+        if isinstance(candidates, list):
+            reviewed = []
+            research_only = 0
+            for candidate in candidates:
+                if not isinstance(candidate, dict):
+                    continue
+                review = candidate.get("human_review")
+                complete = (
+                    isinstance(review, dict)
+                    and review.get("review_complete") is True
+                    and candidate.get("feature_fit_verified") is True
+                    and candidate.get("license_compatible") is True
+                    and candidate.get("security_reviewed") is True
+                    and candidate.get("integration_cost_estimated") is True
+                )
+                if complete:
+                    reviewed.append(candidate)
+                else:
+                    research_only += 1
+            evidence["reuse_candidates_research_only_count"] = research_only
+            evidence["reuse_candidates"] = reviewed
+            evidence["reuse_candidates_eligible_for_recommendation"] = len(reviewed)
+            if research_only:
+                evidence.setdefault("missing_evidence", [])
+                if isinstance(evidence["missing_evidence"], list):
+                    evidence["missing_evidence"] = list(evidence["missing_evidence"])
+                    if "completed human reuse review" not in evidence["missing_evidence"]:
+                        evidence["missing_evidence"].append("completed human reuse review")
         evidence.setdefault("target_customer", context.get("target_customer"))
         evidence.setdefault("milestone", context.get("next_milestone"))
         evidence.setdefault("constraints", context.get("constraints") or [])
@@ -362,6 +394,10 @@ class NextBestActionEngine:
                 proposal["status"] = "approved" if approved else "rejected"
                 proposal["decision_by"] = actor
                 proposal["decided_at"] = _utc_now()
+                if approved:
+                    proposal["approval_signature"] = sign_approval(self.project_path, proposal)
+                else:
+                    proposal.pop("approval_signature", None)
                 temp = self.proposals_path.with_suffix(".tmp")
                 temp.write_text(json.dumps(proposals, indent=2), encoding="utf-8")
                 try:

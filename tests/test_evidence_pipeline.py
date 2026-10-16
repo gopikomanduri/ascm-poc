@@ -83,6 +83,29 @@ class EvidenceSourceConnectorTests(unittest.TestCase):
             self.assertEqual(billing["event_count"], 1)
             self.assertEqual(billing["evidence_event_ids"], ["billing-demand"])
 
+    def test_product_feature_key_and_aliases_scope_customer_demand(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".ascm_product.json").write_text(json.dumps({
+                "feature_key": "invoice-automation",
+                "feature_aliases": ["billing workflow"],
+            }), encoding="utf-8")
+            history = root / ".ascm_history"
+            history.mkdir()
+            now = datetime.now(timezone.utc).isoformat()
+            (history / "gtm_outcomes.json").write_text(json.dumps([
+                {"event_id": "alias-demand", "event_type": "pilot_commitment",
+                 "occurred_at": now, "metrics": {"feature_key": "billing workflow"}},
+                {"event_id": "other-demand", "event_type": "conversion",
+                 "occurred_at": now, "metrics": {"feature_key": "analytics"}},
+            ]), encoding="utf-8")
+            evidence = EvidenceSourceConnector(root).collect("Implement an unfamiliar internal component")
+        summary = evidence["customer_evidence_summary"]
+        self.assertEqual(summary["feature_scope"], "invoice-automation")
+        self.assertEqual(summary["event_count"], 1)
+        self.assertTrue(summary["user_demand_verified"])
+        self.assertEqual(summary["evidence_event_ids"], ["alias-demand"])
+
     def test_relevance_rank_contributes_to_candidate_triage_score(self):
         recent = datetime.now(timezone.utc).isoformat()
         base = {
@@ -101,6 +124,38 @@ class EvidenceSourceConnectorTests(unittest.TestCase):
             result = EvidenceSourceConnector(tmp).reuse_candidates("authentication")
             self.assertFalse(result["enabled"])
             self.assertEqual(result["repositories"], [])
+
+    def test_founder_review_unlocks_only_the_exact_reuse_candidate(self):
+        from orchestrator.mentor.reuse_review import ReuseReviewLedger
+        candidate = {
+            "name": "acme/auth-lib",
+            "url": "https://github.com/acme/auth-lib",
+            "description": "auth library",
+            "stars": 120,
+            "archived": False,
+            "license": "MIT",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+            "os.environ", {"ASCM_ENABLE_REUSE_DISCOVERY": "1"}, clear=False
+        ), mock.patch(
+            "orchestrator.mentor.reuse_advisor.GitHubRepositoryAdvisor.search",
+            return_value={"repositories": [candidate], "query": "authentication", "error": None},
+        ):
+            before = EvidenceSourceConnector(tmp).reuse_candidates("authentication")
+            self.assertFalse(before["repositories"][0]["feature_fit_verified"])
+            ReuseReviewLedger(tmp).record(
+                candidate["url"], feature_fit_verified=True,
+                license_compatible=True, security_reviewed=True,
+                integration_cost_estimated=True,
+            )
+            after = EvidenceSourceConnector(tmp).reuse_candidates("authentication")
+        reviewed = after["repositories"][0]
+        self.assertTrue(reviewed["feature_fit_verified"])
+        self.assertTrue(reviewed["license_compatible"])
+        self.assertTrue(reviewed["security_reviewed"])
+        self.assertTrue(reviewed["integration_cost_estimated"])
+        self.assertTrue(reviewed["human_review"]["review_complete"])
 
     def test_repository_suitability_penalizes_archived_and_unknown_license(self):
         repo = {
@@ -216,6 +271,29 @@ class InterventionQualityTrackerTests(unittest.TestCase):
             tracker = InterventionQualityTracker(tmp)
             with self.assertRaises(ValueError):
                 tracker.record_feedback(feedback="great", intervention_id="missing")
+
+
+    def test_legacy_or_unconfirmed_delivery_cannot_be_rated_or_counted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tracker = InterventionQualityTracker(tmp)
+            tracker.path.parent.mkdir(parents=True, exist_ok=True)
+            tracker.path.write_text(json.dumps([
+                {"intervention_id": "legacy", "session_id": "s", "feedback": None},
+                {"intervention_id": "not-delivered", "session_id": "s",
+                 "delivery_confirmed": False, "feedback": None},
+                {"intervention_id": "delivered", "session_id": "s",
+                 "delivery_confirmed": True, "feedback": None},
+            ]), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "delivery was not confirmed"):
+                tracker.record_feedback(feedback="helpful", intervention_id="legacy")
+            with self.assertRaisesRegex(ValueError, "delivery was not confirmed"):
+                tracker.record_feedback(feedback="helpful", intervention_id="not-delivered")
+            result = tracker.record_feedback(feedback="helpful", intervention_id="delivered")
+            self.assertEqual(result["intervention_id"], "delivered")
+            report = tracker.report("s")
+            self.assertEqual(report["interventions_shown"], 1)
+            self.assertEqual(report["delivery_unconfirmed"], 2)
+            self.assertEqual(report["interventions_reviewed"], 1)
 
 
 if __name__ == "__main__":

@@ -1,10 +1,11 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from orchestrator.mentor.daemon import UniversalASCMDaemon
-from orchestrator.mentor.founder_intelligence import FounderIntelligenceEngine
+from orchestrator.mentor.founder_intelligence import FounderIntelligenceEngine, _feedback_adjustments
 
 
 class FounderIntelligenceTests(unittest.TestCase):
@@ -265,6 +266,31 @@ class FounderEvidenceDeliveryIntegrationTests(unittest.TestCase):
                 daemon.intervention_tracker.record_shown.call_args.kwargs["evidence_summary"]["customer"]["event_count"],
                 0,
             )
+
+
+    def test_learning_requires_explicit_delivery_confirmation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history = Path(tmp) / ".ascm_history"
+            history.mkdir()
+            records = [
+                {"recommended_path": "build", "feedback": "helpful"}
+                for _ in range(8)
+            ]
+            records += [
+                {"recommended_path": "reuse", "feedback": "helpful", "delivery_confirmed": False}
+                for _ in range(8)
+            ]
+            records += [
+                {"recommended_path": "customer_validate", "feedback": "helpful", "delivery_confirmed": True}
+                for _ in range(4)
+            ]
+            (history / "intervention_quality.json").write_text(
+                json.dumps(records), encoding="utf-8"
+            )
+            adjustments = _feedback_adjustments(tmp)
+        self.assertNotIn("build", adjustments)
+        self.assertNotIn("reuse", adjustments)
+        self.assertNotIn("customer_validate", adjustments)
 
 
 if __name__ == "__main__":
