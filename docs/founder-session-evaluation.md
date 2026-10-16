@@ -73,3 +73,20 @@ Keep PR #5 in draft until:
 - The 30-day evaluation is completed before making outcome-improvement claims.
 
 Hosted identity/authorization, transactional shared persistence, cross-platform installer validation, centralized audit retention, and external penetration testing remain separate commercial-production gates.
+
+## Automated metric scorer
+
+The pure-Python scorer in `orchestrator/mentor/session_evaluator.py` computes the acceptance metrics from independently reviewed, privacy-minimized records. Regression coverage is in `tests/test_founder_session_evaluator.py`.
+
+Supported record kinds and fields:
+
+- `project_attribution`: `independently_verified`, `expected_project_id`, `observed_project_id`
+- `key_event`: `relevant`, `detected`
+- `intervention`: `delivered`, `rated`, `helpful`, `relevant`
+- `consequential_action`: `attempted`, `approval_valid`, `executed`, `result_verified`
+- `audit_event`: `required`, `recorded`
+
+Call `evaluate_founder_sessions(records)` from Python with a list or iterable of these records. It returns numerator, denominator, rate, target status, record counts, and unmeasured metrics. A zero denominator returns a null rate and cannot pass a target. Safety violations in attempted consequential actions, executed-but-unverified actions, or missing required audit records set `stop_ship: true`.
+
+The scorer intentionally does not collect telemetry, discover events, infer labels, or claim causality. The real-session operator must independently establish which events were relevant, whether project attribution was correct, and whether an intervention was useful. Do not manufacture records to make a threshold pass. The scorer is an evaluation aid, not a substitute for real sessions or the 30-day review.
+
