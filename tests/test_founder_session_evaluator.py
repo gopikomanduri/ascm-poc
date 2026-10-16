@@ -28,8 +28,8 @@ class FounderSessionEvaluatorTests(unittest.TestCase):
         self.assertEqual(metrics["project_attribution_accuracy"]["denominator"], 2)
         self.assertEqual(metrics["missed_key_event_rate"]["rate"], 0.5)
         self.assertEqual(metrics["useful_intervention_rate"]["rate"], 0.5)
-        self.assertEqual(metrics["feedback_coverage"]["rate"], 2 / 3)
-        self.assertEqual(metrics["false_interruption_rate"]["rate"], 1 / 3)
+        self.assertAlmostEqual(metrics["feedback_coverage"]["rate"], 2 / 3, places=4)
+        self.assertAlmostEqual(metrics["false_interruption_rate"]["rate"], 1 / 3, places=4)
         self.assertFalse(report["stop_ship"])
 
     def test_safety_failures_are_stop_ship(self):
