@@ -260,7 +260,17 @@ class UniversalASCMDaemon:
             reuse_summary = recommendation_evidence.get(
                 "reuse_evidence_summary", {}
             )
-            repositories = recommendation_evidence.get("reuse_candidates", [])
+            # Display only candidates that passed the same explicit review gate used by
+            # the decision engine. Unreviewed public search results remain research-only.
+            decision_evidence = recommendation.get("evidence", {})
+            repositories = (
+                decision_evidence.get("reuse_candidates", [])
+                if isinstance(decision_evidence, dict) else []
+            )
+            research_only_count = (
+                decision_evidence.get("reuse_candidates_research_only_count", 0)
+                if isinstance(decision_evidence, dict) else 0
+            )
 
 
 
@@ -304,10 +314,15 @@ class UniversalASCMDaemon:
                 )
                 # repositories = recommendation_evidence.get("reuse_candidates", [])
                 if repositories:
-                    candidate_line = "Reuse candidates (heuristic): " + "; ".join(
+                    candidate_line = "Reviewed reuse candidates: " + "; ".join(
                         f"{str(item.get('name', 'unknown'))[:70]} score {item.get('suitability_score', '?')}/100"
                         for item in repositories[:2] if isinstance(item, dict)
-                    ) + ". Human fit/license/security review required."
+                    ) + "."
+                elif research_only_count:
+                    candidate_line = (
+                        f"{research_only_count} public reuse candidate(s) are research-only until "
+                        "founder fit/license/security/integration review is complete."
+                    )
                 elif isinstance(reuse_summary, dict) and reuse_summary.get("enabled") is False:
                     candidate_line = "Open-source search disabled; no conclusion that alternatives do not exist."
                 else:
