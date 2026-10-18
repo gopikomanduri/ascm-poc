@@ -13,7 +13,7 @@ def test_customer_evidence_is_redacted_and_never_auto_verified(tmp_path):
     event = pipeline.record(
         feature_key="invoice feature owner@example.com",
         problem_area="billing +1 (415) 555-0198",
-        source="interview token ghp_abcdefghijklmnopqrstuvwxyz123456",
+        source="interview token example-token-not-a-real-credential",
         demand_signal="strong",
         willingness_to_pay="confirmed",
         sentiment="interested",
@@ -26,7 +26,7 @@ def test_customer_evidence_is_redacted_and_never_auto_verified(tmp_path):
     assert "owner@example.com" not in json.dumps(event)
     assert "user@example.com" not in json.dumps(event)
     assert "415" not in json.dumps(event)
-    assert "ghp_abcdefghijklmnopqrstuvwxyz123456" not in json.dumps(event)
+    assert "example-token-not-a-real-credential" not in json.dumps(event)
 
     ledger_events = OutcomeLedger(tmp_path).recent_events()
     assert len(ledger_events) == 1
