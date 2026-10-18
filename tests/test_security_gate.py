@@ -52,8 +52,10 @@ class SecurityGateTests(unittest.TestCase):
                     "summary": "Potential injection", "filePath": "src/example.py"
                 }]}
             }), "stderr": ""})()
-        ):
-            result = run_model_review([], Path.cwd())
+        ) as mock_run:
+            result = run_model_review([], Path.cwd(), base_ref="HEAD^1")
+        review_request = json.loads(mock_run.call_args.kwargs["input"])
+        self.assertEqual(review_request["source"]["scope"]["base"], "HEAD^1")
         self.assertEqual(result["status"], "completed")
         self.assertFalse(result["passed"])
         self.assertEqual(result["blocking_finding_count"], 1)

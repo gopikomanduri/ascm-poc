@@ -92,17 +92,18 @@ def scan_paths(paths: list[Path], repo_root: Path) -> list[dict[str, Any]]:
     return findings
 
 
-def run_model_review(paths: list[Path], repo_root: Path, timeout: int = 180) -> dict[str, Any]:
+def run_model_review(paths: list[Path], repo_root: Path, timeout: int = 180, base_ref: str | None = None) -> dict[str, Any]:
     """Run the Gemini-backed structured security review for the branch diff."""
     if not os.environ.get("GEMINI_API_KEY", "").strip():
         return {"status": "not_configured", "passed": False,
                 "issues": ["GEMINI_API_KEY is not configured for the security review."]}
     base_branch = os.environ.get("GITHUB_BASE_REF", "main").strip() or "main"
+    review_base = base_ref or f"origin/{base_branch}"
     request = {
         "version": 1,
         "repo": str(repo_root.resolve()),
         "source": {"kind": "repository", "scope": {
-            "type": "branch", "base": f"origin/{base_branch}", "head": "HEAD"}},
+            "type": "branch", "base": review_base, "head": "HEAD"}},
         "options": {"trustRepositoryConfig": False},
     }
     command = [sys.executable, "-m", "orchestrator.security.security_review_adapter"]
@@ -179,7 +180,7 @@ def main(argv=None) -> int:
     try:
         paths = [Path(item) for item in args.paths] if args.paths else _changed_paths(args.git_base) if args.git_base else []
         findings = scan_paths(paths, root)
-        review = run_model_review(paths, root)
+        review = run_model_review(paths, root, base_ref=args.git_base or None)
     except Exception as exc:
         print(f"Security gate failed to complete: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
