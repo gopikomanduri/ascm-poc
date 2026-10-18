@@ -400,7 +400,70 @@ class UniversalASCMDaemon:
             )
             # Keep the actionable feedback/report commands intact even when the
             # evidence-rich explanation needs to be shortened for desktop notifications.
-            message = message[:max(0, 990 - len(feedback_footer))] + " " + feedback_footer
+            body_budget = max(0, 990 - len(feedback_footer) - 1)
+            if len(message) > body_budget and decision:
+                missing_labels = ", ".join(str(item) for item in missing[:4]) or "none recorded"
+                alternatives = alternative_summary or "not established"
+                alignment_status = (
+                    str(alignment.get("alignment_status", "unknown"))
+                    if isinstance(alignment, dict) else "unknown"
+                )
+                # Never infer founder intent from activity. Preserve the challenge when
+                # the evaluator says "challenge", even if it omitted prose.
+                challenge_compact = (
+                    "Mentor challenge: Possible goal drift."
+                    if alignment_status == "challenge" or challenge else ""
+                )
+                source_names = [str(source) for source in active_sources[:3] if source]
+                coverage_compact = (
+                    "Observed sources this session: " + ", ".join(source_names) + "."
+                    if source_names else
+                    "Observed sources this session: incomplete; missing signals do not imply inactivity."
+                )
+                if isinstance(reuse_summary, dict) and reuse_summary.get("enabled") is False:
+                    reuse_status = "Open-source search disabled; alternatives unknown."
+                elif research_only_count:
+                    reuse_status = f"{research_only_count} public reuse candidate(s) need founder review."
+                else:
+                    reuse_status = "Reuse suitability is unverified."
+
+                compact_parts = [
+                    "Observed activity (not confirmed intent).",
+                    f"Goal alignment: {alignment_status}.",
+                    challenge_compact,
+                    coverage_compact,
+                    f"Next best path: {recommended_path.replace('_', ' ')}.",
+                    f"Alternatives: {alternatives}.",
+                    f"Missing evidence: {missing_labels}.",
+                    reuse_status,
+                    "Heuristic advice only; no action was executed.",
+                ]
+                compact_message = " ".join(part for part in compact_parts if part)
+                if len(compact_message) > body_budget:
+                    short_alternatives = ", ".join(
+                        str(item.get("path")) for item in top_paths[:2]
+                        if isinstance(item, dict) and item.get("path")
+                    ) or "not established"
+                    compact_parts = [
+                        "Observed activity (not confirmed intent).",
+                        f"Goal alignment: {alignment_status}.",
+                        challenge_compact,
+                        coverage_compact,
+                        f"Next best path: {recommended_path.replace('_', ' ')}.",
+                        f"Alternatives: {short_alternatives}.",
+                        f"Missing evidence: {missing_labels}.",
+                        reuse_status,
+                        "No action was executed.",
+                    ]
+                    compact_message = " ".join(part for part in compact_parts if part)
+                if len(compact_message) > body_budget:
+                    raise ValueError(
+                        "Founder notification context exceeds available budget while preserving feedback footer"
+                    )
+                message = compact_message
+            else:
+                message = message[:body_budget]
+            message = message + " " + feedback_footer
             audit_details["intervention_id"] = intervention_id
             audit_details["session_id"] = session_id
             self.audit_logger.log_event(
