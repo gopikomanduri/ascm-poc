@@ -230,6 +230,45 @@ class ContextFusionEngine:
             pass
         temp.replace(path)
 
+    def has_recent_activity(self, within_seconds: int = 120) -> bool:
+        """Return whether any supported, privacy-minimized signal arrived recently.
+
+        This lets the daemon react to IDE activation, browser-domain and active-app
+        transitions as well as code edits/terminal events. It never reads application
+        content and rejects future-dated events.
+        """
+        now = _now()
+        horizon = max(0, int(within_seconds))
+        for event in reversed(self._read_events()):
+            timestamp = _parse_time(event.get("timestamp"))
+            if timestamp is None:
+                continue
+            age = (now - timestamp).total_seconds()
+            if 0 <= age <= horizon:
+                return True
+        return False
+
+    def has_recent_actionable_activity(self, within_seconds: int = 120) -> bool:
+        """Recent project work that justifies a founder-goal prompt.
+
+        App switches and browser domains alone are deliberately excluded from
+        interruptive goal prompts; file, test, terminal, and IDE project signals
+        are sufficient to make the question relevant.
+        """
+        now = _now()
+        horizon = max(0, int(within_seconds))
+        actionable = {"file_changed", "test_passed", "test_failed", "terminal_command", "project_activated"}
+        for event in reversed(self._read_events()):
+            if event.get("event_type") not in actionable:
+                continue
+            timestamp = _parse_time(event.get("timestamp"))
+            if timestamp is None:
+                continue
+            age = (now - timestamp).total_seconds()
+            if 0 <= age <= horizon:
+                return True
+        return False
+
     def infer_context(self, project_path: str | Path | None = None) -> Dict[str, Any]:
         """Infer a task hypothesis for one project, or return hypotheses for all observed projects."""
         events = self._read_events()
@@ -261,7 +300,7 @@ class ContextFusionEngine:
         )
         recent = [
             event for event in ordered
-            if now - (_parse_time(event["timestamp"]) or now) <= timedelta(minutes=30)
+            if timedelta(0) <= now - (_parse_time(event["timestamp"]) or now) <= timedelta(minutes=30)
         ]
         edits = [e for e in recent if e.get("event_type") == "file_changed"]
         tests = [e for e in recent if e.get("event_type") in {"test_passed", "test_failed"}]
@@ -307,18 +346,34 @@ class ContextFusionEngine:
                 confidence = 0.64
                 rationale = "A test command completed; command text and output were not retained."
             evidence = [latest_terminal["event_id"]]
-        elif active_apps:
-            latest_app = max(active_apps, key=lambda e: e["timestamp"])
-            task = f"Working in {latest_app.get('app_name', 'an application')}"
+        elif active_apps or browser_events:
+            # App names and hostnames are context hints, not proof of intent. Never
+            # turn a foreground app/domain alone into a confident task recommendation.
+            latest_app = max(active_apps, key=lambda e: e["timestamp"], default=None)
+            latest_domain = max(browser_events, key=lambda e: e["timestamp"], default=None)
+            if latest_app and latest_domain:
+                task = "Recent application and browser activity; task intent is unconfirmed"
+                evidence = [latest_app["event_id"], latest_domain["event_id"]]
+            elif latest_app:
+                task = f"Working in {latest_app.get('app_name', 'an application')}"
+                evidence = [latest_app["event_id"]]
+            else:
+                task = f"Browsing {latest_domain.get('domain', 'a website')}"
+                evidence = [latest_domain["event_id"]]
             confidence = 0.25
-            rationale = "Foreground application metadata is weak evidence and cannot establish project intent."
-            evidence = [latest_app["event_id"]]
-        elif browser_events:
-            latest_domain = max(browser_events, key=lambda e: e["timestamp"])
-            task = f"Researching {latest_domain.get('domain', 'a website')}"
-            confidence = 0.30
-            rationale = "An opt-in browser domain was observed; no page URL, path, title, or content was retained."
-            evidence = [latest_domain["event_id"]]
+            rationale = (
+                "Foreground application names and/or browser hostnames are weak, opt-in context hints; "
+                "window titles, page content, and user intent were not captured."
+            )
+        elif any(e.get("event_type") == "project_activated" for e in recent):
+            latest_project = max(
+                (e for e in recent if e.get("event_type") == "project_activated"),
+                key=lambda e: e["timestamp"],
+            )
+            task = "Project workspace activated; task intent is unconfirmed"
+            confidence = 0.20
+            rationale = "An IDE workspace activation was recorded without reading document content."
+            evidence = [latest_project["event_id"]]
 
         context = {
             "project_id": project_id,

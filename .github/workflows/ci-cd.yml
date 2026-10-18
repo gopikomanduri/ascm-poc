@@ -2,9 +2,10 @@ name: ASCM Multi-Agent Engine CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'feat/**' ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, 'feat/**' ]
+  workflow_dispatch:
 
 permissions:
   contents: read

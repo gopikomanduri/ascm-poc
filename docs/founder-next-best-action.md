@@ -101,9 +101,17 @@ The first deterministic fusion rules are intentionally conservative:
 - If no founder goal is recorded, the daemon may ask for that goal because it
   materially changes which next action is appropriate.
 
-This is a first event-correlation layer, not full desktop-wide awareness yet.
-The daemon currently receives filesystem events from its configured workspace;
-terminal/test-result, active-window, and browser adapters still need to be added
-before ASCM can reliably correlate all applications and all independent workspaces.
-Hypotheses are persisted separately from founder-confirmed context and are not
-written into the confirmed task field.
+This is a first event-correlation layer, not full desktop-wide awareness. The implementation has privacy-minimized event entry points for filesystem changes, test results, active-app transitions, IDE project activation, browser hostnames, and terminal command categories. Coverage depends on each adapter being installed/enabled and correctly associating its event with a project inside the configured workspace. It does not reliably infer project identity from every foreground window, especially on all Wayland setups, and it does not capture browser page content. The daemon only recommends when recent, project-matched evidence meets its confidence threshold. Hypotheses remain separate from founder-confirmed context and are never written into the confirmed task field.
+
+
+## Proactive signal-to-decision loop
+
+The background loop now considers recent workspace file changes, test results, safe terminal categories, IDE project activation, opt-in foreground-app transitions, and opt-in browser hostnames. Recentness is checked before a signal can trigger the loop. File/test/terminal/IDE events may justify a goal clarification; app switches or hostnames alone do not interrupt the founder. App/domain metadata alone is never promoted to a confident task inference. A recommendation requires a founder-confirmed goal, recent project-matched evidence above the confidence threshold, and cooldown checks. Activity hypotheses stay separate from the founder's confirmed task.
+
+Supported adapters write metadata through `python -m orchestrator.mentor.activity_cli`; the VS Code extension and browser native-messaging integration remain separately installed/opt-in. The daemon cannot infer activity from an application whose adapter is not installed or enabled.
+
+## Founder beta safety boundary
+
+ASCM's first founder beta is single-user and local-first. Approval signatures bind consent to the exact proposal and help reject stale or casually edited local records, but the key is owned by the same operating-system account. This is not protection against a compromised account, a multi-user authorization mechanism, or permission to expose the executor over a network. Approved execution remains disabled by default and limited to the fixed allowlist.
+
+Before inviting founders, run the workspace-scoped activity/opt-out checks, authenticated GTM webhook replay and signature tests, delivery-confirmed learning regression tests, and signed-approval tampering tests. Treat the 30-day intervention review as the evidence gate for any claim that recommendations improve founder outcomes.
