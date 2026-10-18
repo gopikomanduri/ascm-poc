@@ -66,9 +66,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p security-artifacts
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            BASE="origin/${GITHUB_BASE_REF}"
+          else
+            BASE="$(git rev-parse HEAD^1)"
+          fi
+          echo "Security review diff base: ${BASE} (event: ${GITHUB_EVENT_NAME})" >> "$GITHUB_STEP_SUMMARY"
           set +e
           python -m orchestrator.security.security_gate \
-            --git-base "origin/${GITHUB_BASE_REF:-main}" \
+            --git-base "$BASE" \
             --report security-artifacts/ascm-security-report.json --require-model-review
           status=$?
           set -e
@@ -77,8 +83,13 @@ jobs:
       - name: Run Bandit against changed Python files
         shell: bash
         run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            BASE="origin/${GITHUB_BASE_REF}"
+          else
+            BASE="$(git rev-parse HEAD^1)"
+          fi
+          echo "Bandit diff base: ${BASE} (event: ${GITHUB_EVENT_NAME})" >> "$GITHUB_STEP_SUMMARY"
           set +e
-          BASE="origin/${GITHUB_BASE_REF:-main}"
           mapfile -t changed_py < <(git diff --name-only --diff-filter=ACMR "$BASE...HEAD" -- '*.py' | grep -v '^tests/' || true)
           mkdir -p security-artifacts
           if [ "${#changed_py[@]}" -eq 0 ]; then
