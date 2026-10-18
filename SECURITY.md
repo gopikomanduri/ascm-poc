@@ -1,4 +1,3 @@
-
 # Security Policy
 
 ## Current status
@@ -31,11 +30,11 @@ Security fixes are currently targeted at the latest commit on `main`. No long-te
 - Changed Python files are scanned with Bandit.
 - Python dependencies are checked with pip-audit.
 - A deterministic local security gate checks selected secret markers, unsafe dynamic execution, and `shell=True` usage.
-- CI invokes the configured Coco security-review CLI and blocks the security job if the review fails, does not complete successfully, or reports a blocking finding.
+- CI runs the repository-owned Gemini-backed structured security review adapter and blocks the security job if the review fails, does not complete successfully, or reports a blocking finding.
 - Security artifacts are uploaded for inspection.
 - Activity and audit logs are intended to minimize sensitive data and use bounded local storage.
 
-A successful static or dependency scan is not a penetration test. A Coco review is considered complete only when the CLI returns a valid structured response; a missing provider API key or incomplete review must not be treated as a pass.
+A successful static or dependency scan is not a penetration test. The model-assisted review is considered complete only when the adapter returns a valid structured response; a missing provider API key or incomplete review must not be treated as a pass. The current repository evidence does not establish that a separate CICO/Coco CLI integration exists.
 
 ## Before production
 
