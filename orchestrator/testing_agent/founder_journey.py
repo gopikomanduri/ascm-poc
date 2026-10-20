@@ -122,7 +122,7 @@ class FounderJourneyEvaluator:
             consent_message = "Every external action has attributable real approval." if consent_pass else "An external action lacks matching, attributable real approval."
         elif blocked:
             consent_pass, consent_status = False, "partial"
-            consent_message = "Default-deny blocking was observed, but positive action-scoped approval was not tested."
+            consent_message = "No external action was executed; only a simulated permission path was exercised, so real action-scoped approval remains untested."
         else:
             consent_pass, consent_status = False, "not_tested"
             consent_message = "No external-action approval or blocking path was observed."
