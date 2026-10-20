@@ -1,26 +1,29 @@
 # Continuous Founder-Simulation Testing Agent
 
-## One-terminal workflow
+## Visible multi-terminal workflow
 
 From the ASCM repository root, activate the project's virtual environment and run:
 
 ```bash
-python -m orchestrator.testing_agent.runtime --workspace . --rounds-per-session 8
+python -m orchestrator.testing_agent.runtime --workspace . --visible-terminals --review-delay 5 --rounds-per-session 8
 ```
 
-The runner starts the local A2A gateway on `127.0.0.1:8090` if it is not already available, then runs three cooperating loops in the same terminal:
+On macOS, `--visible-terminals` opens five Terminal windows (Product, Testing/Founder Simulator, Founder Mentor, Goal, and GTM). Each window tails a role-specific log under `.ascm_history/agent_terminals/`. The coordinator still runs in the terminal where you launched the command. The runner starts the local A2A gateway on `127.0.0.1:8090` if it is not already available, then runs three cooperating loops in parallel:
 
 1. **Testing Agent / simulated founder** sends A2A 1.0 JSON-RPC requests to ASCM's ProductAgent, receives its clarification questions, answers from a scenario profile, carries the transcript forward, and repeats across product-risk areas. It then calls the real Founder Mentor over A2A to check that the recommendation is tied to the current goal and includes a measurable next action.
 2. **Goal Agent** periodically records the branch, latest commit, working-tree state, A2A gateway health/advertised roster, testing session, question/round counts, and open findings in `.ascm_history/testing_agent_status.json`.
 3. **GTM Status Agent** watches for a new repository commit, calls the actual GTM specialist over A2A for internal positioning advice, drafts a status-based social post under `artifacts/gtm_cycles/`, and sends an action-scoped LinkedIn permission request to the Testing Agent. It keeps GTM model recommendations separate from the factual draft, deduplicates requests by commit, and persists its last requested fingerprint.
 
-The process runs continuously until Ctrl-C. The Testing Agent writes its report—including explicit acceptance pass/fail for Mentor context, GTM outcome integrity, approval behavior, handoff traceability, and outcome evidence—to `.ascm_history/testing_agent_report.json`; GTM permission request outcomes are appended to `.ascm_history/gtm_permission_requests.jsonl`. The A2A gateway log is `.ascm_history/testing_agent_a2a.log`. The GTM specialist's internal recommendation is saved beside each draft with the `-gtm-review.txt` suffix.
+After every Product Agent question and Testing Agent answer, the coordinator pauses for five seconds by default so you can inspect both sides before the next exchange. Change the delay with `--review-delay N`; set `--review-delay 0` for automated runs. The process runs continuously until Ctrl-C. The Testing Agent writes its report—including explicit acceptance pass/fail for Mentor context, GTM outcome integrity, approval behavior, handoff traceability, and outcome evidence—to `.ascm_history/testing_agent_report.json`; GTM permission request outcomes are appended to `.ascm_history/gtm_permission_requests.jsonl`. The A2A gateway log is `.ascm_history/testing_agent_a2a.log`. The GTM specialist's internal recommendation is saved beside each draft with the `-gtm-review.txt` suffix.
 
 ## Options
 
 ```bash
-# One bounded session, useful for CI
-python -m orchestrator.testing_agent.runtime --workspace . --sessions 1 --rounds-per-session 4
+# One bounded session, useful for CI (no extra Terminal windows and no review delay)
+python -m orchestrator.testing_agent.runtime --workspace . --sessions 1 --rounds-per-session 4 --review-delay 0
+
+# Launch visible per-agent windows on macOS; pause 5 seconds after every Q&A
+python -m orchestrator.testing_agent.runtime --workspace . --visible-terminals --review-delay 5 --rounds-per-session 8
 
 # Use an already-running A2A gateway
 python -m orchestrator.testing_agent.runtime --workspace . --no-start-server
@@ -43,3 +46,8 @@ Scenario fields can override the profile's product name, problem, target user, d
 ## Acceptance coverage
 
 The tests cover transcript-based multi-turn grilling, Founder Mentor A2A review, deterministic founder answers, unknown-evidence handling, malformed model output, repository status snapshots, GTM draft wording, A2A client-to-gateway round trips, handoff/acceptance gates, and simulated approval/default-deny behavior. The complete repository CI remains the release gate.
+
+
+## Live terminal logs
+
+The five role logs are `.ascm_history/agent_terminals/product.log`, `testing.log`, `mentor.log`, `goal.log`, and `gtm.log`. Product questions are shown in both Product and Testing windows; founder answers appear in Testing; Mentor recommendations appear in Mentor and Testing. Goal and GTM windows show their respective status/permission events. The harness does not connect to a social publishing adapter, and simulated permission is never real authorization.

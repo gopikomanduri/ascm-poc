@@ -7,6 +7,7 @@ import pytest
 from orchestrator.testing_agent.founder_journey import JourneyEvent
 from orchestrator.testing_agent.runtime import (
     ASCMJsonRpcClient,
+    AgentTerminalViews,
     ContinuousFounderTestingRuntime,
     FounderProfile,
     GoalAgent,
@@ -51,6 +52,7 @@ def test_product_agent_grills_and_simulated_founder_answers_in_sequence(tmp_path
     ])
     runtime = ContinuousFounderTestingRuntime(
         tmp_path, profile=FounderProfile(), client=client, rounds_per_session=4,
+        review_delay_seconds=0,
     )
     result = runtime.run_product_session("target user")
     assert result["is_clear"] is True
@@ -190,3 +192,22 @@ def test_acceptance_gate_fails_when_mentor_or_handoff_evidence_is_missing(tmp_pa
     failed = {item["criterion"] for item in summary["criteria"] if not item["passed"]}
     assert "mentor_goal_context" in failed
     assert "handoff_traceability" in failed
+
+
+def test_visible_terminal_routes_agent_messages_to_relevant_windows():
+    assert AgentTerminalViews.roles_for_line("[PRODUCT AGENT → TESTING AGENT] Who is the buyer?") == ("product", "testing")
+    assert AgentTerminalViews.roles_for_line("[TESTING AGENT → PRODUCT AGENT] Early-stage founders") == ("testing",)
+    assert AgentTerminalViews.roles_for_line("[MENTOR AGENT → TESTING AGENT] Validate demand first") == ("mentor", "testing")
+    assert AgentTerminalViews.roles_for_line("[GOAL AGENT] branch=main") == ("goal",)
+    assert AgentTerminalViews.roles_for_line("[GTM AGENT] Draft saved") == ("gtm",)
+
+
+def test_question_answer_exchange_pauses_for_configured_review_delay(tmp_path, monkeypatch):
+    client = FakeASCMClient([product_response(question="Who is the target customer?")])
+    runtime = ContinuousFounderTestingRuntime(
+        tmp_path, client=client, rounds_per_session=1, review_delay_seconds=5,
+    )
+    delays = []
+    monkeypatch.setattr("orchestrator.testing_agent.runtime.time.sleep", delays.append)
+    runtime.run_product_session("target user")
+    assert delays == [5]

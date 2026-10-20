@@ -144,3 +144,61 @@ def test_model_failure_does_not_expose_provider_exception(monkeypatch, tmp_path)
     ):
         with pytest.raises(adapter.ReviewError, match="provider failed safely"):
             adapter.review_request(_request(), tmp_path)
+
+
+
+def test_empty_primary_response_retries_with_configured_fallback_model(monkeypatch):
+    monkeypatch.setenv("ASCM_SECURITY_REVIEW_FALLBACK_MODEL", "gemini-3.6-flash")
+    calls = []
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            calls.append(kwargs["model"])
+            if kwargs["model"] == "gemini-3.8-flash":
+                return SimpleNamespace(
+                    text="",
+                    candidates=[SimpleNamespace(finish_reason="MAX_TOKENS", content=SimpleNamespace(parts=[]))],
+                    prompt_feedback=SimpleNamespace(block_reason=None),
+                )
+            return SimpleNamespace(text='{"findings": []}')
+
+    fake_genai = SimpleNamespace(Client=lambda **kwargs: SimpleNamespace(models=FakeModels()))
+    monkeypatch.setitem(sys.modules, "google", SimpleNamespace(genai=fake_genai))
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    result = adapter._request_review("diff --git ...", "test-key", "gemini-3.8-flash")
+
+    assert result == {"findings": []}
+    assert calls == ["gemini-3.8-flash", "gemini-3.6-flash"]
+
+
+def test_empty_primary_and_fallback_responses_still_fail_closed(monkeypatch):
+    monkeypatch.setenv("ASCM_SECURITY_REVIEW_FALLBACK_MODEL", "gemini-3.6-flash")
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            return SimpleNamespace(
+                text="",
+                candidates=[SimpleNamespace(finish_reason="SAFETY", content=SimpleNamespace(parts=[]))],
+                prompt_feedback=SimpleNamespace(block_reason="SAFETY"),
+            )
+
+    fake_genai = SimpleNamespace(Client=lambda **kwargs: SimpleNamespace(models=FakeModels()))
+    monkeypatch.setitem(sys.modules, "google", SimpleNamespace(genai=fake_genai))
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    with pytest.raises(adapter.ReviewError, match=r"empty response.*finish_reason=SAFETY.*block_reason=SAFETY"):
+        adapter._request_review("diff --git ...", "test-key", "gemini-3.8-flash")
+
+
+def test_response_text_can_be_extracted_from_candidate_parts():
+    response = SimpleNamespace(
+        text="",
+        candidates=[SimpleNamespace(
+            finish_reason="STOP",
+            content=SimpleNamespace(parts=[SimpleNamespace(text='{"findings": []}')]),
+        )],
+    )
+    text, diagnostic = adapter._response_text(response)
+    assert text == '{"findings": []}'
+    assert diagnostic == ""
