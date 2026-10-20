@@ -251,30 +251,39 @@ class FounderProfile:
         return profile
 
     def answer(self, question: str) -> str:
-        """Answer only from the simulation profile; never invent validation evidence."""
-        q = question.lower()
-        if any(k in q for k in ("problem", "pain", "why", "need", "value")):
-            return self.problem
-        if any(k in q for k in ("customer", "user", "icp", "segment", "buyer", "who")):
-            return self.target_user
-        if any(k in q for k in ("different", "compet", "alternative", "substitute")):
-            return self.differentiation + " Alternatives to test include: " + self.alternatives
-        if any(k in q for k in ("traction", "customer evidence", "interview", "validation", "demand", "proof")):
-            return self.traction + " Customer validation is an explicit open workstream."
-        if any(k in q for k in ("price", "pricing", "pay", "revenue", "willingness")):
+        """Answer only from known simulation facts; unknowns stay explicitly unresolved."""
+        q = _normalized_text(question)
+        if any(k in q for k in ("go no go", "threshold", "quantitative metric", "success criteria",
+                                "baseline", "conversion rate", "relative improvement", "how will you measure",
+                                "what metric", "qualitative or quantitative signals")):
+            return self.success_metrics + " Baselines and numeric go/no-go thresholds are not established; do not infer a threshold."
+        if any(k in q for k in ("budget holder", "holds the budget", "budget authority", "day to day operational",
+                                "who pays", "purchasing authority")):
+            return "The current hypothesis names founders and engineering leaders, but the budget holder and day-to-day user have not been distinguished or validated."
+        if any(k in q for k in ("failure mode", "specific bottleneck", "handoff failure", "context loss frequency",
+                                "exact pain", "specific painful", "what evidence proves")):
+            return "The exact handoff failure mode is unvalidated. Context loss, conflicting constraints, rework, and governance gaps are hypotheses, not observed customer facts. Cheapest test: interview 5-10 target users and manually trace one cross-repository handoff with permission."
+        if any(k in q for k in ("concierge", "prototype experiment", "how many interviews", "discovery interview",
+                                "acquisition channel", "outreach channel", "how will you validate", "validation experiment")):
+            return "Proposed experiment only—not yet executed: conduct 5-10 discovery interviews, then run a manual concierge test across up to 3 customer-selected repositories. Record observed handoff failures, time/rework baseline, intervention usefulness, and willingness-to-pay signals. No participants or results have been verified yet."
+        if any(k in q for k in ("willingness to pay", "pricing", "price", "revenue", "paid pilot", "commercial commitment")):
             return self.pricing
-        if any(k in q for k in ("security", "privacy", "consent", "permission", "data")):
+        if any(k in q for k in ("alternative", "competitor", "differentiat", "substitute", "existing tools")):
+            return self.differentiation + " Alternatives to test include: " + self.alternatives
+        if any(k in q for k in ("customer evidence", "customer traction", "verified traction", "actual conversion",
+                                "customer demand", "validation status", "has this been validated", "proof of demand")):
+            return self.traction + " Customer validation is an explicit open workstream."
+        if any(k in q for k in ("security", "privacy", "consent", "permission", "data residency", "data handling")):
             return self.security
-        if any(k in q for k in ("exact conversion rate", "conversion rate", "actual conversion", "how many customers", "how many conversions", "verified traction")):
-            return self.traction + " Exact conversion figures are not available; do not fabricate a number."
+        if any(k in q for k in ("publish", "linkedin", "social media", "external outreach", "send this")):
+            return "A draft may be prepared for review. This simulated founder cannot authorize real-world publishing or outreach."
+        if any(k in q for k in ("target user", "target customer", "ideal customer", "icp", "customer segment", "primary persona", "who is the buyer")):
+            return self.target_user
+        if any(k in q for k in ("problem", "pain", "why", "need", "value proposition", "what does ascm solve")):
+            return self.problem
         if any(k in q for k in ("metric", "success", "outcome", "measure", "conversion")):
             return self.success_metrics
-        if any(k in q for k in ("post", "publish", "linkedin", "social", "campaign", "outreach")):
-            return "You may draft content for review. This simulated founder cannot authorize real-world publishing."
-        return (
-            "I do not have validated evidence for that yet. Record it as an open question, state the assumption, "
-            "and propose the cheapest experiment that could resolve it; do not fabricate a fact."
-        )
+        return "I cannot answer that from the current simulation profile. Record it as an open question, state the assumption, and propose the cheapest experiment that could resolve it; do not fabricate a fact."
 
     def decide_permission(self, action: str) -> dict[str, Any]:
         """Return a simulated response. This is never a real founder authorization."""
@@ -612,6 +621,7 @@ class ContinuousFounderTestingRuntime:
         self.mentor_reviews_completed = 0
         self.last_mentor_review = ""
         self.journey_events: list[JourneyEvent] = []
+        self.open_questions: list[str] = []
 
     def _product_prompt(self, area: str) -> str:
         transcript = json.dumps(self.transcript[-24:], ensure_ascii=False)
@@ -620,6 +630,8 @@ class ContinuousFounderTestingRuntime:
             "The connected Testing Agent is simulating the founder and will answer questions. "
             "Ask one highest-priority clarification question at a time; do not invent customer evidence, "
             "pricing, traction, or validation. Use the transcript to avoid repeating answered questions. "
+            "Do not repeat a question when an unresolved item is already in the transcript; checkpoint it instead. "
+            "Treat an answer that does not address the question as unknown, not as clarification. "
             "When critical requirements are sufficiently clear, return is_clear=true and list remaining "
             "non-blocking questions separately. Return JSON keys: detected_domain, confidence_score, "
             "functional_completeness, nfr_completeness, is_clear, understanding, clarification_questions, "
