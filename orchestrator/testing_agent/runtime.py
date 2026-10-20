@@ -982,6 +982,71 @@ class ContinuousFounderTestingRuntime:
         if not action and isinstance(parsed.get("mentor_advice"), str):
             action = parsed["mentor_advice"].strip()
         action = action or "Review the Mentor recommendation and choose a measurable next action."
+        path = self.history / "founder_actions.jsonl"
+        events_path = self.history / "founder_action_events.jsonl"
+        existing_actions: list[dict[str, Any]] = []
+        action_events: list[dict[str, Any]] = []
+        try:
+            if path.exists():
+                existing_actions = [
+                    item for line in path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                    for item in [json.loads(line)] if isinstance(item, dict)
+                ]
+            if events_path.exists():
+                action_events = [
+                    item for line in events_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                    for item in [json.loads(line)] if isinstance(item, dict)
+                ]
+        except (OSError, json.JSONDecodeError) as exc:
+            # Do not create a duplicate queue entry when the action history cannot be trusted.
+            self.findings.append(f"Founder action deduplication could not read its ledger: {type(exc).__name__}.")
+            self.story_log.record(
+                "MENTOR AGENT", "FOUNDER ACTION QUEUE", "action_proposal_blocked",
+                "Existing action history could not be read safely; no duplicate proposal was written.",
+                metadata={"correlation_id": self.session_id, "focus": focus},
+            )
+            return
+
+        latest_status: dict[str, str] = {}
+        for event in action_events:
+            if isinstance(event.get("action_id"), str) and isinstance(event.get("new_status"), str):
+                latest_status[event["action_id"]] = event["new_status"]
+
+        def _normalized_action(value: Any) -> str:
+            return " ".join(re.findall(r"[a-z0-9]+", str(value or "").lower()))
+
+        normalized_action = _normalized_action(action)
+        for previous in existing_actions:
+            if previous.get("session_id") != self.session_id or previous.get("focus") != focus:
+                continue
+            previous_id = previous.get("action_id")
+            status = latest_status.get(previous_id, previous.get("status", "proposed"))
+            if status in {"rejected", "completed"}:
+                continue
+            previous_action = _normalized_action(previous.get("action"))
+            if not previous_action or not normalized_action:
+                continue
+            similarity = difflib.SequenceMatcher(None, previous_action, normalized_action).ratio()
+            previous_tokens, current_tokens = set(previous_action.split()), set(normalized_action.split())
+            overlap = len(previous_tokens & current_tokens) / max(1, len(previous_tokens | current_tokens))
+            if similarity >= 0.82 or overlap >= 0.78:
+                self.journey_events.append(JourneyEvent(
+                    "mentor_action_deduplicated", "mentor_agent", evidence_ref=str(previous_id),
+                    details={"focus": focus, "duplicate_suppressed": True, "existing_status": status},
+                ))
+                self.story_log.record(
+                    "MENTOR AGENT", "FOUNDER ACTION QUEUE", "action_deduplicated",
+                    json.dumps({
+                        "suppressed_action": action,
+                        "retained_action_id": previous_id,
+                        "reason": "similar unresolved action already exists for this focus",
+                    }, sort_keys=True),
+                    metadata={"task_id": str(previous_id), "correlation_id": self.session_id, "focus": focus},
+                )
+                return
+
         action_id = "founder-action-" + str(uuid.uuid4())
         record = {
             "action_id": action_id, "session_id": self.session_id, "focus": focus,
@@ -991,7 +1056,6 @@ class ContinuousFounderTestingRuntime:
             "follow_up": "Record the founder's decision and attach evidence before marking this action complete.",
             "created_at": utc_now(),
         }
-        path = self.history / "founder_actions.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")

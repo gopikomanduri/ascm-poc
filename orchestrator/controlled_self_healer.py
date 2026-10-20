@@ -77,27 +77,49 @@ def _safe_path(value: str) -> bool:
         return False
     return value.startswith(ALLOWED_ROOTS)
 
-def extract_patch_payload(response: str) -> str:
-    """Extract a unified diff from common agent response envelopes without relaxing validation.
+def _find_explicit_patch(payload: Any, *, depth: int = 0) -> str | None:
+    """Find a real diff only inside named patch/transport envelope fields."""
+    if depth > 4:
+        return None
+    if isinstance(payload, str):
+        value = payload.strip()
+        return value if "diff --git " in value else None
+    if not isinstance(payload, dict):
+        return None
+    # These are explicit transport/content wrappers, not arbitrary recursive JSON search.
+    for key in ("patch", "diff", "unified_diff", "content", "output", "response", "result", "data"):
+        if key not in payload:
+            continue
+        candidate = payload[key]
+        if isinstance(candidate, str) and "diff --git " in candidate:
+            return candidate.strip()
+        if isinstance(candidate, dict):
+            nested = _find_explicit_patch(candidate, depth=depth + 1)
+            if nested:
+                return nested
+    return None
 
-    Only explicit patch/diff JSON fields or fenced patch blocks are unwrapped.
-    Arbitrary prose or source code is never converted into a patch.
+
+def extract_patch_payload(response: str) -> str:
+    """Extract a unified diff from explicit agent/transport envelopes without relaxing validation.
+
+    Only named patch/diff fields, known transport wrappers, or fenced patch blocks
+    containing a real git diff are unwrapped. Arbitrary prose or source code is never
+    converted into a patch.
     """
     proposed = str(response or "").strip()
     if not proposed:
         return ""
 
-    # Some A2A model adapters return a JSON envelope rather than the field text.
+    # Some A2A adapters wrap response text under result/content/output.
     try:
         payload = json.loads(proposed)
     except (TypeError, json.JSONDecodeError):
         payload = None
     if isinstance(payload, dict):
-        for key in ("patch", "diff", "unified_diff"):
-            candidate = payload.get(key)
-            if isinstance(candidate, str) and "diff --git " in candidate:
-                proposed = candidate.strip()
-                break
+        candidate = _find_explicit_patch(payload)
+        if candidate:
+            proposed = candidate
 
     # Accept an explicit fenced patch even when the model adds a short preamble.
     fenced = re.findall(

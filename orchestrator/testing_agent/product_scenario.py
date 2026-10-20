@@ -258,12 +258,19 @@ def evaluate_agent_output(agent_id: str, text: str, expected_terms: tuple[str, .
         "findings": findings,
     }
 
-def _challenge_excerpt(value: str, limit: int = 4000) -> str:
-    """Keep both ends of a long artifact so trailing claims are not silently lost."""
-    if len(value) <= limit:
-        return value
-    half = limit // 2
-    return value[:half] + "\n...[middle omitted; reviewer must not infer unseen content]...\n" + value[-half:]
+MAX_CHALLENGE_PROMPT_CHARS = 16000
+MAX_CHALLENGE_ARTIFACT_CHARS = 700
+
+
+def _challenge_excerpt(value: str, limit: int = MAX_CHALLENGE_ARTIFACT_CHARS) -> str:
+    """Create a compact, whitespace-normalized excerpt safe for bounded A2A payloads."""
+    normalized = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(normalized) <= limit:
+        return normalized
+    if limit < 80:
+        return normalized[:limit]
+    half = (limit - 58) // 2
+    return normalized[:half] + " ...[middle omitted; do not infer unseen content]... " + normalized[-half:]
 
 
 def _parse_challenge_review(reviewer_id: str, raw: str, expected_targets: list[str]) -> dict[str, Any]:
@@ -416,11 +423,19 @@ def run_product_scenario(
             targets = [agent_id for agent_id, _purpose, _terms in stages if agent_id != reviewer_id]
             if not targets:
                 continue
+            excerpt_limit = max(220, min(
+                MAX_CHALLENGE_ARTIFACT_CHARS, 4000 // max(1, len(targets))
+            ))
             artifact_bundle = [
-                {"agent_id": target, "artifact": _challenge_excerpt(artifact_by_agent.get(target, "")),
-                 "artifact_truncated": len(artifact_by_agent.get(target, "")) > 4000,
-                 "source_status": next((item.get("status") for item in agent_results
-                                        if item.get("agent_id") == target), "missing")}
+                {
+                    "agent_id": target,
+                    "artifact": _challenge_excerpt(artifact_by_agent.get(target, ""), limit=excerpt_limit),
+                    "artifact_truncated": len(re.sub(
+                        r"\s+", " ", artifact_by_agent.get(target, "")
+                    ).strip()) > excerpt_limit,
+                    "source_status": next((item.get("status") for item in agent_results
+                                           if item.get("agent_id") == target), "missing"),
+                }
                 for target in targets
             ]
             prompt = (
@@ -445,6 +460,11 @@ def run_product_scenario(
             with story_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
             try:
+                if len(prompt) > MAX_CHALLENGE_PROMPT_CHARS:
+                    raise ValueError(
+                        f"Adversarial review prompt is {len(prompt)} characters; "
+                        f"limit is {MAX_CHALLENGE_PROMPT_CHARS}."
+                    )
                 raw_review = client.send(reviewer_id, prompt, scenario_id)
                 parsed = _parse_challenge_review(reviewer_id, raw_review, targets)
                 artifact_path = artifacts_dir / f"challenge-{reviewer_id}.json"
@@ -493,7 +513,9 @@ def run_product_scenario(
             "challenge_reviews_needing_review": sum(item.get("status") != "passed" for item in challenge_results),
             "challenge_findings": sum(len(item.get("non_clear_findings", [])) for item in challenge_results),
             "challenge_pairs_requested": len(stages) * (len(stages) - 1) if adversarial_review else 0,
-            "challenge_pairs_completed": sum(len(item.get("reviews", [])) for item in challenge_results),
+            "challenge_pairs_completed": sum(
+                len(item.get("reviews", [])) for item in challenge_results if item.get("schema_valid")
+            ),
             "challenge_pairs_non_clear": sum(
                 1 for item in challenge_results for review in item.get("reviews", [])
                 if review.get("verdict") in {"CONCERN", "BLOCK"}
