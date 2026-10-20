@@ -7,12 +7,13 @@ def event(kind, source="ascm-ui", ref=None, **details):
 
 def test_complete_founder_journey_passes_only_with_evidence_and_scoped_consent():
     events = [
-        event("mentor_goal_observed", ref="session:goal-1"),
-        event("mentor_recommendation_shown", ref="session:mentor-1"),
+        event("mentor_goal_observed", ref="session:goal-1", goal_id="goal-1",
+              goal="Validate cross-repository handoff pain", simulated=False),
+        event("mentor_recommendation_shown", ref="session:mentor-1", goal_id="goal-1"),
         event("gtm_cycle_generated", ref="experiment:exp-1"),
-        event("action_approved", ref="approval:1", action="send_outreach",
+        event("action_approved", ref="approval:1", action="send_outreach", request_id="request-1",
               approval_id="approval-1", approver="founder", is_real_authorization=True),
-        event("external_action_completed", ref="audit:send-1", action="send_outreach"),
+        event("external_action_completed", ref="audit:send-1", action="send_outreach", request_id="request-1"),
         event("handoff_started", task_id="task-1", correlation_id="corr-1"),
         event("handoff_completed", task_id="task-1", correlation_id="corr-1"),
         event("customer_reply", ref="crm:reply-1", verified=True, verified_by="founder"),
