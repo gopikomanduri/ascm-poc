@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+MAX_PATCH_BYTES = 30000
+MAX_PATCH_PATHS = 8
 ALLOWED_ROOTS = ("orchestrator/", "products/", "tests/")
 PROTECTED_PREFIXES = (".github/", "docs/", "security/", ".ascm_history/")
 PROTECTED_NAMES = {"ASCM_INTENT_CONTRACT.md", "SECURITY.md", "requirements.txt", "pyproject.toml", "pytest.ini", "tox.ini"}
@@ -60,6 +62,12 @@ def _safe_path(value: str) -> bool:
     return value.startswith(ALLOWED_ROOTS)
 
 def validate_patch(patch: str) -> tuple[bool, str, list[str]]:
+    if len(patch.encode("utf-8")) > MAX_PATCH_BYTES:
+        return False, "Patch exceeds the 30 KB bounded-repair limit.", []
+    if "GIT binary patch" in patch or "new file mode 120000" in patch or "new mode 120000" in patch:
+        return False, "Binary patches and symlink changes are prohibited.", []
+    if any(line.startswith("+++ /dev/null") for line in patch.splitlines()):
+        return False, "File deletions are prohibited in automatic repair patches.", []
     if "diff --git " not in patch or "\n@@ " not in patch:
         return False, "Agent must return a unified diff.", []
     paths = []
@@ -70,6 +78,8 @@ def validate_patch(patch: str) -> tuple[bool, str, list[str]]:
             paths.append(line[6:])
     if not paths:
         return False, "Patch has no declared paths.", []
+    if len(set(paths)) > MAX_PATCH_PATHS:
+        return False, "Patch exceeds the 8-file bounded-repair limit.", paths
     unsafe = sorted({p for p in paths if p != "/dev/null" and not _safe_path(p)})
     if unsafe:
         return False, "Patch touches protected/out-of-scope paths: " + ", ".join(unsafe), paths
