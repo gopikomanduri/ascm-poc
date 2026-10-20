@@ -119,6 +119,11 @@ def assess_testing_results(
             "regression_tests_required": True,
             "full_ci_and_security_gates_required": True,
             "human_approval_required_for_merge": True,
-            "max_automatic_repair_attempts_per_finding": 1,
+            "max_automatic_repair_attempts_per_finding": 3,
+            "controlled_code_repair": "enabled_by_default; ASCM_CODE_REPAIR_ENABLED=0 disables",
+            "repair_agent_default": "coder",
+            "fresh_product_intent_acceptance_required": True,
+            "pr_opening_opt_in": "ASCM_CODE_REPAIR_OPEN_PR",
+            "automatic_merge": False,
         },
     }

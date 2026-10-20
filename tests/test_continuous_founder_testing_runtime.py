@@ -307,3 +307,38 @@ def test_product_response_normalizes_recognized_question_shapes_without_retry():
     }))
 
     assert result["clarification_questions"] == ["Who is the target user?"]
+
+
+
+def test_forced_acceptance_gateway_starts_from_isolated_workspace(tmp_path, monkeypatch):
+    from orchestrator.testing_agent import runtime as runtime_module
+
+    monkeypatch.setenv("ASCM_A2A_FORCE_START_SERVER", "1")
+    calls = {"popen": None, "get": 0}
+
+    class FakeProcess:
+        def poll(self):
+            return None
+
+    def fake_popen(args, *, cwd, env, stdout, stderr, start_new_session):
+        calls["popen"] = {"cwd": cwd, "env": env}
+        return FakeProcess()
+
+    class FakeResponse:
+        status_code = 200
+
+    def fake_get(url, timeout):
+        calls["get"] += 1
+        assert calls["popen"] is not None
+        return FakeResponse()
+
+    monkeypatch.setattr(runtime_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(runtime_module.httpx, "get", fake_get)
+    process = runtime_module.ensure_gateway(
+        "http://127.0.0.1:18091", tmp_path, start_server=True
+    )
+
+    assert process is not None
+    assert calls["popen"]["cwd"] == tmp_path
+    assert calls["popen"]["env"]["ASCM_A2A_WORKSPACE"] == str(tmp_path)
+    assert calls["popen"]["env"]["ASCM_A2A_PORT"] == "18091"
