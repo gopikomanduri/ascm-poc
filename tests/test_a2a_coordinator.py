@@ -81,3 +81,16 @@ def test_unknown_agent_is_rejected_without_dispatch():
     with pytest.raises(HandoffError, match="No handler"):
         coordinator.dispatch(task)
     assert task.status is HandoffStatus.REJECTED
+
+
+def test_handler_returning_after_deadline_is_timed_out():
+    import time
+
+    coordinator = A2ACoordinator(
+        handlers={"product": lambda task: (time.sleep(0.03) or {"ok": True})},
+        max_attempts=1,
+    )
+    task = envelope()
+    with pytest.raises(HandoffError, match="deadline exceeded"):
+        coordinator.dispatch(task, timeout_seconds=0.01)
+    assert task.status is HandoffStatus.TIMED_OUT
