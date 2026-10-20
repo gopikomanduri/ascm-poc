@@ -584,7 +584,11 @@ def test_founder_action_lifecycle_requires_human_decisions_and_evidence(tmp_path
     )
     assert completed["new_status"] == "completed"
     assert completed["executed_by_this_module"] is False
-    assert action_states(tmp_path)["action-1"]["current_status"] == "completed"
+    final_state = action_states(tmp_path)["action-1"]
+    assert final_state["current_status"] == "completed"
+    assert final_state["approved"] is True
+    assert final_state["executed"] is True
+    assert final_state["completion_evidence_ref"] == "interview-notes:batch-1"
 
 
 def test_outcome_ledger_requires_verifier_and_evidence_and_preserves_records(tmp_path):
