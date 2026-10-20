@@ -155,9 +155,10 @@ class FounderProfile:
 class ASCMJsonRpcClient:
     """Small A2A 1.0 JSON-RPC client for the local ASCM gateway."""
 
-    def __init__(self, base_url: str, timeout_seconds: float = 150.0):
+    def __init__(self, base_url: str, timeout_seconds: float = 150.0, http_client: Any | None = None):
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.http_client = http_client
 
     @staticmethod
     def _collect_text(value: Any) -> list[str]:
@@ -188,12 +189,14 @@ class ASCMJsonRpcClient:
                 }
             },
         }
-        response = httpx.post(
-            f"{self.base_url}/a2a/jsonrpc",
-            headers={"A2A-Version": "1.0"},
-            json=payload,
-            timeout=self.timeout_seconds,
-        )
+        post = self.http_client.post if self.http_client is not None else httpx.post
+        kwargs = {
+            "headers": {"A2A-Version": "1.0"},
+            "json": payload,
+        }
+        if self.http_client is None:
+            kwargs["timeout"] = self.timeout_seconds
+        response = post(f"{self.base_url}/a2a/jsonrpc", **kwargs)
         response.raise_for_status()
         body = response.json()
         if body.get("error"):
