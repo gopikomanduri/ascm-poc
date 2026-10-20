@@ -51,3 +51,23 @@ The tests cover transcript-based multi-turn grilling, Founder Mentor A2A review,
 ## Live terminal logs
 
 The five role logs are `.ascm_history/agent_terminals/product.log`, `testing.log`, `mentor.log`, `goal.log`, and `gtm.log`. Product questions are shown in both Product and Testing windows; founder answers appear in Testing; Mentor recommendations appear in Mentor and Testing. Goal and GTM windows show their respective status/permission events. The harness does not connect to a social publishing adapter, and simulated permission is never real authorization.
+
+
+## Timestamped conversation story
+
+Each run writes an ordered conversation timeline under `.ascm_history/`:
+
+- `conversation_story.log` — readable story sequence with UTC timestamp, session ID, monotonically increasing event number, speaker, recipient, event type, and full message text.
+- `conversation_story.jsonl` — one structured JSON event per line, including task and correlation IDs for A2A handoffs; useful for scripts and analysis.
+
+The timeline records Testing Agent requests to Product/Mentor specialists, specialist responses, Product Agent questions, simulated-founder answers, and failed A2A requests. The console also prints a timestamped story preview. The report JSON contains both log paths. These logs may include full prompts and responses, so keep the local `.ascm_history/` directory private and do not commit it.
+
+Example story:
+
+```text
+[2026-10-20T10:24:49+00:00] [session=...] #0001 TESTING AGENT → MENTOR AGENT | REQUEST
+    Review this simulated founder/product-discovery session...
+
+[2026-10-20T10:24:50+00:00] [session=...] #0002 MENTOR AGENT → TESTING AGENT | RESPONSE
+    Validate the core assumption before building more...
+```

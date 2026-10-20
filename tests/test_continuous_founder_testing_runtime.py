@@ -9,6 +9,7 @@ from orchestrator.testing_agent.runtime import (
     ASCMJsonRpcClient,
     AgentTerminalViews,
     ContinuousFounderTestingRuntime,
+    ConversationStoryLog,
     FounderProfile,
     GoalAgent,
     GTMStatusAgent,
@@ -211,3 +212,25 @@ def test_question_answer_exchange_pauses_for_configured_review_delay(tmp_path, m
     monkeypatch.setattr("orchestrator.testing_agent.runtime.time.sleep", delays.append)
     runtime.run_product_session("target user")
     assert delays == [5]
+
+
+def test_conversation_story_log_records_timestamped_ordered_events(tmp_path):
+    logger = ConversationStoryLog(tmp_path / ".ascm_history", "session-story-1")
+    first = logger.record(
+        "TESTING AGENT", "MENTOR AGENT", "request", "What is the founder's goal?",
+        metadata={"task_id": "task-1", "correlation_id": "session-story-1"},
+    )
+    second = logger.record(
+        "MENTOR AGENT", "TESTING AGENT", "response", "Validate the core assumption first.",
+        metadata={"task_id": "task-1", "correlation_id": "session-story-1"},
+    )
+
+    events = [json.loads(line) for line in logger.jsonl_path.read_text().splitlines()]
+    story = logger.text_path.read_text()
+    assert first["sequence"] == 1 and second["sequence"] == 2
+    assert first["timestamp"] and second["timestamp"]
+    assert events[0]["speaker"] == "TESTING AGENT"
+    assert events[1]["speaker"] == "MENTOR AGENT"
+    assert "What is the founder's goal?" in story
+    assert "Validate the core assumption first." in story
+    assert "#0001" in story and "#0002" in story
