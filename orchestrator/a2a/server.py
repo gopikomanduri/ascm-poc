@@ -153,6 +153,13 @@ def _extract_prompt(context: RequestContext) -> str:
 def _requested_agent(context: RequestContext) -> str:
     message = context.message
     metadata = getattr(message, "metadata", None) or {}
+    if not isinstance(metadata, dict):
+        # A2A SDK v1 represents protobuf Struct metadata as a message, not a dict.
+        try:
+            from google.protobuf.json_format import MessageToDict
+            metadata = MessageToDict(metadata)
+        except (TypeError, ValueError):
+            metadata = {}
     ascm_metadata = metadata.get("ascm", {}) if isinstance(metadata, dict) else {}
     agent_id = ascm_metadata.get("agent_id") if isinstance(ascm_metadata, dict) else None
     if not isinstance(agent_id, str) or agent_id not in AGENT_ALIASES:
@@ -258,6 +265,7 @@ class ASCMGatewayExecutor(AgentExecutor):
             )
         )
         await updater.start_work()
+        agent_id = "unknown"
         try:
             agent_id = _requested_agent(context)
             prompt = _extract_prompt(context)
