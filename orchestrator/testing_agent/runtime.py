@@ -483,6 +483,18 @@ class GTMStatusAgent:
                         + draft + "\n\n> TEST HARNESS: draft only. No external publishing is connected.\n",
                         encoding="utf-8",
                     )
+                    self.journey_events.append(JourneyEvent(
+                        "gtm_asset_generated", "gtm_status_agent",
+                        evidence_ref=str(draft_path),
+                        details={"request_id": request_id, "approved": False, "published": False},
+                    ))
+                    if self.story_log is not None:
+                        self.story_log.record(
+                            "GTM STATUS AGENT", "FOUNDER", "gtm_asset_generated",
+                            "A review-required draft was generated; it is not approved and was not published.",
+                            metadata={"task_id": request_id, "correlation_id": request_id,
+                                      "asset_path": str(draft_path), "external_publishing_enabled": False},
+                        )
                     gtm_review_path = draft_path.with_name(draft_path.stem + "-gtm-review.txt")
                     gtm_review = "GTM specialist was not called; deterministic status draft only."
                     if self.client is not None:
@@ -567,6 +579,21 @@ class GTMStatusAgent:
                     record = {**request, "decision": decision or {"decision": "no_response", "is_real_authorization": False}}
                     with result_path.open("a", encoding="utf-8") as handle:
                         handle.write(json.dumps(record, sort_keys=True) + "\n")
+                    block_details = {
+                        "action": request["action"], "request_id": request_id,
+                        "decision": (decision or {}).get("decision", "no_response"),
+                        "is_real_authorization": False, "external_publishing_enabled": False,
+                    }
+                    self.journey_events.append(JourneyEvent(
+                        "external_action_blocked", "gtm_status_agent",
+                        evidence_ref=request_id, details=block_details,
+                    ))
+                    if self.story_log is not None:
+                        self.story_log.record(
+                            "GTM STATUS AGENT", "EXTERNAL ACTION GATE", "external_action_blocked",
+                            "External publishing remains disabled; simulated permission is not real authorization.",
+                            metadata={"task_id": request_id, "correlation_id": request_id, **block_details},
+                        )
                     print(f"[GTM AGENT] Permission outcome: {(decision or {}).get('decision', 'no_response')}; real publishing remains disabled.", flush=True)
             if self.status_changed is not None:
                 self.status_changed.wait(self.interval)
