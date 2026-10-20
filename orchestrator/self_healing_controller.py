@@ -47,7 +47,7 @@ def assess_testing_results(
     ).evaluate({
         "contract_version": testing_results.get("intent_contract_version"),
         "events": events,
-        "acceptance_passed": testing_results.get("acceptance_passed") is False,
+        "acceptance_passed": testing_results.get("acceptance_passed", False),
         "open_findings": runtime_findings,
         "external_action_without_approval": bool(
             testing_results.get("external_action_without_approval", False)
