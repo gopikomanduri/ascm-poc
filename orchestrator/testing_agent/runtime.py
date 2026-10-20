@@ -124,6 +124,8 @@ class FounderProfile:
             return self.pricing
         if any(k in q for k in ("security", "privacy", "consent", "permission", "data")):
             return self.security
+        if any(k in q for k in ("exact conversion rate", "conversion rate", "actual conversion", "how many customers", "how many conversions", "verified traction")):
+            return self.traction + " Exact conversion figures are not available; do not fabricate a number."
         if any(k in q for k in ("metric", "success", "outcome", "measure", "conversion")):
             return self.success_metrics
         if any(k in q for k in ("post", "publish", "linkedin", "social", "campaign", "outreach")):
