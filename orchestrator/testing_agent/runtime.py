@@ -932,6 +932,11 @@ class ContinuousFounderTestingRuntime:
                     open_pr=os.getenv("ASCM_CODE_REPAIR_OPEN_PR", "0") == "1",
                 )
                 assessment["code_repair"] = repair_result
+                assessment["repair_status"] = repair_result.get("status", "unknown")
+                assessment["repair_verified"] = repair_result.get("status") in {
+                    "verified_pr_ready", "verified_local_branch", "verified_remote_branch"
+                }
+                assessment["repair_attempts_used"] = len(repair_result.get("attempts", []))
                 self.story_log.record(
                     "ASCM SELF-HEALING CONTROLLER", str(repair_result.get("routed_agent") or "ENGINEERING AGENT"),
                     "controlled_repair_" + str(repair_result.get("status", "unknown")),
