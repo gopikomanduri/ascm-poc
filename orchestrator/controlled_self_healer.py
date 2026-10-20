@@ -212,7 +212,7 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
         _audit(root, result)
         return result
     if checkout_status:
-        result["reason"] = "Active checkout has tracked changes; refusing to create a repair worktree."
+        result["reason"] = "Active checkout is dirty because tracked files have changes; refusing to create a repair worktree."
         _audit(root, result)
         return result
     if not _claim_attempt(root, key):
