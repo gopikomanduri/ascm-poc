@@ -238,6 +238,7 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
         if not command:
             result["reason"] = "Configured product-intent acceptance command is empty."; return result
         env["ASCM_CODE_REPAIR_ENABLED"] = "0"
+        env["ASCM_A2A_FORCE_START_SERVER"] = "1"
         accepted = _run(command, worktree, timeout=1800, env=env)
         report_path = worktree / ".ascm_history" / "testing_agent_report.json"
         try:
