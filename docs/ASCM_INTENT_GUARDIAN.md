@@ -59,3 +59,7 @@ When enabled, it:
 
 A dirty checkout, malformed/unsafe patch, missing regression test, exhausted three-attempt cycle, failed test/security gate, unavailable security tooling, or failed/missing fresh acceptance report blocks completion and records the exact evidence for the next diagnosis. P0 consent/security findings are never automatically repaired. Verified local repairs are applied only in an isolated branch/worktree; remote PR creation requires explicit opt-in, and all merges remain human-controlled.
 
+### Learning from outcomes (RL-ready, not RL-dependent)
+
+Every repair cycle records the finding, owner, attempted patch outcome, focused/full test results, security results, fresh intent-acceptance result, number of iterations, and final disposition. This creates the labeled outcome history needed to compare repair strategies. RL is deliberately not in the critical repair path yet: use deterministic acceptance/security gates first, then evaluate offline contextual-bandit or RL policies against this history. A learned policy may rank diagnosis/repair strategies, but it must never override tests, product intent, consent, or security gates.
+
