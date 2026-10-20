@@ -258,6 +258,14 @@ def evaluate_agent_output(agent_id: str, text: str, expected_terms: tuple[str, .
         "findings": findings,
     }
 
+def _challenge_excerpt(value: str, limit: int = 4000) -> str:
+    """Keep both ends of a long artifact so trailing claims are not silently lost."""
+    if len(value) <= limit:
+        return value
+    half = limit // 2
+    return value[:half] + "\n...[middle omitted; reviewer must not infer unseen content]...\n" + value[-half:]
+
+
 def _parse_challenge_review(reviewer_id: str, raw: str, expected_targets: list[str]) -> dict[str, Any]:
     """Fail closed unless a reviewer explicitly covers every other agent artifact."""
     try:
@@ -402,13 +410,15 @@ def run_product_scenario(
 
     if adversarial_review:
         # Every configured agent challenges every other configured agent in a second A2A pass.
-        artifact_by_agent = {item["agent_id"]: str(item.get("output_preview", "")) for item in agent_results}
+        # Use the larger retained output, not the short display preview, for challenges.
+        artifact_by_agent = {item["agent_id"]: str(item.get("output", "")) for item in context}
         for reviewer_id, purpose, _expected_terms in stages:
             targets = [agent_id for agent_id, _purpose, _terms in stages if agent_id != reviewer_id]
             if not targets:
                 continue
             artifact_bundle = [
-                {"agent_id": target, "artifact": artifact_by_agent.get(target, "")[:1200],
+                {"agent_id": target, "artifact": _challenge_excerpt(artifact_by_agent.get(target, "")),
+                 "artifact_truncated": len(artifact_by_agent.get(target, "")) > 4000,
                  "source_status": next((item.get("status") for item in agent_results
                                         if item.get("agent_id") == target), "missing")}
                 for target in targets
