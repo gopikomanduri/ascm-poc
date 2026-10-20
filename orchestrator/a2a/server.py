@@ -13,6 +13,8 @@ import os
 from typing import Any
 
 from fastapi import FastAPI
+from orchestrator.a2a.contracts import HandoffEnvelope
+from orchestrator.a2a.coordinator import A2ACoordinator, HandoffError
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
@@ -229,7 +231,16 @@ def _run_specialist(agent_id: str, prompt: str) -> str:
 
 
 class ASCMGatewayExecutor(AgentExecutor):
-    """A2A executor which routes messages to the named ASCM specialist."""
+    """A2A executor which routes messages through ASCM governance before dispatch."""
+
+    def __init__(self, coordinator: A2ACoordinator | None = None):
+        if coordinator is None:
+            handlers = {
+                agent_id: (lambda handoff, selected=agent_id: {"answer": _run_specialist(selected, handoff.goal)})
+                for agent_id in AGENT_ALIASES
+            }
+            coordinator = A2ACoordinator(handlers=handlers, max_attempts=2)
+        self.coordinator = coordinator
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task_id = context.task_id
@@ -247,10 +258,21 @@ class ASCMGatewayExecutor(AgentExecutor):
             )
         )
         await updater.start_work()
-        agent_id = _requested_agent(context)
-        prompt = _extract_prompt(context)
         try:
-            answer = await __import__("asyncio").to_thread(_run_specialist, agent_id, prompt)
+            agent_id = _requested_agent(context)
+            prompt = _extract_prompt(context)
+            handoff = HandoffEnvelope(
+                goal=prompt,
+                sender="a2a_gateway",
+                recipient=agent_id,
+                expected_output="Specialist response as text",
+                task_id=task_id,
+                correlation_id=context_id,
+            )
+            coordinated = await __import__("asyncio").to_thread(
+                self.coordinator.dispatch, handoff, timeout_seconds=120.0
+            )
+            answer = coordinated["answer"]
         except Exception as exc:
             logger.exception("A2A specialist execution failed: %s", agent_id)
             await updater.add_artifact(
