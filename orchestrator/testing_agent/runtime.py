@@ -897,7 +897,7 @@ class ContinuousFounderTestingRuntime:
                 "human_merge_required": True,
             }
         elif repair_enabled and assessment.get("status") == "remediation_required":
-            # One finding per Testing Agent report; the runner enforces one lifetime attempt per finding.
+            # One finding per report; the repair runner allows up to three verifier-driven iterations in one isolated worktree.
             candidate = next((item for item in assessment.get("findings", []) if item.get("severity") != "P0"), None)
             if candidate is not None and self.client is not None:
                 def proposal_provider(finding: dict[str, Any], context: str) -> str:
