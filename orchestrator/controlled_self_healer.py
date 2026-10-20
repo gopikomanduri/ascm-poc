@@ -256,7 +256,7 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
                 result["status"] = "verified_remote_branch"
                 result["reason"] += " GitHub CLI unavailable; branch pushed but PR not opened."
         return result
-    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+    except Exception as exc:
         result["reason"] = f"Repair stopped safely: {type(exc).__name__}: {exc}"; return result
     finally:
         result["worktree_retained"] = created
