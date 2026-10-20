@@ -1138,6 +1138,12 @@ class ContinuousFounderTestingRuntime:
                     "reason": "No non-P0 finding or no A2A client is available; escalate for human triage.",
                     "human_merge_required": True,
                 }
+        elif assessment.get("status") == "awaiting_evidence":
+            assessment["code_repair"] = {
+                "status": "not_triggered",
+                "reason": "Acceptance is incomplete because evidence is missing; this is not treated as a code defect or automatic repair request.",
+                "human_merge_required": True,
+            }
         else:
             assessment["code_repair"] = {
                 "status": "disabled",
