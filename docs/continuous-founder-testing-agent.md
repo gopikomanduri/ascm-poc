@@ -10,11 +10,11 @@ python -m orchestrator.testing_agent.runtime --workspace . --rounds-per-session 
 
 The runner starts the local A2A gateway on `127.0.0.1:8090` if it is not already available, then runs three cooperating loops in the same terminal:
 
-1. **Testing Agent / simulated founder** sends A2A 1.0 JSON-RPC requests to ASCM's ProductAgent, receives its clarification questions, answers from a scenario profile, carries the transcript forward, and repeats across product-risk areas.
+1. **Testing Agent / simulated founder** sends A2A 1.0 JSON-RPC requests to ASCM's ProductAgent, receives its clarification questions, answers from a scenario profile, carries the transcript forward, and repeats across product-risk areas. It then calls the real Founder Mentor over A2A to check that the recommendation is tied to the current goal and includes a measurable next action.
 2. **Goal Agent** periodically records the branch, latest commit, working-tree state, A2A gateway health/advertised roster, testing session, question/round counts, and open findings in `.ascm_history/testing_agent_status.json`.
 3. **GTM Status Agent** watches for a new repository commit, calls the actual GTM specialist over A2A for internal positioning advice, drafts a status-based social post under `artifacts/gtm_cycles/`, and sends an action-scoped LinkedIn permission request to the Testing Agent. It keeps GTM model recommendations separate from the factual draft, deduplicates requests by commit, and persists its last requested fingerprint.
 
-The process runs continuously until Ctrl-C. The Testing Agent writes its report to `.ascm_history/testing_agent_report.json`; GTM permission request outcomes are appended to `.ascm_history/gtm_permission_requests.jsonl`. The A2A gateway log is `.ascm_history/testing_agent_a2a.log`. The GTM specialist's internal recommendation is saved beside each draft with the `-gtm-review.txt` suffix.
+The process runs continuously until Ctrl-C. The Testing Agent writes its report—including explicit acceptance pass/fail for Mentor context, GTM outcome integrity, approval behavior, handoff traceability, and outcome evidence—to `.ascm_history/testing_agent_report.json`; GTM permission request outcomes are appended to `.ascm_history/gtm_permission_requests.jsonl`. The A2A gateway log is `.ascm_history/testing_agent_a2a.log`. The GTM specialist's internal recommendation is saved beside each draft with the `-gtm-review.txt` suffix.
 
 ## Options
 
@@ -42,4 +42,4 @@ Scenario fields can override the profile's product name, problem, target user, d
 
 ## Acceptance coverage
 
-The tests cover transcript-based multi-turn grilling, deterministic founder answers, unknown-evidence handling, malformed model output, repository status snapshots, GTM draft wording, A2A artifact parsing, and simulated approval/default-deny behavior. The complete repository CI remains the release gate.
+The tests cover transcript-based multi-turn grilling, Founder Mentor A2A review, deterministic founder answers, unknown-evidence handling, malformed model output, repository status snapshots, GTM draft wording, A2A client-to-gateway round trips, handoff/acceptance gates, and simulated approval/default-deny behavior. The complete repository CI remains the release gate.
