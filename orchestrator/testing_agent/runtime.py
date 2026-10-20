@@ -262,6 +262,7 @@ class GoalAgent:
             "testing_session": report.get("session_id") if isinstance(report, dict) else None,
             "testing_rounds": report.get("rounds_completed", 0) if isinstance(report, dict) else 0,
             "product_questions": report.get("questions_asked", 0) if isinstance(report, dict) else 0,
+            "mentor_reviews_completed": report.get("mentor_reviews_completed", 0) if isinstance(report, dict) else 0,
             "sessions_completed": report.get("sessions_completed", 0) if isinstance(report, dict) else 0,
             "open_findings": report.get("open_findings", []) if isinstance(report, dict) else [],
         }
