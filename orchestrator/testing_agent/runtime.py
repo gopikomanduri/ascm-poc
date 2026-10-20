@@ -1296,6 +1296,7 @@ class ContinuousFounderTestingRuntime:
                 "acceptance": self._acceptance_summary(),
                 "acceptance_passed": self._acceptance_summary()["passed"],
                 "open_findings": list(self.findings),
+                "open_questions": list(dict.fromkeys(self.open_questions)),
                 "external_publishing_enabled": False,
                 "simulated_founder_only": True,
             }
