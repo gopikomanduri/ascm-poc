@@ -87,7 +87,12 @@ class FounderJourneyEvaluator:
                     (e.details.get("verified") is True or e.details.get("verification_status") == "verified")]
         def claim_supported(claim: JourneyEvent) -> bool:
             cycle = claim.details.get("cycle_id") or claim.details.get("gtm_cycle_id")
-            return any(not cycle or (o.details.get("cycle_id") or o.details.get("gtm_cycle_id")) == cycle for o in verified)
+            if not cycle:
+                return False
+            return any(
+                (o.details.get("cycle_id") or o.details.get("gtm_cycle_id")) == cycle
+                for o in verified
+            )
         unsupported = [c for c in claims if not claim_supported(c)]
         gtm_pass = bool(proposals) and not unsupported
         gtm_status = "passed" if gtm_pass else ("failed" if unsupported else "not_tested")
