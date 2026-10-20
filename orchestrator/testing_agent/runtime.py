@@ -114,6 +114,46 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class ConversationStoryLog:
+    """Persist a timestamped, human-readable story and structured event stream."""
+
+    def __init__(self, history: Path, session_id: str):
+        self.history = history
+        self.session_id = session_id
+        self.sequence = 0
+        self.lock = threading.Lock()
+        self.text_path = history / "conversation_story.log"
+        self.jsonl_path = history / "conversation_story.jsonl"
+        history.mkdir(parents=True, exist_ok=True)
+
+    def record(self, speaker: str, recipient: str, event_type: str, message: str,
+               *, metadata: dict[str, Any] | None = None, preview_limit: int = 420) -> dict[str, Any]:
+        timestamp = utc_now()
+        with self.lock:
+            self.sequence += 1
+            event = {
+                "timestamp": timestamp,
+                "session_id": self.session_id,
+                "sequence": self.sequence,
+                "speaker": speaker,
+                "recipient": recipient,
+                "event_type": event_type,
+                "message": message,
+                "metadata": metadata or {},
+            }
+            with self.jsonl_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+            header = f"[{timestamp}] [session={self.session_id}] #{self.sequence:04d} {speaker} → {recipient} | {event_type.upper()}"
+            with self.text_path.open("a", encoding="utf-8") as handle:
+                handle.write(header + "\n")
+                handle.write("    " + message.replace("\n", "\n    ") + "\n\n")
+        preview = " ".join(message.split())
+        if len(preview) > preview_limit:
+            preview = preview[:preview_limit] + "…"
+        print(f"[{timestamp}] [STORY #{self.sequence:04d}] {speaker} → {recipient} | {event_type}: {preview}", flush=True)
+        return event
+
+
 def atomic_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -504,6 +544,7 @@ class ContinuousFounderTestingRuntime:
         self.permission_responses: queue.Queue = queue.Queue()
         self.status_changed = threading.Event()
         self.session_id = str(uuid.uuid4())
+        self.story_log = ConversationStoryLog(self.history, self.session_id)
         self.transcript: list[dict[str, str]] = []
         self.findings: list[str] = []
         self.questions_asked = 0
@@ -551,22 +592,25 @@ class ContinuousFounderTestingRuntime:
         """Trace a bounded Testing Agent handoff, including failed requests."""
         task_id = f"test-handoff-{uuid.uuid4()}"
         correlation_id = session_id
+        handoff_metadata = {"task_id": task_id, "correlation_id": correlation_id, "agent_id": agent_id}
         self.journey_events.append(JourneyEvent(
-            "handoff_started", "testing_agent",
-            details={"task_id": task_id, "correlation_id": correlation_id, "agent_id": agent_id},
+            "handoff_started", "testing_agent", details=handoff_metadata,
         ))
+        recipient = f"{agent_id.upper()} AGENT"
+        self.story_log.record("TESTING AGENT", recipient, "request", prompt, metadata=handoff_metadata)
         try:
             result = self.client.send(agent_id, prompt, session_id)
-        except Exception:
+        except Exception as exc:
             self.journey_events.append(JourneyEvent(
-                "handoff_failed", "testing_agent",
-                details={"task_id": task_id, "correlation_id": correlation_id, "agent_id": agent_id},
+                "handoff_failed", "testing_agent", details=handoff_metadata,
             ))
+            self.story_log.record("TESTING AGENT", recipient, "request_failed",
+                                  f"{type(exc).__name__}: {exc}", metadata=handoff_metadata)
             raise
         self.journey_events.append(JourneyEvent(
-            "handoff_completed", "testing_agent",
-            details={"task_id": task_id, "correlation_id": correlation_id, "agent_id": agent_id},
+            "handoff_completed", "testing_agent", details=handoff_metadata,
         ))
+        self.story_log.record(recipient, "TESTING AGENT", "response", result, metadata=handoff_metadata)
         return result
 
     def _answer_permission_requests(self) -> None:
@@ -618,8 +662,12 @@ class ContinuousFounderTestingRuntime:
                 {"role": "assistant", "content": question},
                 {"role": "user", "content": answer},
             ])
-            print(f"\n[PRODUCT AGENT → TESTING AGENT] {question}", flush=True)
-            print(f"[TESTING AGENT → PRODUCT AGENT] {answer}\n", flush=True)
+            self.story_log.record("PRODUCT AGENT", "TESTING AGENT", "question", question,
+                                  metadata={"focus": focus, "round": round_number})
+            self.story_log.record("TESTING AGENT (SIMULATED FOUNDER)", "PRODUCT AGENT", "answer", answer,
+                                  metadata={"focus": focus, "round": round_number})
+            print(f"[{utc_now()}] [PRODUCT AGENT → TESTING AGENT] {question}", flush=True)
+            print(f"[{utc_now()}] [TESTING AGENT → PRODUCT AGENT] {answer}\n", flush=True)
             if self.review_delay_seconds:
                 print(
                     f"[TESTING AGENT] Pausing {self.review_delay_seconds:g} seconds for your review before the next exchange.",
@@ -746,6 +794,8 @@ class ContinuousFounderTestingRuntime:
                 report = {
                     "session_id": self.session_id,
                     "updated_at": utc_now(),
+                    "conversation_story_log": str(self.story_log.text_path),
+                    "conversation_story_jsonl": str(self.story_log.jsonl_path),
                     "workspace": str(self.workspace),
                     "sessions_completed": session_count,
                     "rounds_completed": self.rounds_completed,
@@ -786,6 +836,8 @@ class ContinuousFounderTestingRuntime:
             report = {
                 "session_id": self.session_id,
                 "updated_at": utc_now(),
+                "conversation_story_log": str(self.story_log.text_path),
+                "conversation_story_jsonl": str(self.story_log.jsonl_path),
                 "workspace": str(self.workspace),
                 "sessions_completed": session_count,
                 "rounds_completed": self.rounds_completed,
