@@ -125,6 +125,10 @@ class ConversationStoryLog:
         self.text_path = history / "conversation_story.log"
         self.jsonl_path = history / "conversation_story.jsonl"
         history.mkdir(parents=True, exist_ok=True)
+        try:
+            history.chmod(0o700)
+        except OSError:
+            pass
 
     def record(self, speaker: str, recipient: str, event_type: str, message: str,
                *, metadata: dict[str, Any] | None = None, preview_limit: int = 420) -> dict[str, Any]:
@@ -147,10 +151,15 @@ class ConversationStoryLog:
             with self.text_path.open("a", encoding="utf-8") as handle:
                 handle.write(header + "\n")
                 handle.write("    " + message.replace("\n", "\n    ") + "\n\n")
+        for path in (self.text_path, self.jsonl_path):
+            try:
+                path.chmod(0o600)
+            except OSError:
+                pass
         preview = " ".join(message.split())
         if len(preview) > preview_limit:
             preview = preview[:preview_limit] + "…"
-        print(f"[{timestamp}] [STORY #{self.sequence:04d}] {speaker} → {recipient} | {event_type}: {preview}", flush=True)
+        print(f"[{timestamp}] [STORY #{event['sequence']:04d}] {speaker} → {recipient} | {event_type}: {preview}", flush=True)
         return event
 
 
