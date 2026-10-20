@@ -15,9 +15,19 @@ def test_testing_agent_a2a_client_round_trips_through_real_gateway(monkeypatch):
             "is_clear": False,
         }),
     )
-    gateway = TestClient(create_app(host="127.0.0.1", port=8090))
+    class CaptureClient:
+        def __init__(self, client):
+            self.client = client
+            self.last_response = None
+        def post(self, url, **kwargs):
+            response = self.client.post(url, **kwargs)
+            self.last_response = response.json()
+            return response
+
+    gateway = CaptureClient(TestClient(create_app(host="127.0.0.1", port=8090)))
     client = ASCMJsonRpcClient("http://testserver", http_client=gateway)
     result = client.send("product", "Interview the simulated founder.", "session-e2e-1")
+    assert result != "Interview the simulated founder.", json.dumps(gateway.last_response)
     payload = json.loads(result)
     assert payload["agent"] == "product"
     assert payload["clarification_questions"] == ["Who is the target customer?"]
