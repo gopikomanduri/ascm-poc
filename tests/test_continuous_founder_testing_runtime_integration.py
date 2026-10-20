@@ -65,8 +65,13 @@ def test_single_terminal_runtime_runs_goal_gtm_and_testing_agents_together(tmp_p
     assert records[-1]["is_real_publish_enabled"] is False
     assert client.mentor_calls, "Testing Agent must exercise Founder Mentor over A2A"
     assert report["mentor_reviews_completed"] == 1
-    assert report["acceptance_passed"] is True
-    assert all(item["passed"] for item in report["acceptance"]["criteria"])
+    assert report["acceptance_passed"] is False  # No verified customer outcome or real approval was exercised.
+    criteria = {item["criterion"]: item for item in report["acceptance"]["criteria"]}
+    assert criteria["mentor_goal_context"]["passed"] is True
+    assert criteria["gtm_proposal_distinguished_from_outcome"]["passed"] is True
+    assert criteria["explicit_action_scoped_consent"]["status"] == "partial"
+    assert criteria["verified_outcome_learning"]["status"] == "not_tested"
+    assert report["acceptance"]["generated_asset_count"] == 1
     assert client.gtm_calls, "GTM Status Agent must consult the actual GTM A2A specialist"
     review_path = Path(records[-1]["gtm_review_path"])
     assert "Internal GTM review" in review_path.read_text()
