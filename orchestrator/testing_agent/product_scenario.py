@@ -107,6 +107,11 @@ AGENT_STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("threat", "permission", "approval", "mitigation"),
     ),
     (
+        "compliance",
+        "Governance and compliance review",
+        ("policy", "control", "evidence", "approval"),
+    ),
+    (
         "qa",
         "Independent QA evaluation",
         ("test", "pass", "fail", "evidence"),
@@ -115,6 +120,21 @@ AGENT_STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "business_strategy",
         "GTM and strategy proposal",
         ("experiment", "customer", "hypothesis", "metric"),
+    ),
+    (
+        "sales",
+        "Customer discovery and sales qualification",
+        ("discovery", "customer", "qualification", "evidence"),
+    ),
+    (
+        "marketing",
+        "Positioning and marketing proposal",
+        ("positioning", "audience", "hypothesis", "experiment"),
+    ),
+    (
+        "code_review",
+        "Implementation and reviewability guardrails",
+        ("review", "test", "risk", "change"),
     ),
     (
         "revenue_roi",
@@ -194,6 +214,8 @@ def run_product_scenario(
 ) -> dict[str, Any]:
     """Send a product brief through actual A2A agents and evaluate their returned artifacts."""
     scenario_id = scenario_id or f"product-scenario-{uuid.uuid4()}"
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", scenario_id) or scenario_id in {".", ".."}:
+        raise ValueError("scenario_id must be a safe 1-100 character identifier (letters, digits, dot, underscore, hyphen).")
     history = workspace / ".ascm_history"
     history.mkdir(parents=True, exist_ok=True)
     story_path = history / "product_scenario_events.jsonl"
