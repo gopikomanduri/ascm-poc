@@ -955,8 +955,10 @@ class ContinuousFounderTestingRuntime:
         self.mentor_reviews_completed += 1
         self.last_mentor_review = review
         review_ref = f"mentor-review:{self.session_id}:{self.mentor_reviews_completed}"
+        goal_id = f"founder-goal:{self.session_id}:{focus}"
         self.journey_events.append(JourneyEvent(
             "mentor_recommendation_shown", "ascm_mentor", evidence_ref=review_ref,
+            details={"goal_id": goal_id, "simulated": True},
         ))
         self._record_mentor_action(focus, review, review_ref)
         print(f"[MENTOR AGENT → TESTING AGENT] {review[:1200]}\\n", flush=True)
@@ -1218,8 +1220,20 @@ class ContinuousFounderTestingRuntime:
         try:
             while not self.stop.is_set() and (sessions == 0 or session_count < sessions):
                 focus = PROBE_AREAS[session_count % len(PROBE_AREAS)]
-                self.journey_events.append(JourneyEvent("goal_observed", "goal_agent", evidence_ref=f"founder-goal:{self.session_id}:{focus}"))
-                self.journey_events.append(JourneyEvent("mentor_goal_observed", "testing_agent", evidence_ref=f"focus:{focus}"))
+                goal_id = f"founder-goal:{self.session_id}:{focus}"
+                self.journey_events.append(JourneyEvent(
+                    "goal_observed", "goal_agent", evidence_ref=goal_id,
+                    details={"goal_id": goal_id, "goal": focus, "source": "testing_scenario", "simulated": True},
+                ))
+                self.journey_events.append(JourneyEvent(
+                    "mentor_goal_observed", "testing_agent", evidence_ref=goal_id,
+                    details={
+                        "goal_id": goal_id,
+                        "goal": focus,
+                        "goal_source": "testing_scenario_focus",
+                        "simulated": True,
+                    },
+                ))
                 previous_rounds = self.rounds_completed
                 result = self.run_product_session(focus)
                 if self.rounds_completed > previous_rounds and not self.stop.is_set():
