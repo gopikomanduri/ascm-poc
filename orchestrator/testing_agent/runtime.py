@@ -472,6 +472,28 @@ class ContinuousFounderTestingRuntime:
         value["clarification_questions"] = questions
         return value
 
+    def _send_agent(self, agent_id: str, prompt: str, session_id: str) -> str:
+        """Trace a bounded Testing Agent handoff, including failed requests."""
+        task_id = f"test-handoff-{uuid.uuid4()}"
+        correlation_id = session_id
+        self.journey_events.append(JourneyEvent(
+            "handoff_started", "testing_agent",
+            details={"task_id": task_id, "correlation_id": correlation_id, "agent_id": agent_id},
+        ))
+        try:
+            result = self.client.send(agent_id, prompt, session_id)
+        except Exception:
+            self.journey_events.append(JourneyEvent(
+                "handoff_failed", "testing_agent",
+                details={"task_id": task_id, "correlation_id": correlation_id, "agent_id": agent_id},
+            ))
+            raise
+        self.journey_events.append(JourneyEvent(
+            "handoff_completed", "testing_agent",
+            details={"task_id": task_id, "correlation_id": correlation_id, "agent_id": agent_id},
+        ))
+        return result
+
     def _answer_permission_requests(self) -> None:
         while True:
             try:
@@ -490,7 +512,7 @@ class ContinuousFounderTestingRuntime:
             self._answer_permission_requests()
             prompt = self._product_prompt(focus)
             try:
-                raw = self.client.send("product", prompt, self.session_id)
+                raw = self._send_agent("product", prompt, self.session_id)
                 result = self._parse_product_result(raw)
             except Exception as exc:
                 self.findings.append(f"ProductAgent interface failure in {focus}, round {round_number}: {type(exc).__name__}: {exc}")
@@ -534,7 +556,7 @@ class ContinuousFounderTestingRuntime:
             f"Focus: {focus}. Transcript: {json.dumps(self.transcript[-24:], ensure_ascii=False)}"
         )
         try:
-            review = self.client.send("mentor", prompt, self.session_id).strip()
+            review = self._send_agent("mentor", prompt, self.session_id).strip()
         except Exception as exc:
             self.findings.append(f"Founder Mentor A2A review failed for '{focus}': {type(exc).__name__}: {exc}")
             print(f"[TESTING AGENT] FAIL: Founder Mentor review failed: {exc}", flush=True)
@@ -544,6 +566,10 @@ class ContinuousFounderTestingRuntime:
             return ""
         self.mentor_reviews_completed += 1
         self.last_mentor_review = review
+        self.journey_events.append(JourneyEvent(
+            "mentor_recommendation_shown", "ascm_mentor",
+            evidence_ref=f"mentor-review:{self.session_id}:{self.mentor_reviews_completed}",
+        ))
         print(f"[MENTOR AGENT → TESTING AGENT] {review[:1200]}\\n", flush=True)
         return review
 
