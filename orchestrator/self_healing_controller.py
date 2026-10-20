@@ -120,5 +120,10 @@ def assess_testing_results(
             "full_ci_and_security_gates_required": True,
             "human_approval_required_for_merge": True,
             "max_automatic_repair_attempts_per_finding": 1,
+            "controlled_code_repair": "opt_in_via_ASCM_CODE_REPAIR_ENABLED",
+            "repair_agent_default": "coder",
+            "fresh_product_intent_acceptance_required": True,
+            "pr_opening_opt_in": "ASCM_CODE_REPAIR_OPEN_PR",
+            "automatic_merge": False,
         },
     }
