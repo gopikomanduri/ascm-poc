@@ -286,6 +286,8 @@ def _parse_challenge_review(reviewer_id: str, raw: str, expected_targets: list[s
         by_target[target] = item
         if item.get("verdict") not in allowed:
             findings.append(f"{target}: verdict must be CLEAR, CONCERN, or BLOCK.")
+        if item.get("severity") not in {"P0", "P1", "P2", "P3"}:
+            findings.append(f"{target}: severity must be P0, P1, P2, or P3.")
         if not str(item.get("reason", "")).strip() or not str(item.get("evidence", "")).strip():
             findings.append(f"{target}: verdict must cite an artifact-specific reason and evidence.")
     expected = set(expected_targets)
