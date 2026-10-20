@@ -16,7 +16,7 @@ def test_a2a_jsonrpc_message_send_routes_through_governed_coordinator(monkeypatc
         json={
             "jsonrpc": "2.0",
             "id": "request-1",
-            "method": "message/send",
+            "method": "SendMessage",
             "params": {
                 "message": {
                     "messageId": "message-1",
