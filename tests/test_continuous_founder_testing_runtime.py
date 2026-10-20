@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from orchestrator.testing_agent.founder_journey import JourneyEvent
 from orchestrator.testing_agent.runtime import (
     ASCMJsonRpcClient,
     ContinuousFounderTestingRuntime,
@@ -174,3 +175,18 @@ def test_a2a_client_uses_version_one_jsonrpc_and_agent_metadata(monkeypatch):
     assert captured["body"]["method"] == "SendMessage"
     assert captured["body"]["params"]["message"]["metadata"]["ascm"]["agent_id"] == "product"
     assert captured["body"]["params"]["message"]["contextId"] == "session-123"
+
+
+
+def test_acceptance_gate_fails_when_mentor_or_handoff_evidence_is_missing(tmp_path):
+    runtime = ContinuousFounderTestingRuntime(tmp_path, client=FakeASCMClient([]))
+    runtime.journey_events.append(
+        JourneyEvent(
+            "mentor_goal_observed", "testing_agent", evidence_ref="goal:1"
+        )
+    )
+    summary = runtime._acceptance_summary()
+    assert summary["passed"] is False
+    failed = {item["criterion"] for item in summary["criteria"] if not item["passed"]}
+    assert "mentor_goal_context" in failed
+    assert "handoff_traceability" in failed

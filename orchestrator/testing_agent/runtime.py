@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import httpx
+from orchestrator.testing_agent.founder_journey import FounderJourneyEvaluator, JourneyEvent
 
 logger = logging.getLogger("ASCM.TestingAgent")
 PROBE_AREAS = (
@@ -262,6 +263,8 @@ class GoalAgent:
             "testing_session": report.get("session_id") if isinstance(report, dict) else None,
             "testing_rounds": report.get("rounds_completed", 0) if isinstance(report, dict) else 0,
             "product_questions": report.get("questions_asked", 0) if isinstance(report, dict) else 0,
+            "mentor_reviews_completed": report.get("mentor_reviews_completed", 0) if isinstance(report, dict) else 0,
+            "acceptance_passed": report.get("acceptance_passed", False) if isinstance(report, dict) else False,
             "sessions_completed": report.get("sessions_completed", 0) if isinstance(report, dict) else 0,
             "open_findings": report.get("open_findings", []) if isinstance(report, dict) else [],
         }
@@ -432,6 +435,9 @@ class ContinuousFounderTestingRuntime:
         self.questions_asked = 0
         self.rounds_completed = 0
         self.consecutive_interface_failures = 0
+        self.mentor_reviews_completed = 0
+        self.last_mentor_review = ""
+        self.journey_events: list[JourneyEvent] = []
 
     def _product_prompt(self, area: str) -> str:
         transcript = json.dumps(self.transcript[-24:], ensure_ascii=False)
@@ -467,6 +473,28 @@ class ContinuousFounderTestingRuntime:
         value["clarification_questions"] = questions
         return value
 
+    def _send_agent(self, agent_id: str, prompt: str, session_id: str) -> str:
+        """Trace a bounded Testing Agent handoff, including failed requests."""
+        task_id = f"test-handoff-{uuid.uuid4()}"
+        correlation_id = session_id
+        self.journey_events.append(JourneyEvent(
+            "handoff_started", "testing_agent",
+            details={"task_id": task_id, "correlation_id": correlation_id, "agent_id": agent_id},
+        ))
+        try:
+            result = self.client.send(agent_id, prompt, session_id)
+        except Exception:
+            self.journey_events.append(JourneyEvent(
+                "handoff_failed", "testing_agent",
+                details={"task_id": task_id, "correlation_id": correlation_id, "agent_id": agent_id},
+            ))
+            raise
+        self.journey_events.append(JourneyEvent(
+            "handoff_completed", "testing_agent",
+            details={"task_id": task_id, "correlation_id": correlation_id, "agent_id": agent_id},
+        ))
+        return result
+
     def _answer_permission_requests(self) -> None:
         while True:
             try:
@@ -485,7 +513,7 @@ class ContinuousFounderTestingRuntime:
             self._answer_permission_requests()
             prompt = self._product_prompt(focus)
             try:
-                raw = self.client.send("product", prompt, self.session_id)
+                raw = self._send_agent("product", prompt, self.session_id)
                 result = self._parse_product_result(raw)
             except Exception as exc:
                 self.findings.append(f"ProductAgent interface failure in {focus}, round {round_number}: {type(exc).__name__}: {exc}")
@@ -519,6 +547,79 @@ class ContinuousFounderTestingRuntime:
             print(f"\n[PRODUCT AGENT → TESTING AGENT] {question}", flush=True)
             print(f"[TESTING AGENT → PRODUCT AGENT] {answer}\n", flush=True)
         return final
+
+    def run_mentor_review(self, focus: str) -> str:
+        """Exercise the real Founder Mentor A2A route after product grilling."""
+        prompt = (
+            "Review this simulated founder/product-discovery session. State the founder goal you inferred, "
+            "one concrete next action, assumptions that remain unverified, and a measurable follow-up. "
+            "Do not execute actions, claim customer traction, or publish anything. "
+            f"Focus: {focus}. Transcript: {json.dumps(self.transcript[-24:], ensure_ascii=False)}"
+        )
+        try:
+            review = self._send_agent("mentor", prompt, self.session_id).strip()
+        except Exception as exc:
+            self.findings.append(f"Founder Mentor A2A review failed for '{focus}': {type(exc).__name__}: {exc}")
+            print(f"[TESTING AGENT] FAIL: Founder Mentor review failed: {exc}", flush=True)
+            return ""
+        if not review:
+            self.findings.append(f"Founder Mentor returned an empty review for '{focus}'.")
+            return ""
+        self.mentor_reviews_completed += 1
+        self.last_mentor_review = review
+        self.journey_events.append(JourneyEvent(
+            "mentor_recommendation_shown", "ascm_mentor",
+            evidence_ref=f"mentor-review:{self.session_id}:{self.mentor_reviews_completed}",
+        ))
+        print(f"[MENTOR AGENT → TESTING AGENT] {review[:1200]}\\n", flush=True)
+        return review
+
+    def _acceptance_summary(self) -> dict[str, Any]:
+        events = list(self.journey_events)
+        ledger = read_json(self.history / "gtm_outcomes.json", [])
+        outcome_types = {
+            "customer_reply", "customer_interview", "feature_request", "pilot_commitment",
+            "waitlist_signup", "meeting_booked", "qualified_opportunity", "conversion",
+        }
+        verified = [
+            item for item in ledger
+            if isinstance(item, dict) and item.get("event_type") in outcome_types
+        ] if isinstance(ledger, list) else []
+        cycles = [
+            item for item in ledger
+            if isinstance(item, dict) and item.get("event_type") == "gtm_cycle_generated"
+        ] if isinstance(ledger, list) else []
+        for item in verified:
+            evidence_ref = item.get("event_id") or item.get("experiment_id")
+            events.append(JourneyEvent(
+                item["event_type"], "outcome_ledger",
+                evidence_ref=str(evidence_ref) if evidence_ref else None,
+            ))
+        outcome_status = "outcomes_observed" if verified else (
+            "awaiting_outcomes" if cycles else "no_gtm_cycles_recorded"
+        )
+        events.append(JourneyEvent(
+            "outcome_status_recorded", "outcome_ledger",
+            details={"status": outcome_status},
+        ))
+        evaluation = FounderJourneyEvaluator().evaluate(self.session_id, events)
+        criteria = [
+            {
+                "criterion": finding.criterion,
+                "passed": finding.passed,
+                "evidence": list(finding.evidence),
+                "message": finding.message,
+            }
+            for finding in evaluation.findings
+        ]
+        return {
+            "passed": evaluation.passed and not self.findings,
+            "criteria": criteria,
+            "runtime_findings": list(self.findings),
+            "verified_outcome_counts": evaluation.verified_outcome_counts,
+            "generated_asset_count": evaluation.generated_asset_count,
+            "outcome_status": outcome_status,
+        }
 
     def _permission_worker(self) -> None:
         while not self.stop.is_set():
@@ -555,7 +656,11 @@ class ContinuousFounderTestingRuntime:
         try:
             while not self.stop.is_set() and (sessions == 0 or session_count < sessions):
                 focus = PROBE_AREAS[session_count % len(PROBE_AREAS)]
+                self.journey_events.append(JourneyEvent("mentor_goal_observed", "testing_agent", evidence_ref=f"focus:{focus}"))
+                previous_rounds = self.rounds_completed
                 result = self.run_product_session(focus)
+                if self.rounds_completed > previous_rounds and not self.stop.is_set():
+                    self.run_mentor_review(focus)
                 session_count += 1
                 self._answer_permission_requests()
                 report = {
@@ -565,6 +670,10 @@ class ContinuousFounderTestingRuntime:
                     "sessions_completed": session_count,
                     "rounds_completed": self.rounds_completed,
                     "questions_asked": self.questions_asked,
+                    "mentor_reviews_completed": self.mentor_reviews_completed,
+                    "last_mentor_review": self.last_mentor_review,
+                    "acceptance": self._acceptance_summary(),
+                    "acceptance_passed": self._acceptance_summary()["passed"],
                     "last_focus": focus,
                     "last_product_result": result,
                     "open_findings": list(self.findings),
@@ -601,6 +710,10 @@ class ContinuousFounderTestingRuntime:
                 "sessions_completed": session_count,
                 "rounds_completed": self.rounds_completed,
                 "questions_asked": self.questions_asked,
+                "mentor_reviews_completed": self.mentor_reviews_completed,
+                "last_mentor_review": self.last_mentor_review,
+                "acceptance": self._acceptance_summary(),
+                "acceptance_passed": self._acceptance_summary()["passed"],
                 "open_findings": list(self.findings),
                 "external_publishing_enabled": False,
                 "simulated_founder_only": True,
