@@ -275,10 +275,12 @@ class GTMStatusAgent:
 
     def __init__(self, workspace: Path, status_path: Path, stop: threading.Event,
                  requests: queue.Queue, responses: queue.Queue, interval: float,
-                 status_changed: threading.Event | None = None):
+                 status_changed: threading.Event | None = None,
+                 client: ASCMJsonRpcClient | None = None):
         self.workspace, self.status_path, self.stop = workspace, status_path, stop
         self.requests, self.responses, self.interval = requests, responses, interval
         self.status_changed = status_changed
+        self.client = client
         self.state_path = self.workspace / ".ascm_history" / "gtm_status_agent_state.json"
         state = read_json(self.state_path, {})
         self._last_fingerprint: str | None = state.get("last_requested_fingerprint") if isinstance(state, dict) else None
@@ -315,11 +317,33 @@ class GTMStatusAgent:
                         + draft + "\n\n> TEST HARNESS: draft only. No external publishing is connected.\n",
                         encoding="utf-8",
                     )
+                    gtm_review_path = draft_path.with_name(draft_path.stem + "-gtm-review.txt")
+                    gtm_review = "GTM specialist was not called; deterministic status draft only."
+                    if self.client is not None:
+                        try:
+                            gtm_review = self.client.send(
+                                "gtm",
+                                "Review this ASCM repository/testing status and propose GTM positioning, "
+                                "audience, and risks for a LinkedIn draft. Do not invent customers, traction, "
+                                "revenue, conversions, or outcomes. Do not publish or claim permission. "
+                                "Return concise internal recommendations only. Status evidence: "
+                                + json.dumps(status, sort_keys=True),
+                                request_id,
+                            )
+                        except Exception as exc:
+                            gtm_review = f"GTM specialist unavailable: {type(exc).__name__}: {exc}"
+                            print(f"[GTM AGENT] A2A specialist review failed; keeping factual draft: {exc}", flush=True)
+                    gtm_review_path.write_text(
+                        "INTERNAL REVIEW ONLY — not approved copy and not a publishing action.\\n\\n"
+                        + gtm_review + "\\n",
+                        encoding="utf-8",
+                    )
                     request = {
                         "request_id": request_id,
                         "action": "publish_linkedin_post",
                         "channel": "LinkedIn",
                         "draft_path": str(draft_path),
+                        "gtm_review_path": str(gtm_review_path),
                         "summary": "Share a progress update about the ASCM founder-simulation test.",
                         "created_at": utc_now(),
                         "status_fingerprint": fingerprint,
@@ -499,7 +523,7 @@ class ContinuousFounderTestingRuntime:
         goal = GoalAgent(self.workspace, self.status_path, self.stop, self.poll_interval, self.status_changed, getattr(self.client, "base_url", None))
         gtm = GTMStatusAgent(self.workspace, self.status_path, self.stop,
                              self.permission_requests, self.permission_responses, self.poll_interval,
-                             self.status_changed)
+                             self.status_changed, self.client)
         threads = [
             threading.Thread(target=goal.run, name="ASCM-Goal-Agent", daemon=True),
             threading.Thread(target=gtm.run, name="ASCM-GTM-Status-Agent", daemon=True),
