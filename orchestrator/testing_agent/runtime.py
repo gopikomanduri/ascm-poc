@@ -264,6 +264,7 @@ class GoalAgent:
             "testing_rounds": report.get("rounds_completed", 0) if isinstance(report, dict) else 0,
             "product_questions": report.get("questions_asked", 0) if isinstance(report, dict) else 0,
             "mentor_reviews_completed": report.get("mentor_reviews_completed", 0) if isinstance(report, dict) else 0,
+            "acceptance_passed": report.get("acceptance_passed", False) if isinstance(report, dict) else False,
             "sessions_completed": report.get("sessions_completed", 0) if isinstance(report, dict) else 0,
             "open_findings": report.get("open_findings", []) if isinstance(report, dict) else [],
         }
@@ -655,6 +656,7 @@ class ContinuousFounderTestingRuntime:
         try:
             while not self.stop.is_set() and (sessions == 0 or session_count < sessions):
                 focus = PROBE_AREAS[session_count % len(PROBE_AREAS)]
+                self.journey_events.append(JourneyEvent("mentor_goal_observed", "testing_agent", evidence_ref=f"focus:{focus}"))
                 previous_rounds = self.rounds_completed
                 result = self.run_product_session(focus)
                 if self.rounds_completed > previous_rounds and not self.stop.is_set():
@@ -670,6 +672,8 @@ class ContinuousFounderTestingRuntime:
                     "questions_asked": self.questions_asked,
                     "mentor_reviews_completed": self.mentor_reviews_completed,
                     "last_mentor_review": self.last_mentor_review,
+                    "acceptance": self._acceptance_summary(),
+                    "acceptance_passed": self._acceptance_summary()["passed"],
                     "last_focus": focus,
                     "last_product_result": result,
                     "open_findings": list(self.findings),
@@ -708,6 +712,8 @@ class ContinuousFounderTestingRuntime:
                 "questions_asked": self.questions_asked,
                 "mentor_reviews_completed": self.mentor_reviews_completed,
                 "last_mentor_review": self.last_mentor_review,
+                "acceptance": self._acceptance_summary(),
+                "acceptance_passed": self._acceptance_summary()["passed"],
                 "open_findings": list(self.findings),
                 "external_publishing_enabled": False,
                 "simulated_founder_only": True,
