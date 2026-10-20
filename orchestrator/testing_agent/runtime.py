@@ -230,6 +230,7 @@ class GoalAgent:
             "testing_session": report.get("session_id") if isinstance(report, dict) else None,
             "testing_rounds": report.get("rounds_completed", 0) if isinstance(report, dict) else 0,
             "product_questions": report.get("questions_asked", 0) if isinstance(report, dict) else 0,
+            "sessions_completed": report.get("sessions_completed", 0) if isinstance(report, dict) else 0,
             "open_findings": report.get("open_findings", []) if isinstance(report, dict) else [],
         }
         atomic_json(self.status_path, snapshot)
@@ -252,21 +253,28 @@ class GTMStatusAgent:
                  requests: queue.Queue, responses: queue.Queue, interval: float):
         self.workspace, self.status_path, self.stop = workspace, status_path, stop
         self.requests, self.responses, self.interval = requests, responses, interval
-        self._last_fingerprint: str | None = None
-        self._request_counter = 0
+        self.state_path = self.workspace / ".ascm_history" / "gtm_status_agent_state.json"
+        state = read_json(self.state_path, {})
+        self._last_fingerprint: str | None = state.get("last_requested_fingerprint") if isinstance(state, dict) else None
+        self._request_counter = int(state.get("request_counter", 0)) if isinstance(state, dict) else 0
 
     def run(self) -> None:
         while not self.stop.is_set():
             status = read_json(self.status_path, {})
-            if status:
+            if status and int(status.get("testing_rounds", 0) or 0) > 0:
+                # Keep checking every poll, but request a social approval only once per
+                # repository commit. Test-round counters are deliberately not triggers.
                 fingerprint = hashlib.sha256(json.dumps({
                     "commit": status.get("latest_commit"),
-                    "rounds": status.get("testing_rounds"),
-                    "questions": status.get("product_questions"),
                 }, sort_keys=True).encode()).hexdigest()
                 if fingerprint != self._last_fingerprint:
                     self._last_fingerprint = fingerprint
                     self._request_counter += 1
+                    atomic_json(self.state_path, {
+                        "last_requested_fingerprint": fingerprint,
+                        "request_counter": self._request_counter,
+                        "updated_at": utc_now(),
+                    })
                     request_id = f"social-review-{self._request_counter}-{fingerprint[:8]}"
                     draft = self._build_draft(status)
                     draft_path = self.workspace / "artifacts" / "gtm_cycles" / f"{request_id}.md"
