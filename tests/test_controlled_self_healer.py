@@ -3,6 +3,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import orchestrator.controlled_self_healer as controlled
 from orchestrator.controlled_self_healer import (
     build_repair_context,
     route_owner,
@@ -154,3 +155,40 @@ index 1111111..2222222 100644
     ok, reason, _ = validate_patch(deletion)
     assert not ok
     assert "deletions" in reason
+
+
+
+def test_github_ci_gate_requires_success_before_pr(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(args, cwd, *, timeout=900, env=None):
+        calls.append(args)
+        if args[1:3] == ["workflow", "run"]:
+            return subprocess.CompletedProcess(args, 0, "", "")
+        return subprocess.CompletedProcess(
+            args, 0,
+            json.dumps([{"headSha": "abc123", "status": "completed", "conclusion": "success", "databaseId": 42}]),
+            "",
+        )
+
+    monkeypatch.setattr(controlled, "_run", fake_run)
+    passed, detail = controlled._wait_for_github_ci("gh", "ascm/repair-test", "abc123", tmp_path, timeout=1)
+    assert passed is True
+    assert len(calls) == 2
+    assert "success" in detail
+
+
+def test_github_ci_gate_blocks_pr_when_workflow_fails(monkeypatch, tmp_path):
+    def fake_run(args, cwd, *, timeout=900, env=None):
+        if args[1:3] == ["workflow", "run"]:
+            return subprocess.CompletedProcess(args, 0, "", "")
+        return subprocess.CompletedProcess(
+            args, 0,
+            json.dumps([{"headSha": "abc123", "status": "completed", "conclusion": "failure", "databaseId": 43}]),
+            "",
+        )
+
+    monkeypatch.setattr(controlled, "_run", fake_run)
+    passed, detail = controlled._wait_for_github_ci("gh", "ascm/repair-test", "abc123", tmp_path, timeout=1)
+    assert passed is False
+    assert "failure" in detail
