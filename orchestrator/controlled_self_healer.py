@@ -138,7 +138,7 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
             "evidence": finding.get("evidence", []),
         },
         "expected_outcome": "minimal scoped fix, regression test, all verification gates pass, human-reviewed PR only",
-        "finding_key_duplicate": key, "status": "blocked", "branch": None, "changed_files": [],
+        "status": "blocked", "branch": None, "changed_files": [],
         "checks": {}, "pr_url": None, "human_merge_required": True}
     if str(finding.get("severity", "")).upper() == "P0":
         result["reason"] = "P0 finding: stop and escalate; automatic repair is forbidden."
