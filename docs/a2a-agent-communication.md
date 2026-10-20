@@ -17,13 +17,13 @@ The server binds to loopback by default. Do not expose it to a network unless it
 
 ## Routing a task
 
-Use a standard A2A 1.0 `message/send` JSON-RPC request. The A2A Message must contain a text Part and the ASCM extension metadata:
+Use the A2A SDK v1 JSON-RPC binding shown below. The SDK version pinned by the project dispatches the request as `SendMessage`; use the official A2A client for interoperability instead of hard-coding transport method names in production clients. The A2A Message must contain a text Part and the ASCM extension metadata:
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": "request-1",
-  "method": "message/send",
+  "method": "SendMessage",
   "params": {
     "message": {
       "messageId": "message-1",
