@@ -12,6 +12,8 @@ import argparse
 import builtins
 import hashlib
 import json
+import difflib
+import re
 import logging
 import os
 import queue
@@ -114,6 +116,21 @@ PROBE_AREAS = (
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _normalized_text(value: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.lower()).split())
+
+
+def _text_similarity(left: str, right: str) -> float:
+    """Cheap deterministic similarity check to stop near-duplicate interview loops."""
+    a, b = _normalized_text(left), _normalized_text(right)
+    if not a or not b:
+        return 0.0
+    sequence_score = difflib.SequenceMatcher(None, a, b).ratio()
+    a_tokens, b_tokens = set(a.split()), set(b.split())
+    token_score = len(a_tokens & b_tokens) / max(1, len(a_tokens | b_tokens))
+    return max(sequence_score, token_score)
 
 
 class ConversationStoryLog:
@@ -234,30 +251,39 @@ class FounderProfile:
         return profile
 
     def answer(self, question: str) -> str:
-        """Answer only from the simulation profile; never invent validation evidence."""
-        q = question.lower()
-        if any(k in q for k in ("problem", "pain", "why", "need", "value")):
-            return self.problem
-        if any(k in q for k in ("customer", "user", "icp", "segment", "buyer", "who")):
-            return self.target_user
-        if any(k in q for k in ("different", "compet", "alternative", "substitute")):
-            return self.differentiation + " Alternatives to test include: " + self.alternatives
-        if any(k in q for k in ("traction", "customer evidence", "interview", "validation", "demand", "proof")):
-            return self.traction + " Customer validation is an explicit open workstream."
-        if any(k in q for k in ("price", "pricing", "pay", "revenue", "willingness")):
+        """Answer only from known simulation facts; unknowns stay explicitly unresolved."""
+        q = _normalized_text(question)
+        if any(k in q for k in ("go no go", "threshold", "quantitative metric", "success criteria",
+                                "baseline", "conversion rate", "relative improvement", "how will you measure",
+                                "what metric", "qualitative or quantitative signals")):
+            return self.success_metrics + " Baselines and numeric go/no-go thresholds are not established; do not infer a threshold; do not fabricate a fact."
+        if any(k in q for k in ("budget holder", "holds the budget", "budget authority", "day to day operational",
+                                "who pays", "purchasing authority")):
+            return "The current hypothesis names founders and engineering leaders, but the budget holder and day-to-day user have not been distinguished or validated."
+        if any(k in q for k in ("failure mode", "specific bottleneck", "handoff failure", "context loss frequency",
+                                "exact pain", "specific painful", "what evidence proves")):
+            return "The exact handoff failure mode is unvalidated. Context loss, conflicting constraints, rework, and governance gaps are hypotheses, not observed customer facts. Cheapest test: interview 5-10 target users and manually trace one cross-repository handoff with permission."
+        if any(k in q for k in ("concierge", "prototype experiment", "how many interviews", "discovery interview",
+                                "acquisition channel", "outreach channel", "how will you validate", "validation experiment")):
+            return "Proposed experiment only—not yet executed: conduct 5-10 discovery interviews, then run a manual concierge test across up to 3 customer-selected repositories. Record observed handoff failures, time/rework baseline, intervention usefulness, and willingness-to-pay signals. No participants or results have been verified yet."
+        if any(k in q for k in ("willingness to pay", "pricing", "price", "revenue", "paid pilot", "commercial commitment")):
             return self.pricing
-        if any(k in q for k in ("security", "privacy", "consent", "permission", "data")):
+        if any(k in q for k in ("alternative", "competitor", "differentiat", "substitute", "existing tools")):
+            return self.differentiation + " Alternatives to test include: " + self.alternatives
+        if any(k in q for k in ("customer evidence", "customer traction", "verified traction", "actual conversion",
+                                "customer demand", "validation status", "has this been validated", "proof of demand")):
+            return self.traction + " Customer validation is an explicit open workstream."
+        if any(k in q for k in ("security", "privacy", "consent", "permission", "data residency", "data handling")):
             return self.security
-        if any(k in q for k in ("exact conversion rate", "conversion rate", "actual conversion", "how many customers", "how many conversions", "verified traction")):
-            return self.traction + " Exact conversion figures are not available; do not fabricate a number."
+        if any(k in q for k in ("publish", "linkedin", "social media", "external outreach", "send this")):
+            return "A draft may be prepared for review. This simulated founder cannot authorize real-world publishing or outreach."
+        if any(k in q for k in ("target user", "target customer", "ideal customer", "icp", "customer segment", "primary persona", "who is the buyer")):
+            return self.target_user
+        if any(k in q for k in ("problem", "pain", "why", "need", "value proposition", "what does ascm solve")):
+            return self.problem
         if any(k in q for k in ("metric", "success", "outcome", "measure", "conversion")):
             return self.success_metrics
-        if any(k in q for k in ("post", "publish", "linkedin", "social", "campaign", "outreach")):
-            return "You may draft content for review. This simulated founder cannot authorize real-world publishing."
-        return (
-            "I do not have validated evidence for that yet. Record it as an open question, state the assumption, "
-            "and propose the cheapest experiment that could resolve it; do not fabricate a fact."
-        )
+        return "I cannot answer that from the current simulation profile. Record it as an open question, state the assumption, and propose the cheapest experiment that could resolve it; do not fabricate a fact."
 
     def decide_permission(self, action: str) -> dict[str, Any]:
         """Return a simulated response. This is never a real founder authorization."""
@@ -457,6 +483,18 @@ class GTMStatusAgent:
                         + draft + "\n\n> TEST HARNESS: draft only. No external publishing is connected.\n",
                         encoding="utf-8",
                     )
+                    self.journey_events.append(JourneyEvent(
+                        "gtm_asset_generated", "gtm_status_agent",
+                        evidence_ref=str(draft_path),
+                        details={"request_id": request_id, "approved": False, "published": False},
+                    ))
+                    if self.story_log is not None:
+                        self.story_log.record(
+                            "GTM STATUS AGENT", "FOUNDER", "gtm_asset_generated",
+                            "A review-required draft was generated; it is not approved and was not published.",
+                            metadata={"task_id": request_id, "correlation_id": request_id,
+                                      "asset_path": str(draft_path), "external_publishing_enabled": False},
+                        )
                     gtm_review_path = draft_path.with_name(draft_path.stem + "-gtm-review.txt")
                     gtm_review = "GTM specialist was not called; deterministic status draft only."
                     if self.client is not None:
@@ -541,6 +579,21 @@ class GTMStatusAgent:
                     record = {**request, "decision": decision or {"decision": "no_response", "is_real_authorization": False}}
                     with result_path.open("a", encoding="utf-8") as handle:
                         handle.write(json.dumps(record, sort_keys=True) + "\n")
+                    block_details = {
+                        "action": request["action"], "request_id": request_id,
+                        "decision": (decision or {}).get("decision", "no_response"),
+                        "is_real_authorization": False, "external_publishing_enabled": False,
+                    }
+                    self.journey_events.append(JourneyEvent(
+                        "external_action_blocked", "gtm_status_agent",
+                        evidence_ref=request_id, details=block_details,
+                    ))
+                    if self.story_log is not None:
+                        self.story_log.record(
+                            "GTM STATUS AGENT", "EXTERNAL ACTION GATE", "external_action_blocked",
+                            "External publishing remains disabled; simulated permission is not real authorization.",
+                            metadata={"task_id": request_id, "correlation_id": request_id, **block_details},
+                        )
                     print(f"[GTM AGENT] Permission outcome: {(decision or {}).get('decision', 'no_response')}; real publishing remains disabled.", flush=True)
             if self.status_changed is not None:
                 self.status_changed.wait(self.interval)
@@ -595,6 +648,7 @@ class ContinuousFounderTestingRuntime:
         self.mentor_reviews_completed = 0
         self.last_mentor_review = ""
         self.journey_events: list[JourneyEvent] = []
+        self.open_questions: list[str] = []
 
     def _product_prompt(self, area: str) -> str:
         transcript = json.dumps(self.transcript[-24:], ensure_ascii=False)
@@ -603,6 +657,8 @@ class ContinuousFounderTestingRuntime:
             "The connected Testing Agent is simulating the founder and will answer questions. "
             "Ask one highest-priority clarification question at a time; do not invent customer evidence, "
             "pricing, traction, or validation. Use the transcript to avoid repeating answered questions. "
+            "Do not repeat a question when an unresolved item is already in the transcript; checkpoint it instead. "
+            "Treat an answer that does not address the question as unknown, not as clarification. "
             "When critical requirements are sufficiently clear, return is_clear=true and list remaining "
             "non-blocking questions separately. Return JSON keys: detected_domain, confidence_score, "
             "functional_completeness, nfr_completeness, is_clear, understanding, clarification_questions, "
@@ -775,7 +831,9 @@ class ContinuousFounderTestingRuntime:
 
     def run_product_session(self, focus: str) -> dict[str, Any]:
         self.transcript = []
-        final = {"is_clear": False, "confidence_score": 0.0, "understanding": "", "clarification_questions": []}
+        final = {"is_clear": False, "confidence_score": 0.0, "understanding": "",
+                 "clarification_questions": [], "checkpoint_clarification_items": []}
+        seen_questions: list[str] = []
         for round_number in range(1, self.rounds_per_session + 1):
             self._answer_permission_requests()
             prompt = self._product_prompt(focus)
@@ -799,44 +857,81 @@ class ContinuousFounderTestingRuntime:
                     "product_discovery_completed", "product_agent",
                     evidence_ref=f"product-discovery:{self.session_id}:{round_number}",
                 ))
-            if not questions:
-                if result.get("is_clear") is True and float(result.get("confidence_score", 0)) >= 0.90:
+                if float(result.get("confidence_score", 0)) >= 0.90:
+                    self.open_questions.extend(
+                        item for item in result.get("checkpoint_clarification_items", [])
+                        if isinstance(item, str) and item.strip()
+                    )
                     print(f"[PRODUCT AGENT] Focus '{focus}' is clear at confidence {result.get('confidence_score')}.", flush=True)
                     break
+            if not questions:
                 self.findings.append(f"ProductAgent returned no actionable question and did not establish clarity for focus '{focus}'.")
+                self.open_questions.extend(
+                    item for item in result.get("checkpoint_clarification_items", [])
+                    if isinstance(item, str) and item.strip()
+                )
                 print(f"[TESTING AGENT] FAIL: ProductAgent returned no question and did not establish clarity for '{focus}'.", flush=True)
                 break
             question = questions[0].strip()
             if not question:
                 self.findings.append(f"ProductAgent returned an empty clarification question for '{focus}'.")
                 break
+            duplicate = next((prior for prior in seen_questions
+                              if _text_similarity(question, prior) >= 0.78), None)
+            if duplicate is not None:
+                note = f"ProductAgent repeated a near-duplicate question in focus '{focus}'; interview stopped and the item remains open: {question}"
+                self.findings.append(note)
+                self.open_questions.append(question)
+                final["is_clear"] = False
+                final["checkpoint_clarification_items"] = list(dict.fromkeys(
+                    list(result.get("checkpoint_clarification_items", [])) + [question]
+                ))
+                self.story_log.record("TESTING AGENT", "PRODUCT AGENT", "repeated_question_blocked", note,
+                                      metadata={"focus": focus, "round": round_number, "correlation_id": self.session_id})
+                break
+            seen_questions.append(question)
             answer = self.profile.answer(question)
             self.questions_asked += 1
             self.journey_events.append(JourneyEvent(
                 "product_question", "product_agent",
                 evidence_ref=f"product-question:{self.session_id}:{self.questions_asked}",
             ))
+            previous_question = self.transcript[-2]["content"] if len(self.transcript) >= 2 else None
+            previous_answer = self.transcript[-1]["content"] if self.transcript else None
+            repeated_off_topic_answer = (
+                previous_answer is not None
+                and _normalized_text(answer) == _normalized_text(previous_answer)
+                and previous_question is not None
+                and _text_similarity(question, previous_question) < 0.60
+            )
             self.transcript.extend([
                 {"role": "assistant", "content": question},
                 {"role": "user", "content": answer},
             ])
             exchange_metadata = {
                 "task_id": f"product-interview-{self.session_id}-{round_number}",
-                "correlation_id": self.session_id,
-                "focus": focus,
-                "round": round_number,
+                "correlation_id": self.session_id, "focus": focus, "round": round_number,
             }
-            self.story_log.record("PRODUCT AGENT", "TESTING AGENT", "question", question,
-                                  metadata=exchange_metadata)
-            self.story_log.record("TESTING AGENT (SIMULATED FOUNDER)", "PRODUCT AGENT", "answer", answer,
-                                  metadata=exchange_metadata)
+            self.story_log.record("PRODUCT AGENT", "TESTING AGENT", "question", question, metadata=exchange_metadata)
+            self.story_log.record("TESTING AGENT (SIMULATED FOUNDER)", "PRODUCT AGENT", "answer", answer, metadata=exchange_metadata)
             print(f"[{utc_now()}] [PRODUCT AGENT → TESTING AGENT] {question}", flush=True)
             print(f"[{utc_now()}] [TESTING AGENT → PRODUCT AGENT] {answer}\n", flush=True)
-            if self.review_delay_seconds:
-                print(
-                    f"[TESTING AGENT] Pausing {self.review_delay_seconds:g} seconds for your review before the next exchange.",
-                    flush=True,
+            if repeated_off_topic_answer:
+                note = (
+                    f"Simulated founder repeated an earlier answer to a materially different question in focus '{focus}'. "
+                    "The new question remains unresolved; the interview stopped rather than treating repetition as progress."
                 )
+                self.findings.append(note)
+                self.open_questions.append(question)
+                final["is_clear"] = False
+                final["checkpoint_clarification_items"] = list(dict.fromkeys(
+                    list(result.get("checkpoint_clarification_items", [])) + [question]
+                ))
+                self.story_log.record("TESTING AGENT", "PRODUCT AGENT", "unresolved_answer_checkpointed", note,
+                                      metadata={**exchange_metadata, "answer_repeated": True})
+                break
+            if self.review_delay_seconds:
+                print(f"[TESTING AGENT] Pausing {self.review_delay_seconds:g} seconds for your review before the next exchange.", flush=True)
                 time.sleep(self.review_delay_seconds)
         return final
 
@@ -859,12 +954,60 @@ class ContinuousFounderTestingRuntime:
             return ""
         self.mentor_reviews_completed += 1
         self.last_mentor_review = review
+        review_ref = f"mentor-review:{self.session_id}:{self.mentor_reviews_completed}"
+        goal_id = f"founder-goal:{self.session_id}:{focus}"
         self.journey_events.append(JourneyEvent(
-            "mentor_recommendation_shown", "ascm_mentor",
-            evidence_ref=f"mentor-review:{self.session_id}:{self.mentor_reviews_completed}",
+            "mentor_recommendation_shown", "ascm_mentor", evidence_ref=review_ref,
+            details={"goal_id": goal_id, "simulated": True},
         ))
+        self._record_mentor_action(focus, review, review_ref)
         print(f"[MENTOR AGENT → TESTING AGENT] {review[:1200]}\\n", flush=True)
         return review
+
+    def _record_mentor_action(self, focus: str, review: str, review_ref: str) -> None:
+        """Persist a proposed founder follow-up without approving or executing it."""
+        parsed: dict[str, Any] = {}
+        try:
+            start, end = review.find("{"), review.rfind("}")
+            if start >= 0 and end > start:
+                candidate = json.loads(review[start:end + 1])
+                if isinstance(candidate, dict):
+                    parsed = candidate
+        except (json.JSONDecodeError, TypeError):
+            pass
+        plan = parsed.get("pre_build_validation_plan", [])
+        if isinstance(plan, str):
+            plan = [plan]
+        action = next((x.strip() for x in plan if isinstance(x, str) and x.strip()), None) if isinstance(plan, list) else None
+        if not action and isinstance(parsed.get("mentor_advice"), str):
+            action = parsed["mentor_advice"].strip()
+        action = action or "Review the Mentor recommendation and choose a measurable next action."
+        action_id = "founder-action-" + str(uuid.uuid4())
+        record = {
+            "action_id": action_id, "session_id": self.session_id, "focus": focus,
+            "action": action, "source": "mentor_agent", "source_evidence_ref": review_ref,
+            "status": "proposed", "approved": False, "executed": False,
+            "outcome_status": "awaiting_evidence",
+            "follow_up": "Record the founder's decision and attach evidence before marking this action complete.",
+            "created_at": utc_now(),
+        }
+        path = self.history / "founder_actions.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+        self.journey_events.append(JourneyEvent(
+            "mentor_action_proposed", "mentor_agent", evidence_ref=action_id,
+            details={"status": "proposed", "approved": False, "executed": False, "focus": focus},
+        ))
+        self.story_log.record(
+            "MENTOR AGENT", "FOUNDER ACTION QUEUE", "action_proposed",
+            json.dumps(record, sort_keys=True),
+            metadata={"task_id": action_id, "correlation_id": self.session_id, "focus": focus},
+        )
 
     def _acceptance_summary(self) -> dict[str, Any]:
         events = list(self.journey_events)
@@ -873,7 +1016,7 @@ class ContinuousFounderTestingRuntime:
             "customer_reply", "customer_interview", "feature_request", "pilot_commitment",
             "waitlist_signup", "meeting_booked", "qualified_opportunity", "conversion",
         }
-        verified = [
+        outcome_records = [
             item for item in ledger
             if isinstance(item, dict) and item.get("event_type") in outcome_types
         ] if isinstance(ledger, list) else []
@@ -881,27 +1024,29 @@ class ContinuousFounderTestingRuntime:
             item for item in ledger
             if isinstance(item, dict) and item.get("event_type") == "gtm_cycle_generated"
         ] if isinstance(ledger, list) else []
-        for item in verified:
-            evidence_ref = item.get("event_id") or item.get("experiment_id")
+        verified_count = 0
+        for item in outcome_records:
+            evidence_ref = item.get("evidence_ref") or item.get("source_evidence_ref") or item.get("evidence_uri")
+            is_verified = item.get("verified") is True or item.get("verification_status") == "verified"
+            if is_verified and evidence_ref:
+                verified_count += 1
             events.append(JourneyEvent(
                 item["event_type"], "outcome_ledger",
                 evidence_ref=str(evidence_ref) if evidence_ref else None,
+                details={**item, "verified": is_verified},
             ))
-        outcome_status = "outcomes_observed" if verified else (
-            "awaiting_outcomes" if cycles else "no_gtm_cycles_recorded"
+        outcome_status = "outcomes_observed" if verified_count else (
+            "awaiting_outcomes" if cycles or outcome_records else "no_gtm_cycles_recorded"
         )
         events.append(JourneyEvent(
             "outcome_status_recorded", "outcome_ledger",
-            details={"status": outcome_status},
+            evidence_ref=f"outcome-status:{self.session_id}",
+            details={"status": outcome_status, "verified_count": verified_count},
         ))
         evaluation = FounderJourneyEvaluator().evaluate(self.session_id, events)
         criteria = [
-            {
-                "criterion": finding.criterion,
-                "passed": finding.passed,
-                "evidence": list(finding.evidence),
-                "message": finding.message,
-            }
+            {"criterion": finding.criterion, "passed": finding.passed, "status": finding.status,
+             "evidence": list(finding.evidence), "message": finding.message}
             for finding in evaluation.findings
         ]
         return {
@@ -911,6 +1056,7 @@ class ContinuousFounderTestingRuntime:
             "verified_outcome_counts": evaluation.verified_outcome_counts,
             "generated_asset_count": evaluation.generated_asset_count,
             "outcome_status": outcome_status,
+            "unverified_outcome_count": len(outcome_records) - verified_count,
         }
 
     def _attach_self_healing_assessment(self, report: dict[str, Any]) -> dict[str, Any]:
@@ -993,6 +1139,12 @@ class ContinuousFounderTestingRuntime:
                     "reason": "No non-P0 finding or no A2A client is available; escalate for human triage.",
                     "human_merge_required": True,
                 }
+        elif assessment.get("status") == "awaiting_evidence":
+            assessment["code_repair"] = {
+                "status": "not_triggered",
+                "reason": "Acceptance is incomplete because evidence is missing; this is not treated as a code defect or automatic repair request.",
+                "human_merge_required": True,
+            }
         else:
             assessment["code_repair"] = {
                 "status": "disabled",
@@ -1067,8 +1219,20 @@ class ContinuousFounderTestingRuntime:
         try:
             while not self.stop.is_set() and (sessions == 0 or session_count < sessions):
                 focus = PROBE_AREAS[session_count % len(PROBE_AREAS)]
-                self.journey_events.append(JourneyEvent("goal_observed", "goal_agent", evidence_ref=f"founder-goal:{self.session_id}:{focus}"))
-                self.journey_events.append(JourneyEvent("mentor_goal_observed", "testing_agent", evidence_ref=f"focus:{focus}"))
+                goal_id = f"founder-goal:{self.session_id}:{focus}"
+                self.journey_events.append(JourneyEvent(
+                    "goal_observed", "goal_agent", evidence_ref=goal_id,
+                    details={"goal_id": goal_id, "goal": focus, "source": "testing_scenario", "simulated": True},
+                ))
+                self.journey_events.append(JourneyEvent(
+                    "mentor_goal_observed", "testing_agent", evidence_ref=goal_id,
+                    details={
+                        "goal_id": goal_id,
+                        "goal": focus,
+                        "goal_source": "testing_scenario_focus",
+                        "simulated": True,
+                    },
+                ))
                 previous_rounds = self.rounds_completed
                 result = self.run_product_session(focus)
                 if self.rounds_completed > previous_rounds and not self.stop.is_set():
@@ -1097,6 +1261,7 @@ class ContinuousFounderTestingRuntime:
                     "last_focus": focus,
                     "last_product_result": result,
                     "open_findings": list(self.findings),
+                    "open_questions": list(dict.fromkeys(self.open_questions)),
                     "external_publishing_enabled": False,
                     "simulated_founder_only": True,
                 }
@@ -1144,6 +1309,7 @@ class ContinuousFounderTestingRuntime:
                 "acceptance": self._acceptance_summary(),
                 "acceptance_passed": self._acceptance_summary()["passed"],
                 "open_findings": list(self.findings),
+                "open_questions": list(dict.fromkeys(self.open_questions)),
                 "external_publishing_enabled": False,
                 "simulated_founder_only": True,
             }

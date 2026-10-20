@@ -36,8 +36,14 @@ def assess_testing_results(
     criteria = acceptance.get("criteria", []) if isinstance(acceptance, dict) else []
     failed_criteria = [
         item for item in criteria
-        if isinstance(item, dict) and item.get("passed") is False
+        if isinstance(item, dict)
+        and item.get("passed") is False
+        and item.get("status", "failed") == "failed"
     ]
+    acceptance_pending = any(
+        isinstance(item, dict) and item.get("status") in {"not_tested", "partial"}
+        for item in criteria
+    )
     runtime_findings = testing_results.get("open_findings", [])
     if not isinstance(runtime_findings, list):
         runtime_findings = []
@@ -47,7 +53,10 @@ def assess_testing_results(
     ).evaluate({
         "contract_version": testing_results.get("intent_contract_version"),
         "events": events,
-        "acceptance_passed": testing_results.get("acceptance_passed", False),
+        "acceptance_passed": (
+            testing_results.get("acceptance_passed", False) is True
+            or (acceptance_pending and not failed_criteria and not runtime_findings)
+        ),
         "open_findings": runtime_findings,
         "external_action_without_approval": bool(
             testing_results.get("external_action_without_approval", False)
@@ -94,7 +103,9 @@ def assess_testing_results(
     return {
         "trigger": "testing_agent_run",
         "input": "testing_agent_results",
-        "status": "blocked_p0" if p0 else ("remediation_required" if unique else "aligned"),
+        "status": "blocked_p0" if p0 else (
+            "remediation_required" if unique else ("awaiting_evidence" if acceptance_pending else "aligned")
+        ),
         "contract_version": intent_assessment.contract_version,
         "source_report_session_id": testing_results.get("session_id"),
         "source_report_updated_at": testing_results.get("updated_at"),

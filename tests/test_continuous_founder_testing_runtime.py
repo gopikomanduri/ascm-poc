@@ -458,3 +458,165 @@ def test_gtm_specialist_failure_is_logged_in_conversation_story(tmp_path):
     assert handoff[0]["metadata"]["task_id"] == handoff[1]["metadata"]["task_id"]
     assert handoff[0]["metadata"]["correlation_id"] == handoff[1]["metadata"]["correlation_id"]
     assert "TimeoutError" in handoff[1]["message"]
+
+
+
+def test_acceptance_does_not_vacuously_pass_missing_gtm_consent_or_outcomes():
+    from orchestrator.testing_agent.founder_journey import FounderJourneyEvaluator
+
+    report = FounderJourneyEvaluator().evaluate("empty-journey", [])
+    findings = {item.criterion: item for item in report.findings}
+    assert report.passed is False
+    assert findings["gtm_proposal_distinguished_from_outcome"].status == "not_tested"
+    assert findings["explicit_action_scoped_consent"].status == "not_tested"
+    assert findings["verified_outcome_learning"].status == "not_tested"
+    assert all(not item.passed for item in report.findings)
+
+
+def test_acceptance_requires_external_evidence_and_explicit_verification_for_outcomes():
+    from orchestrator.testing_agent.founder_journey import FounderJourneyEvaluator
+
+    evaluator = FounderJourneyEvaluator()
+    unverified = evaluator.evaluate("unverified", [
+        JourneyEvent("customer_reply", "ledger", evidence_ref="event-123", details={"verified": False})
+    ])
+    verified = evaluator.evaluate("verified", [
+        JourneyEvent("customer_reply", "ledger", evidence_ref="https://example.test/evidence/123",
+                     details={"verification_status": "verified", "verified_by": "human-review"})
+    ])
+    assert unverified.passed is False
+    assert next(f for f in unverified.findings if f.criterion == "verified_outcome_learning").status == "failed"
+    assert verified.verified_outcome_counts["customer_reply"] == 1
+    assert next(f for f in verified.findings if f.criterion == "verified_outcome_learning").passed is True
+
+
+def test_acceptance_requires_gtm_proposal_evidence_and_does_not_count_it_as_outcome():
+    from orchestrator.testing_agent.founder_journey import FounderJourneyEvaluator
+
+    report = FounderJourneyEvaluator().evaluate("draft-only", [
+        JourneyEvent("gtm_asset_generated", "gtm", evidence_ref="artifacts/draft.md",
+                     details={"approved": False, "published": False})
+    ])
+    findings = {item.criterion: item for item in report.findings}
+    assert findings["gtm_proposal_distinguished_from_outcome"].passed is True
+    assert report.generated_asset_count == 1
+    assert report.verified_outcome_counts["customer_reply"] == 0
+    assert findings["verified_outcome_learning"].status == "not_tested"
+
+
+def test_handoff_traceability_requires_matching_terminal_event():
+    from orchestrator.testing_agent.founder_journey import FounderJourneyEvaluator
+
+    evaluator = FounderJourneyEvaluator()
+    started_only = evaluator.evaluate("started-only", [
+        JourneyEvent("handoff_started", "testing", details={"task_id": "t1", "correlation_id": "c1"})
+    ])
+    complete = evaluator.evaluate("complete", [
+        JourneyEvent("handoff_started", "testing", details={"task_id": "t1", "correlation_id": "c1"}),
+        JourneyEvent("handoff_completed", "testing", details={"task_id": "t1", "correlation_id": "c1"}),
+    ])
+    assert next(f for f in started_only.findings if f.criterion == "handoff_traceability").passed is False
+    assert next(f for f in complete.findings if f.criterion == "handoff_traceability").passed is True
+
+
+def test_founder_simulator_answers_unknown_metrics_as_unknown_not_target_user():
+    profile = FounderProfile()
+    answer = profile.answer(
+        "What quantitative metric and go-no-go threshold will validate this customer segment?"
+    )
+    assert "Baselines and numeric go/no-go thresholds are not established" in answer
+    assert "Initial hypothesis: founders" not in answer
+
+
+def test_product_interview_stops_when_product_agent_repeats_question(tmp_path):
+    client = FakeASCMClient([
+        product_response(question="Who is the target customer?"),
+        product_response(question="What quantitative success threshold will validate this target segment?"),
+        product_response(question="What quantitative success threshold will validate this target segment?"),
+    ])
+    runtime = ContinuousFounderTestingRuntime(
+        tmp_path, profile=FounderProfile(), client=client, rounds_per_session=8,
+        review_delay_seconds=0,
+    )
+    runtime.run_product_session("target user")
+    assert runtime.rounds_completed <= 3
+    assert runtime.questions_asked <= 2
+    assert runtime.open_questions
+    assert any("repeated" in item.lower() for item in runtime.findings)
+
+
+def test_mentor_review_persists_proposed_action_without_approval_or_execution(tmp_path):
+    review = json.dumps({
+        "pre_build_validation_plan": ["Conduct five customer discovery interviews."],
+        "mentor_advice": "Validate demand before building.",
+    })
+    runtime = ContinuousFounderTestingRuntime(
+        tmp_path, client=FakeASCMClient([review]), rounds_per_session=1,
+    )
+    runtime.run_mentor_review("problem and value proposition")
+    action_file = tmp_path / ".ascm_history" / "founder_actions.jsonl"
+    records = [json.loads(line) for line in action_file.read_text().splitlines()]
+    assert records[0]["action"] == "Conduct five customer discovery interviews."
+    assert records[0]["status"] == "proposed"
+    assert records[0]["approved"] is False
+    assert records[0]["executed"] is False
+    assert records[0]["outcome_status"] == "awaiting_evidence"
+
+
+def test_founder_action_lifecycle_requires_human_decisions_and_evidence(tmp_path):
+    from orchestrator.testing_agent.founder_actions import action_states, transition_action
+
+    history = tmp_path / ".ascm_history"
+    history.mkdir()
+    proposal = {
+        "action_id": "action-1", "action": "Conduct discovery interviews.",
+        "status": "proposed", "approved": False, "executed": False,
+    }
+    (history / "founder_actions.jsonl").write_text(json.dumps(proposal) + "\n")
+    approved = transition_action(tmp_path, "action-1", "approve", "founder")
+    assert approved["new_status"] == "approved"
+    started = transition_action(tmp_path, "action-1", "start", "founder")
+    assert started["new_status"] == "in_progress"
+    with pytest.raises(ValueError, match="requires an evidence_ref"):
+        transition_action(tmp_path, "action-1", "complete", "founder", evidence_ref=None)
+    completed = transition_action(
+        tmp_path, "action-1", "complete", "founder", evidence_ref="interview-notes:batch-1"
+    )
+    assert completed["new_status"] == "completed"
+    assert completed["executed_by_this_module"] is False
+    final_state = action_states(tmp_path)["action-1"]
+    assert final_state["current_status"] == "completed"
+    assert final_state["approved"] is True
+    assert final_state["executed"] is True
+    assert final_state["completion_evidence_ref"] == "interview-notes:batch-1"
+
+
+def test_outcome_ledger_requires_verifier_and_evidence_and_preserves_records(tmp_path):
+    from orchestrator.testing_agent.outcome_ledger import record_verified_outcome
+
+    with pytest.raises(ValueError, match="evidence_ref is required"):
+        record_verified_outcome(tmp_path, "customer_reply", "", "founder")
+    first = record_verified_outcome(
+        tmp_path, "customer_interview", "interview-notes:customer-1", "founder",
+        notes="Customer interview completed; no purchase commitment claimed.",
+    )
+    second = record_verified_outcome(
+        tmp_path, "meeting_booked", "calendar-event:meeting-1", "founder",
+    )
+    ledger = json.loads((tmp_path / ".ascm_history" / "gtm_outcomes.json").read_text())
+    assert len(ledger) == 2
+    assert first["verified"] is True and second["verified_by"] == "founder"
+    assert ledger[0]["evidence_ref"] == "interview-notes:customer-1"
+    assert ledger[1]["event_type"] == "meeting_booked"
+
+
+def test_outcome_ledger_refuses_to_overwrite_corrupt_ledger(tmp_path):
+    from orchestrator.testing_agent.outcome_ledger import record_verified_outcome
+
+    history = tmp_path / ".ascm_history"
+    history.mkdir()
+    path = history / "gtm_outcomes.json"
+    path.write_text("{not valid json")
+    with pytest.raises(ValueError, match="refusing to overwrite"):
+        record_verified_outcome(tmp_path, "customer_reply", "crm:reply-1", "founder")
+    assert path.read_text() == "{not valid json"
