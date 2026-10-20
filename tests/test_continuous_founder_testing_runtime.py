@@ -52,6 +52,7 @@ def test_product_agent_grills_and_simulated_founder_answers_in_sequence(tmp_path
     ])
     runtime = ContinuousFounderTestingRuntime(
         tmp_path, profile=FounderProfile(), client=client, rounds_per_session=4,
+        review_delay_seconds=0,
     )
     result = runtime.run_product_session("target user")
     assert result["is_clear"] is True
