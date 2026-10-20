@@ -203,12 +203,13 @@ class ASCMJsonRpcClient:
         if body.get("error"):
             raise RuntimeError(f"A2A {agent_id} request failed: {body['error']}")
         result = body.get("result", {})
+        task = result.get("task", result) if isinstance(result, dict) else result
         # Task history contains the founder's prompt as well as the agent's reply.
         # Prefer the response artifacts explicitly so we never answer with our own prompt.
-        artifacts = result.get("artifacts", []) if isinstance(result, dict) else []
+        artifacts = task.get("artifacts", []) if isinstance(task, dict) else []
         texts = self._collect_text(artifacts)
         if not texts:
-            texts = self._collect_text(result)
+            texts = self._collect_text(task)
         if not texts:
             raise RuntimeError(f"A2A {agent_id} response contained no text artifact.")
         return texts[-1].strip()
