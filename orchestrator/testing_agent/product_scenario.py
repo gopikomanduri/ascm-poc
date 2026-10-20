@@ -258,6 +258,59 @@ def evaluate_agent_output(agent_id: str, text: str, expected_terms: tuple[str, .
         "findings": findings,
     }
 
+def _parse_challenge_review(reviewer_id: str, raw: str, expected_targets: list[str]) -> dict[str, Any]:
+    """Fail closed unless a reviewer explicitly covers every other agent artifact."""
+    try:
+        start, end = raw.find("{"), raw.rfind("}")
+        if start < 0 or end <= start:
+            raise ValueError("response is not a JSON object")
+        payload = json.loads(raw[start:end + 1])
+    except (ValueError, json.JSONDecodeError) as exc:
+        return {"reviewer_id": reviewer_id, "status": "review_required", "schema_valid": False,
+                "findings": [f"Invalid adversarial review JSON: {exc}"], "reviews": [], "non_clear_findings": []}
+    if not isinstance(payload, dict) or payload.get("reviewer") != reviewer_id:
+        return {"reviewer_id": reviewer_id, "status": "review_required", "schema_valid": False,
+                "findings": ["Reviewer identity is missing or mismatched."], "reviews": [], "non_clear_findings": []}
+    reviews = payload.get("reviews") if isinstance(payload.get("reviews"), list) else []
+    by_target: dict[str, dict[str, Any]] = {}
+    findings: list[str] = []
+    allowed = {"CLEAR", "CONCERN", "BLOCK"}
+    for item in reviews:
+        if not isinstance(item, dict):
+            findings.append("Review item is not an object.")
+            continue
+        target = str(item.get("target_agent", "")).strip()
+        if not target or target in by_target:
+            findings.append("Review contains a missing or duplicate target agent.")
+            continue
+        by_target[target] = item
+        if item.get("verdict") not in allowed:
+            findings.append(f"{target}: verdict must be CLEAR, CONCERN, or BLOCK.")
+        if not str(item.get("reason", "")).strip() or not str(item.get("evidence", "")).strip():
+            findings.append(f"{target}: verdict must cite an artifact-specific reason and evidence.")
+    expected = set(expected_targets)
+    actual = set(by_target)
+    if actual != expected:
+        if expected - actual:
+            findings.append("Reviewer omitted target agents: " + ", ".join(sorted(expected - actual)))
+        if actual - expected:
+            findings.append("Reviewer included unexpected targets: " + ", ".join(sorted(actual - expected)))
+    non_clear = [{"target_agent": target, "verdict": item.get("verdict"),
+                  "severity": item.get("severity", "unspecified"),
+                  "reason": str(item.get("reason", ""))[:500],
+                  "evidence": str(item.get("evidence", ""))[:500]}
+                 for target, item in by_target.items() if item.get("verdict") in {"CONCERN", "BLOCK"}]
+    schema_valid = (not findings and actual == expected and
+                    all(item.get("verdict") in allowed and str(item.get("reason", "")).strip()
+                        and str(item.get("evidence", "")).strip() for item in by_target.values()))
+    if non_clear:
+        findings.append(f"Adversarial reviewer flagged {len(non_clear)} concern/block finding(s).")
+    return {"reviewer_id": reviewer_id,
+            "status": "passed" if schema_valid and not non_clear else "review_required",
+            "schema_valid": schema_valid, "findings": findings,
+            "reviews": [by_target[t] for t in expected_targets if t in by_target],
+            "non_clear_findings": non_clear}
+
 def run_product_scenario(
     client: ASCMJsonRpcClient,
     product_brief: dict[str, Any],
