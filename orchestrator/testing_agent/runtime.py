@@ -889,7 +889,14 @@ class ContinuousFounderTestingRuntime:
             self.journey_events,
             workspace=self.workspace,
         )
-        if os.getenv("ASCM_CODE_REPAIR_ENABLED", "0") == "1" and assessment.get("status") == "remediation_required":
+        repair_enabled = os.getenv("ASCM_CODE_REPAIR_ENABLED", "0") == "1"
+        if repair_enabled and assessment.get("status") == "blocked_p0":
+            assessment["code_repair"] = {
+                "status": "blocked_p0",
+                "reason": "P0 consent/security finding: stop and escalate; automatic code repair is prohibited.",
+                "human_merge_required": True,
+            }
+        elif repair_enabled and assessment.get("status") == "remediation_required":
             # One finding per Testing Agent report; the runner enforces one lifetime attempt per finding.
             candidate = next((item for item in assessment.get("findings", []) if item.get("severity") != "P0"), None)
             if candidate is not None and self.client is not None:
