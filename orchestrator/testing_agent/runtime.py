@@ -1028,8 +1028,7 @@ class ContinuousFounderTestingRuntime:
         for item in outcome_records:
             evidence_ref = item.get("evidence_ref") or item.get("source_evidence_ref") or item.get("evidence_uri")
             is_verified = item.get("verified") is True or item.get("verification_status") == "verified"
-            if (item.get("event_type") in {"customer_reply", "meeting_booked", "qualified_opportunity", "conversion"}
-                    and is_verified and evidence_ref):
+            if is_verified and evidence_ref:
                 verified_count += 1
             events.append(JourneyEvent(
                 item["event_type"], "outcome_ledger",
