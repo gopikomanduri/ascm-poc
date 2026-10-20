@@ -335,7 +335,14 @@ class GTMStatusAgent:
                                 "audience, and risks for a LinkedIn draft. Do not invent customers, traction, "
                                 "revenue, conversions, or outcomes. Do not publish or claim permission. "
                                 "Return concise internal recommendations only. Status evidence: "
-                                + json.dumps(status, sort_keys=True),
+                                + json.dumps({
+                                    "latest_commit": status.get("latest_commit"),
+                                    "testing_rounds": status.get("testing_rounds", 0),
+                                    "product_questions": status.get("product_questions", 0),
+                                    "sessions_completed": status.get("sessions_completed", 0),
+                                    "open_finding_count": len(status.get("open_findings", [])),
+                                    "a2a_gateway_status": status.get("a2a_gateway_status", "unknown"),
+                                }, sort_keys=True),
                                 request_id,
                             )
                         except Exception as exc:
@@ -387,7 +394,6 @@ class GTMStatusAgent:
 
     @staticmethod
     def _build_draft(status: dict[str, Any]) -> str:
-        commit = status.get("latest_commit") or "latest development work"
         rounds = int(status.get("testing_rounds", 0) or 0)
         questions = int(status.get("product_questions", 0) or 0)
         return (
