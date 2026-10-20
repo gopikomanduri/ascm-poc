@@ -55,6 +55,8 @@ def _claim_attempt(root: Path, key: str) -> bool:
             return False
     else:
         data = {}
+    if not isinstance(data, dict):
+        return False
     attempts = data.get(key, [])
     if not isinstance(attempts, list) or len(attempts) >= 1:
         return False
