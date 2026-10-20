@@ -96,3 +96,16 @@ def test_one_agent_failure_is_recorded_and_does_not_abort_remaining_stages(tmp_p
     assert report["passed"] is False
     assert report["handoffs"][1]["terminal_event"] == "handoff_failed"
     assert client.calls[-1][0] == AGENT_STAGES[2][0]
+
+
+def test_scenario_id_cannot_escape_artifact_directory(tmp_path):
+    client = FakeA2AClient()
+    try:
+        run_product_scenario(
+            client, DEFAULT_PRODUCT_BRIEF, workspace=tmp_path, scenario_id="../../outside",
+            stages=AGENT_STAGES[:1],
+        )
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "safe" in str(exc)
+    assert not (tmp_path.parent / "outside").exists()
