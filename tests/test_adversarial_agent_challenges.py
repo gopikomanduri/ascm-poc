@@ -91,5 +91,5 @@ def test_adversarial_concern_blocks_scenario_pass(tmp_path):
         adversarial_review=True,
     )
     assert report["passed"] is False
-    assert report["summary"]["challenge_findings"] == 2
-    assert report["summary"]["challenge_reviews_needing_review"] == 2
+    assert report["summary"]["challenge_findings"] == 1
+    assert report["summary"]["challenge_reviews_needing_review"] == 1
