@@ -71,3 +71,16 @@ Example story:
 [2026-10-20T10:24:50+00:00] [session=...] #0002 MENTOR AGENT → TESTING AGENT | RESPONSE
     Validate the core assumption before building more...
 ```
+
+
+## Bounded self-healing
+
+The Testing Agent validates ProductAgent responses at the A2A consumer boundary. Recognized response variants (a single question string, a question object with `question`/`text`/`prompt`/`label`, or a list of those) are normalized deterministically. If the shape is unknown, the runtime asks ProductAgent for one schema-only correction and validates the corrected response again.
+
+- The retry budget is exactly one per ProductAgent round; no infinite retry loop.
+- A successful repair is timestamped in `.ascm_history/conversation_story.log` and `.ascm_history/conversation_story.jsonl`, then the interview continues normally.
+- A failed repair remains a finding and does not count as a completed round or a successful acceptance check.
+- The report exposes `self_healing.attempts`, `successes`, `failures`, and the retry policy.
+- This recovery repairs an agent response contract; it does not edit repository source code, alter permissions, approve external actions, or bypass tests/security gates.
+
+This is the first self-healing layer. Broader code-level repair should run only in an isolated worktree/branch, create a minimal patch plus regression test, run the complete test and security gates, and open a PR. It must not push directly to `main`, weaken a failing gate, or treat a green repair attempt as proof until the tests and acceptance criteria pass.
