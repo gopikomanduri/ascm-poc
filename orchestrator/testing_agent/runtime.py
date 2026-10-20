@@ -209,9 +209,10 @@ class GoalAgent:
     """Continuously track ASCM repository and testing progress with evidence."""
 
     def __init__(self, workspace: Path, status_path: Path, stop: threading.Event, interval: float,
-                 status_changed: threading.Event | None = None):
+                 status_changed: threading.Event | None = None, base_url: str | None = None):
         self.workspace, self.status_path, self.stop, self.interval = workspace, status_path, stop, interval
         self.status_changed = status_changed
+        self.base_url = base_url.rstrip("/") if base_url else None
 
     def snapshot(self) -> dict[str, Any]:
         def git(*args: str) -> str:
@@ -225,8 +226,25 @@ class GoalAgent:
                 return ""
 
         report = read_json(self.workspace / ".ascm_history" / "testing_agent_report.json", {})
+        gateway_status = "not_checked"
+        agent_ids: list[str] = []
+        if self.base_url:
+            try:
+                response = httpx.get(self.base_url + "/.well-known/agent-card.json", timeout=1.0)
+                response.raise_for_status()
+                card = response.json()
+                gateway_status = "healthy"
+                agent_ids = sorted(
+                    skill.get("id") for skill in card.get("skills", [])
+                    if isinstance(skill, dict) and isinstance(skill.get("id"), str)
+                )
+            except (httpx.HTTPError, ValueError):
+                gateway_status = "unavailable"
         snapshot = {
             "observed_at": utc_now(),
+            "a2a_gateway_url": self.base_url,
+            "a2a_gateway_status": gateway_status,
+            "a2a_agent_ids": agent_ids,
             "workspace": str(self.workspace),
             "branch": git("branch", "--show-current") or "unknown",
             "git_status": git("status", "--short")[:12000],
@@ -473,7 +491,7 @@ class ContinuousFounderTestingRuntime:
 
     def run(self, *, sessions: int = 0) -> dict[str, Any]:
         self.history.mkdir(parents=True, exist_ok=True)
-        goal = GoalAgent(self.workspace, self.status_path, self.stop, self.poll_interval, self.status_changed)
+        goal = GoalAgent(self.workspace, self.status_path, self.stop, self.poll_interval, self.status_changed, self.client.base_url)
         gtm = GTMStatusAgent(self.workspace, self.status_path, self.stop,
                              self.permission_requests, self.permission_responses, self.poll_interval,
                              self.status_changed)
