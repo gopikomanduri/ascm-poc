@@ -804,7 +804,9 @@ class ContinuousFounderTestingRuntime:
 
     def run_product_session(self, focus: str) -> dict[str, Any]:
         self.transcript = []
-        final = {"is_clear": False, "confidence_score": 0.0, "understanding": "", "clarification_questions": []}
+        final = {"is_clear": False, "confidence_score": 0.0, "understanding": "",
+                 "clarification_questions": [], "checkpoint_clarification_items": []}
+        seen_questions: list[str] = []
         for round_number in range(1, self.rounds_per_session + 1):
             self._answer_permission_requests()
             prompt = self._product_prompt(focus)
@@ -828,44 +830,81 @@ class ContinuousFounderTestingRuntime:
                     "product_discovery_completed", "product_agent",
                     evidence_ref=f"product-discovery:{self.session_id}:{round_number}",
                 ))
-            if not questions:
-                if result.get("is_clear") is True and float(result.get("confidence_score", 0)) >= 0.90:
+                if float(result.get("confidence_score", 0)) >= 0.90:
+                    self.open_questions.extend(
+                        item for item in result.get("checkpoint_clarification_items", [])
+                        if isinstance(item, str) and item.strip()
+                    )
                     print(f"[PRODUCT AGENT] Focus '{focus}' is clear at confidence {result.get('confidence_score')}.", flush=True)
                     break
+            if not questions:
                 self.findings.append(f"ProductAgent returned no actionable question and did not establish clarity for focus '{focus}'.")
+                self.open_questions.extend(
+                    item for item in result.get("checkpoint_clarification_items", [])
+                    if isinstance(item, str) and item.strip()
+                )
                 print(f"[TESTING AGENT] FAIL: ProductAgent returned no question and did not establish clarity for '{focus}'.", flush=True)
                 break
             question = questions[0].strip()
             if not question:
                 self.findings.append(f"ProductAgent returned an empty clarification question for '{focus}'.")
                 break
+            duplicate = next((prior for prior in seen_questions
+                              if _text_similarity(question, prior) >= 0.78), None)
+            if duplicate is not None:
+                note = f"ProductAgent repeated a near-duplicate question in focus '{focus}'; interview stopped and the item remains open: {question}"
+                self.findings.append(note)
+                self.open_questions.append(question)
+                final["is_clear"] = False
+                final["checkpoint_clarification_items"] = list(dict.fromkeys(
+                    list(result.get("checkpoint_clarification_items", [])) + [question]
+                ))
+                self.story_log.record("TESTING AGENT", "PRODUCT AGENT", "repeated_question_blocked", note,
+                                      metadata={"focus": focus, "round": round_number, "correlation_id": self.session_id})
+                break
+            seen_questions.append(question)
             answer = self.profile.answer(question)
             self.questions_asked += 1
             self.journey_events.append(JourneyEvent(
                 "product_question", "product_agent",
                 evidence_ref=f"product-question:{self.session_id}:{self.questions_asked}",
             ))
+            previous_question = self.transcript[-2]["content"] if len(self.transcript) >= 2 else None
+            previous_answer = self.transcript[-1]["content"] if self.transcript else None
+            repeated_off_topic_answer = (
+                previous_answer is not None
+                and _normalized_text(answer) == _normalized_text(previous_answer)
+                and previous_question is not None
+                and _text_similarity(question, previous_question) < 0.60
+            )
             self.transcript.extend([
                 {"role": "assistant", "content": question},
                 {"role": "user", "content": answer},
             ])
             exchange_metadata = {
                 "task_id": f"product-interview-{self.session_id}-{round_number}",
-                "correlation_id": self.session_id,
-                "focus": focus,
-                "round": round_number,
+                "correlation_id": self.session_id, "focus": focus, "round": round_number,
             }
-            self.story_log.record("PRODUCT AGENT", "TESTING AGENT", "question", question,
-                                  metadata=exchange_metadata)
-            self.story_log.record("TESTING AGENT (SIMULATED FOUNDER)", "PRODUCT AGENT", "answer", answer,
-                                  metadata=exchange_metadata)
+            self.story_log.record("PRODUCT AGENT", "TESTING AGENT", "question", question, metadata=exchange_metadata)
+            self.story_log.record("TESTING AGENT (SIMULATED FOUNDER)", "PRODUCT AGENT", "answer", answer, metadata=exchange_metadata)
             print(f"[{utc_now()}] [PRODUCT AGENT → TESTING AGENT] {question}", flush=True)
             print(f"[{utc_now()}] [TESTING AGENT → PRODUCT AGENT] {answer}\n", flush=True)
-            if self.review_delay_seconds:
-                print(
-                    f"[TESTING AGENT] Pausing {self.review_delay_seconds:g} seconds for your review before the next exchange.",
-                    flush=True,
+            if repeated_off_topic_answer:
+                note = (
+                    f"Simulated founder repeated an earlier answer to a materially different question in focus '{focus}'. "
+                    "The new question remains unresolved; the interview stopped rather than treating repetition as progress."
                 )
+                self.findings.append(note)
+                self.open_questions.append(question)
+                final["is_clear"] = False
+                final["checkpoint_clarification_items"] = list(dict.fromkeys(
+                    list(result.get("checkpoint_clarification_items", [])) + [question]
+                ))
+                self.story_log.record("TESTING AGENT", "PRODUCT AGENT", "unresolved_answer_checkpointed", note,
+                                      metadata={**exchange_metadata, "answer_repeated": True})
+                break
+            if self.review_delay_seconds:
+                print(f"[TESTING AGENT] Pausing {self.review_delay_seconds:g} seconds for your review before the next exchange.", flush=True)
                 time.sleep(self.review_delay_seconds)
         return final
 
