@@ -20,7 +20,7 @@ def test_a2a_jsonrpc_message_send_routes_through_governed_coordinator(monkeypatc
             "params": {
                 "message": {
                     "messageId": "message-1",
-                    "role": "user",
+                    "role": "ROLE_USER",
                     "parts": [{"text": "Review this product idea"}],
                     "metadata": {"ascm": {"agent_id": "product"}},
                 }
