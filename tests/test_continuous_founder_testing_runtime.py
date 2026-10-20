@@ -418,3 +418,43 @@ def test_gtm_specialist_request_and_response_are_written_to_conversation_story(t
     assert handoff[0]["metadata"]["correlation_id"] == handoff[1]["metadata"]["correlation_id"]
     assert handoff[0]["speaker"] == "GTM STATUS AGENT"
     assert handoff[1]["speaker"] == "GTM AGENT"
+
+
+def test_gtm_specialist_failure_is_logged_in_conversation_story(tmp_path):
+    import queue
+    import threading
+
+    class BrokenGTMClient:
+        def send(self, agent_id, prompt, session_id):
+            raise TimeoutError("simulated GTM timeout")
+
+    history = tmp_path / ".ascm_history"
+    history.mkdir()
+    status_path = history / "testing_agent_status.json"
+    status_path.write_text(json.dumps({
+        "latest_commit": "abc123 test",
+        "testing_rounds": 1,
+        "product_questions": 1,
+        "sessions_completed": 1,
+        "open_findings": [],
+    }))
+    stop = threading.Event()
+    story = ConversationStoryLog(history, "gtm-failure-session")
+    agent = GTMStatusAgent(
+        tmp_path, status_path, stop, queue.Queue(), queue.Queue(), 0.5,
+        client=BrokenGTMClient(), story_log=story,
+    )
+    timer = threading.Timer(0.25, stop.set)
+    timer.start()
+    try:
+        agent.run()
+    finally:
+        stop.set()
+        timer.cancel()
+
+    events = [json.loads(line) for line in story.jsonl_path.read_text().splitlines()]
+    handoff = [event for event in events if event["metadata"].get("channel") == "internal_gtm_review"]
+    assert [event["event_type"] for event in handoff] == ["request", "request_failed"]
+    assert handoff[0]["metadata"]["task_id"] == handoff[1]["metadata"]["task_id"]
+    assert handoff[0]["metadata"]["correlation_id"] == handoff[1]["metadata"]["correlation_id"]
+    assert "TimeoutError" in handoff[1]["message"]
