@@ -46,9 +46,13 @@ def _ledger(root: Path) -> Path:
 
 def _claim_attempt(root: Path, key: str) -> bool:
     path = _ledger(root) / "ascm-controlled-repair-attempts.json"
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # A corrupt budget ledger must not silently reset the retry allowance.
+            return False
+    else:
         data = {}
     attempts = data.get(key, [])
     if not isinstance(attempts, list) or len(attempts) >= 1:
