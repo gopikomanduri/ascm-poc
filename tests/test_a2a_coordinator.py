@@ -57,6 +57,11 @@ def test_proposed_side_effect_requires_scoped_approval():
     authorized = ApprovalScope(required=True, actions=("publish_campaign",),
                                approved_by="founder", approved_at="2026-10-20T10:00:00+05:30",
                                approval_id="approval-1")
+    wrong_scope = ApprovalScope(required=True, actions=("draft_campaign",),
+                                approved_by="founder", approved_at="2026-10-20T10:00:00+05:30",
+                                approval_id="approval-2")
+    with pytest.raises(HandoffError, match="scoped approval"):
+        coordinator.dispatch(envelope(recipient="gtm", proposed_action="publish_campaign", approval_scope=wrong_scope))
     task = envelope(recipient="gtm", proposed_action="publish_campaign", approval_scope=authorized)
     assert coordinator.dispatch(task)["published"] is True
 
