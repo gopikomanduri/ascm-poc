@@ -73,7 +73,7 @@ def test_product_scenario_calls_real_stages_records_handoffs_and_report(tmp_path
     client = FakeA2AClient()
     report = run_product_scenario(
         client, DEFAULT_PRODUCT_BRIEF, workspace=tmp_path, scenario_id="test-product-1",
-        stages=AGENT_STAGES[:3],
+        stages=AGENT_STAGES[:3], adversarial_review=False,
     )
     assert [call[0] for call in client.calls] == [stage[0] for stage in AGENT_STAGES[:3]]
     assert report["summary"]["agents_requested"] == 3
@@ -103,7 +103,7 @@ def test_scenario_id_cannot_escape_artifact_directory(tmp_path):
     try:
         run_product_scenario(
             client, DEFAULT_PRODUCT_BRIEF, workspace=tmp_path, scenario_id="../../outside",
-            stages=AGENT_STAGES[:1],
+            stages=AGENT_STAGES[:1], adversarial_review=False,
         )
         assert False, "expected ValueError"
     except ValueError as exc:
