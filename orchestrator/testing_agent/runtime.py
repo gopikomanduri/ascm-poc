@@ -29,6 +29,7 @@ from typing import Any, Callable
 import httpx
 from orchestrator.testing_agent.founder_journey import FounderJourneyEvaluator, JourneyEvent
 from orchestrator.self_healing_controller import assess_testing_results
+from orchestrator.controlled_self_healer import route_owner, run_controlled_repair
 
 logger = logging.getLogger("ASCM.TestingAgent")
 
@@ -888,6 +889,54 @@ class ContinuousFounderTestingRuntime:
             self.journey_events,
             workspace=self.workspace,
         )
+        if os.getenv("ASCM_CODE_REPAIR_ENABLED", "0") == "1" and assessment.get("status") == "remediation_required":
+            # One finding per Testing Agent report; the runner enforces one lifetime attempt per finding.
+            candidate = next((item for item in assessment.get("findings", []) if item.get("severity") != "P0"), None)
+            if candidate is not None and self.client is not None:
+                def proposal_provider(finding: dict[str, Any], context: str) -> str:
+                    agent_id = route_owner(str(finding.get("remediation_owner", "orchestrator")))
+                    if not agent_id:
+                        raise RuntimeError("No configured A2A repair agent for this finding owner.")
+                    prompt = (
+                        "You are ASCM's bounded repair agent. Return ONLY a unified diff patch. "
+                        "Include a regression test under tests/. Do not modify product requirements, "
+                        "security policies, CI gates, dependencies, permissions, or publishing controls.\n\n"
+                        + context
+                    )
+                    return self.client.send(agent_id, prompt, self.session_id)
+
+                repair_result = run_controlled_repair(
+                    self.workspace,
+                    candidate,
+                    proposal_provider,
+                    acceptance_command=os.getenv("ASCM_REPAIR_ACCEPTANCE_COMMAND"),
+                    open_pr=os.getenv("ASCM_CODE_REPAIR_OPEN_PR", "0") == "1",
+                )
+                assessment["code_repair"] = repair_result
+                self.story_log.record(
+                    "ASCM SELF-HEALING CONTROLLER", str(repair_result.get("routed_agent") or "ENGINEERING AGENT"),
+                    "controlled_repair_" + str(repair_result.get("status", "unknown")),
+                    str(repair_result.get("reason", "Controlled repair attempt completed.")),
+                    metadata={
+                        "finding_id": repair_result.get("finding_id"),
+                        "branch": repair_result.get("branch"),
+                        "changed_files": repair_result.get("changed_files", []),
+                        "checks": {key: value.get("passed") for key, value in repair_result.get("checks", {}).items()},
+                        "pr_url": repair_result.get("pr_url"),
+                    },
+                )
+            else:
+                assessment["code_repair"] = {
+                    "status": "blocked",
+                    "reason": "No non-P0 finding or no A2A client is available; escalate for human triage.",
+                    "human_merge_required": True,
+                }
+        else:
+            assessment["code_repair"] = {
+                "status": "disabled",
+                "reason": "Set ASCM_CODE_REPAIR_ENABLED=1 to opt into isolated code repair.",
+                "human_merge_required": True,
+            }
         report["self_healing_controller"] = assessment
         # Intent drift is a product acceptance failure even if ordinary tests are green.
         report["acceptance_passed"] = (
