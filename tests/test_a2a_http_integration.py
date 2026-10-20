@@ -13,6 +13,7 @@ def test_a2a_jsonrpc_message_send_routes_through_governed_coordinator(monkeypatc
     client = TestClient(create_app(host="127.0.0.1", port=8090))
     response = client.post(
         "/a2a/jsonrpc",
+        headers={"A2A-Version": "1.0"},
         json={
             "jsonrpc": "2.0",
             "id": "request-1",
