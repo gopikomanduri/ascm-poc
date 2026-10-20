@@ -1,3 +1,4 @@
+from orchestrator.agents import all_agents
 from orchestrator.a2a.server import (
     AGENT_ALIASES,
     available_agent_ids,
@@ -41,3 +42,27 @@ def test_a2a_gateway_refuses_remote_bind_without_explicit_opt_in(monkeypatch):
         assert "loopback" in str(exc)
     else:
         raise AssertionError("Remote binding should require explicit opt-in")
+
+
+
+def test_every_advertised_specialist_resolves_to_an_implemented_agent():
+    # The founder mentor lives outside all_agents.py; every other target must
+    # resolve to a real class or compatibility alias in the central agent module.
+    for agent_id, class_name in AGENT_ALIASES.items():
+        if agent_id == "mentor":
+            assert class_name == "ASCMProactiveMentor"
+        else:
+            assert getattr(all_agents, class_name, None) is not None, (
+                f"A2A advertises {agent_id!r} but {class_name!r} is not implemented"
+            )
+
+
+def test_a2a_roster_includes_the_implemented_specialists_without_placeholder_ids():
+    ids = set(available_agent_ids())
+    assert {
+        "discovery", "product", "design", "architect", "planner", "database",
+        "coder", "security_auditor", "business_strategy", "gtm", "revenue_roi",
+        "architecture_review", "code_review", "mentor",
+    } <= ids
+    assert {"checker", "compliance", "qa", "sre", "apm", "oncall", "sales",
+            "marketing", "advertising", "seo"} <= ids

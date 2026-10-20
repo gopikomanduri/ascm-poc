@@ -13,6 +13,8 @@ import os
 from typing import Any
 
 from fastapi import FastAPI
+from orchestrator.a2a.contracts import HandoffEnvelope
+from orchestrator.a2a.coordinator import A2ACoordinator, HandoffError
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
@@ -40,6 +42,7 @@ logger = logging.getLogger("ASCM.A2A")
 
 # Keep aliases stable even if Python class names or module paths change.
 AGENT_ALIASES = {
+    # Keep this list aligned with implemented classes in orchestrator.agents.all_agents.
     "discovery": "DiscoveryAgent",
     "product": "ProductAgent",
     "business_strategy": "BusinessStrategyAgent",
@@ -69,7 +72,7 @@ AGENT_DESCRIPTIONS = {
     "discovery": "Classify repository topology and cross-repository dependencies.",
     "product": "Clarify requirements, identify ambiguity and produce a product specification.",
     "business_strategy": "Produce domain-specific market and go-to-market strategy.",
-    "gtm": "Produce domain-specific market and go-to-market strategy.",
+    "gtm": "Alias for the Business Strategy specialist's go-to-market capabilities.",
     "revenue_roi": "Analyze ROI, pricing, revenue metrics and unit economics.",
     "design": "Produce high-level and low-level software designs.",
     "architect": "Decompose requirements into implementation tasks and contracts.",
@@ -150,6 +153,13 @@ def _extract_prompt(context: RequestContext) -> str:
 def _requested_agent(context: RequestContext) -> str:
     message = context.message
     metadata = getattr(message, "metadata", None) or {}
+    if not isinstance(metadata, dict):
+        # A2A SDK v1 represents protobuf Struct metadata as a message, not a dict.
+        try:
+            from google.protobuf.json_format import MessageToDict
+            metadata = MessageToDict(metadata)
+        except (TypeError, ValueError):
+            metadata = {}
     ascm_metadata = metadata.get("ascm", {}) if isinstance(metadata, dict) else {}
     agent_id = ascm_metadata.get("agent_id") if isinstance(ascm_metadata, dict) else None
     if not isinstance(agent_id, str) or agent_id not in AGENT_ALIASES:
@@ -228,7 +238,16 @@ def _run_specialist(agent_id: str, prompt: str) -> str:
 
 
 class ASCMGatewayExecutor(AgentExecutor):
-    """A2A executor which routes messages to the named ASCM specialist."""
+    """A2A executor which routes messages through ASCM governance before dispatch."""
+
+    def __init__(self, coordinator: A2ACoordinator | None = None):
+        if coordinator is None:
+            handlers = {
+                agent_id: (lambda handoff, selected=agent_id: {"answer": _run_specialist(selected, handoff.goal)})
+                for agent_id in AGENT_ALIASES
+            }
+            coordinator = A2ACoordinator(handlers=handlers, max_attempts=2)
+        self.coordinator = coordinator
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task_id = context.task_id
@@ -246,10 +265,22 @@ class ASCMGatewayExecutor(AgentExecutor):
             )
         )
         await updater.start_work()
-        agent_id = _requested_agent(context)
-        prompt = _extract_prompt(context)
+        agent_id = "unknown"
         try:
-            answer = await __import__("asyncio").to_thread(_run_specialist, agent_id, prompt)
+            agent_id = _requested_agent(context)
+            prompt = _extract_prompt(context)
+            handoff = HandoffEnvelope(
+                goal=prompt,
+                sender="a2a_gateway",
+                recipient=agent_id,
+                expected_output="Specialist response as text",
+                task_id=task_id,
+                correlation_id=context_id,
+            )
+            coordinated = await __import__("asyncio").to_thread(
+                self.coordinator.dispatch, handoff, timeout_seconds=120.0
+            )
+            answer = coordinated["answer"]
         except Exception as exc:
             logger.exception("A2A specialist execution failed: %s", agent_id)
             await updater.add_artifact(

@@ -17,17 +17,17 @@ The server binds to loopback by default. Do not expose it to a network unless it
 
 ## Routing a task
 
-Use a standard A2A 1.0 `message/send` JSON-RPC request. The A2A Message must contain a text Part and the ASCM extension metadata:
+Use the A2A SDK v1 JSON-RPC binding shown below. The SDK version pinned by the project dispatches the request as `SendMessage`; the v1.0 request must include the `A2A-Version: 1.0` HTTP header. Use the official A2A client for interoperability instead of hard-coding transport method names in production clients. The A2A Message must contain a text Part and the ASCM extension metadata:
 
 ```json
 {
   "jsonrpc": "2.0",
   "id": "request-1",
-  "method": "message/send",
+  "method": "SendMessage",
   "params": {
     "message": {
       "messageId": "message-1",
-      "role": "user",
+      "role": "ROLE_USER",
       "parts": [{"text": "Review this feature idea and identify missing requirements."}],
       "metadata": {"ascm": {"agent_id": "product"}}
     }
@@ -35,7 +35,7 @@ Use a standard A2A 1.0 `message/send` JSON-RPC request. The A2A Message must con
 }
 ```
 
-Supported IDs are listed in the Agent Card: discovery, product, business_strategy, revenue_roi, design, architect, architecture_review, planner, database, coder, security_auditor, code_review, checker, compliance, qa, sre, apm, oncall, sales, marketing, advertising, seo and mentor. `gtm` is accepted as a routing alias for `business_strategy`, but is not duplicated in the Agent Card.
+Supported IDs are listed in the Agent Card: discovery, product, business_strategy, revenue_roi, design, architect, architecture_review, planner, database, coder, security_auditor, code_review, checker, compliance, qa, sre, apm, oncall, sales, marketing, advertising, seo and mentor. `gtm` is accepted as a routing alias for `business_strategy`, but is not duplicated in the Agent Card. The roster is expected to stay aligned with implemented specialist classes in `orchestrator.agents.all_agents` plus the separately implemented Founder Mentor.
 
 ## Scope and safety boundaries
 
@@ -46,3 +46,22 @@ Supported IDs are listed in the Agent Card: discovery, product, business_strateg
 - Task state is currently in memory and is lost when the gateway restarts. This is a local interoperability slice, not yet a production multi-user service.
 - The gateway advertises JSON-RPC only. Add other A2A bindings only after interoperability tests justify them.
 - Remote deployment still requires authenticated identity, per-agent authorization, rate limiting, durable task storage, observability and end-to-end tests with real A2A clients before production use.
+
+
+## ASCM governance envelope (extension profile v1.0)
+
+Standard A2A remains the transport and task lifecycle. ASCM adds a versioned governance envelope in `orchestrator/a2a/contracts.py` with task and correlation IDs, sender/recipient, goal, evidence with confidence, expected output, proposed action, scoped approval, status, result/error and follow-up. The extension is deliberately versioned independently of the A2A protocol.
+
+The first local coordinator is in `orchestrator/a2a/coordinator.py`. It validates the recipient, records audit events, retries transient handler errors within a bounded attempt count, rejects idempotency-key reuse with a different payload, returns prior results for identical replays, escalates conflicting recommendations, and blocks proposed side effects unless the approval record names the exact action and includes an approver, timestamp and approval ID.
+
+**Important limits:** the coordinator is wired into the A2A server request path, and the HTTP integration test exercises JSON-RPC through that path. It is still an in-process foundation: it does not enforce authenticated caller identity, forcibly interrupt a handler that exceeds its deadline, or persist idempotency/audit state across restarts. Do not expose it as production-ready. Before production, use durable transactional storage, add caller/agent authorization and cancellation, and expand real-client interoperability tests.
+
+## Testing Agent strategy
+
+The Testing Agent is an independent evaluator, not an execution approver. Acceptance coverage must exercise founder journeys through the real ASCM interface and verify:
+- Mentor prompts are relevant to the founder's stated goal and distinguish evidence from assumptions.
+- GTM proposals are not reported as published/sent until a permitted, verified action occurs.
+- External actions require explicit, action-scoped consent; routing or recommendation never implies permission.
+- Handoffs retain correlation/task identity, handle retries and duplicates safely, and escalate disagreement.
+- Learning counts verified replies, meetings, qualified opportunities and conversions separately from generated assets.
+- The evaluator reports evidence and failed criteria; it cannot approve releases or grant permissions.
