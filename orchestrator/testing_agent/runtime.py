@@ -206,8 +206,10 @@ class ASCMJsonRpcClient:
 class GoalAgent:
     """Continuously track ASCM repository and testing progress with evidence."""
 
-    def __init__(self, workspace: Path, status_path: Path, stop: threading.Event, interval: float):
+    def __init__(self, workspace: Path, status_path: Path, stop: threading.Event, interval: float,
+                 status_changed: threading.Event | None = None):
         self.workspace, self.status_path, self.stop, self.interval = workspace, status_path, stop, interval
+        self.status_changed = status_changed
 
     def snapshot(self) -> dict[str, Any]:
         def git(*args: str) -> str:
@@ -234,6 +236,8 @@ class GoalAgent:
             "open_findings": report.get("open_findings", []) if isinstance(report, dict) else [],
         }
         atomic_json(self.status_path, snapshot)
+        if self.status_changed is not None:
+            self.status_changed.set()
         return snapshot
 
     def run(self) -> None:
@@ -250,9 +254,11 @@ class GTMStatusAgent:
     """Poll progress, draft a social update, and request a simulated tester decision."""
 
     def __init__(self, workspace: Path, status_path: Path, stop: threading.Event,
-                 requests: queue.Queue, responses: queue.Queue, interval: float):
+                 requests: queue.Queue, responses: queue.Queue, interval: float,
+                 status_changed: threading.Event | None = None):
         self.workspace, self.status_path, self.stop = workspace, status_path, stop
         self.requests, self.responses, self.interval = requests, responses, interval
+        self.status_changed = status_changed
         self.state_path = self.workspace / ".ascm_history" / "gtm_status_agent_state.json"
         state = read_json(self.state_path, {})
         self._last_fingerprint: str | None = state.get("last_requested_fingerprint") if isinstance(state, dict) else None
@@ -316,7 +322,11 @@ class GTMStatusAgent:
                     with result_path.open("a", encoding="utf-8") as handle:
                         handle.write(json.dumps(record, sort_keys=True) + "\n")
                     print(f"[GTM AGENT] Permission outcome: {(decision or {}).get('decision', 'no_response')}; real publishing remains disabled.", flush=True)
-            self.stop.wait(self.interval)
+            if self.status_changed is not None:
+                self.status_changed.wait(self.interval)
+                self.status_changed.clear()
+            else:
+                self.stop.wait(self.interval)
 
     @staticmethod
     def _build_draft(status: dict[str, Any]) -> str:
@@ -350,6 +360,7 @@ class ContinuousFounderTestingRuntime:
         self.stop = threading.Event()
         self.permission_requests: queue.Queue = queue.Queue()
         self.permission_responses: queue.Queue = queue.Queue()
+        self.status_changed = threading.Event()
         self.session_id = str(uuid.uuid4())
         self.transcript: list[dict[str, str]] = []
         self.findings: list[str] = []
