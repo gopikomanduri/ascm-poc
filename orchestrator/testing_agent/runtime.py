@@ -201,10 +201,15 @@ class ASCMJsonRpcClient:
         body = response.json()
         if body.get("error"):
             raise RuntimeError(f"A2A {agent_id} request failed: {body['error']}")
-        texts = self._collect_text(body.get("result", {}))
+        result = body.get("result", {})
+        # Task history contains the founder's prompt as well as the agent's reply.
+        # Prefer the response artifacts explicitly so we never answer with our own prompt.
+        artifacts = result.get("artifacts", []) if isinstance(result, dict) else []
+        texts = self._collect_text(artifacts)
+        if not texts:
+            texts = self._collect_text(result)
         if not texts:
             raise RuntimeError(f"A2A {agent_id} response contained no text artifact.")
-        # SDK task responses may repeat a prompt in metadata; prefer the last artifact text.
         return texts[-1].strip()
 
 
