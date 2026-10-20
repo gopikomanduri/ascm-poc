@@ -43,7 +43,7 @@ When enabled, it:
 1. Uses Testing Agent findings as the trigger and routes each candidate through a configured A2A repair agent.
 2. Requires a clean active checkout and creates a separate git worktree/branch; it never edits the active checkout.
 3. Allows changes only under `orchestrator/`, `products/`, and `tests/`. Product intent, docs, security policy, CI gates, dependency manifests, permissions, and publishing settings are protected.
-4. Requires a regression test, runs focused tests and the full test suite, then Bandit and pip-audit. Missing security tooling is a blocking result.
+4. Requires a regression test, limits patches to 30 KB and eight files, rejects file deletions/symlinks, runs focused tests and the full test suite, then Bandit and pip-audit. Missing security tooling is a blocking result.
 5. Requires a fresh end-to-end Testing Agent run whose report has `acceptance_passed=true` and an aligned Intent Guardian result. The original failed report is never rewritten as a pass.
 6. Records an audit event in `.ascm_history/controlled_self_healing.jsonl` and a one-attempt-per-finding ledger under the Git common directory.
 7. Can push a verified branch and open a PR only when `ASCM_CODE_REPAIR_OPEN_PR=1`; it never merges. The worktree and branch are retained for review and diagnosis.
