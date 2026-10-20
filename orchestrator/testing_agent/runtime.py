@@ -167,7 +167,8 @@ class ASCMJsonRpcClient:
             if isinstance(value.get("text"), str):
                 found.append(value["text"])
             for key, child in value.items():
-                if key != "text":
+                # A2A Part wrappers may contain a nested object under the text key.
+                if key != "text" or not isinstance(child, str):
                     found.extend(ASCMJsonRpcClient._collect_text(child))
         elif isinstance(value, list):
             for child in value:
