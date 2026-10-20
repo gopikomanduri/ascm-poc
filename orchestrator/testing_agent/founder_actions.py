@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,7 +43,13 @@ def action_states(workspace: str | Path) -> dict[str, dict[str, Any]]:
     for event in events:
         action_id = event.get("action_id")
         if action_id in states:
-            states[action_id]["current_status"] = event.get("new_status", states[action_id]["current_status"])
+            status = event.get("new_status", states[action_id]["current_status"])
+            states[action_id]["current_status"] = status
+            states[action_id]["approved"] = status in {"approved", "in_progress", "completed"}
+            states[action_id]["executed"] = status == "completed"
+            states[action_id]["outcome_status"] = "evidence_attached" if status == "completed" else "awaiting_evidence"
+            if status == "completed" and event.get("evidence_ref"):
+                states[action_id]["completion_evidence_ref"] = event["evidence_ref"]
             states[action_id]["last_event"] = event
     return states
 
