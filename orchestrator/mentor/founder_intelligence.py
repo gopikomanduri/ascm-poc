@@ -8,6 +8,7 @@ it cannot replace current evidence or turn heuristics into calibrated probabilit
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any, Dict, List
@@ -20,6 +21,19 @@ POSITIVE_FEEDBACK = {"helpful", "accepted", "acted_on"}
 NEGATIVE_FEEDBACK = {"not_helpful", "dismissed", "incorrect"}
 MIN_FEEDBACK_PER_PATH = 5
 MAX_FEEDBACK_ADJUSTMENT = 6
+
+
+def _safe_reuse_score(candidate: dict[str, Any]) -> int:
+    """Return a bounded reuse score, defaulting safely when metadata is malformed."""
+    raw_score = candidate.get("suitability_score", 70)
+    if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
+        return 70
+    try:
+        if not math.isfinite(raw_score):
+            return 70
+        return max(0, min(85, int(raw_score)))
+    except (OverflowError, ValueError):
+        return 70
 
 
 def _feedback_adjustments(project_path: str | Path | None = None) -> dict[str, dict[str, int]]:
@@ -145,7 +159,7 @@ class FounderIntelligenceEngine:
                 and item.get("integration_cost_estimated") is True
             ]
             if verified:
-                score = min(85, int(max(item.get("suitability_score", 70) for item in verified)))
+                score = max(_safe_reuse_score(item) for item in verified)
                 signal("reuse", score, "A candidate has explicit fit, license, security, and integration-cost review recorded; validate it in a small proof of concept before committing.", "reuse_candidates")
             else:
                 metadata_candidates = [

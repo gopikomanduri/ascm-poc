@@ -52,6 +52,33 @@ class FounderIntelligenceTests(unittest.TestCase):
         self.assertGreater(paths["reuse"], paths["build"])
         self.assertEqual(result["recommended_path"], "reuse")
 
+    def test_malformed_verified_reuse_scores_fall_back_safely(self):
+        malformed_scores = ("unknown", None, float("nan"), float("inf"), True)
+        for score in malformed_scores:
+            with self.subTest(suitability_score=score):
+                result = self.engine.evaluate(
+                    goal="Ship authentication",
+                    observation="code_activity",
+                    evidence={
+                        "task_description": "Implement authentication",
+                        "milestone": "Working sign-in",
+                        "customer_evidence": "Three customer interviews",
+                        "reuse_candidates": [{
+                            "name": "verified auth library",
+                            "license": "MIT",
+                            "archived": False,
+                            "suitability_score": score,
+                            "feature_fit_verified": True,
+                            "license_compatible": True,
+                            "security_reviewed": True,
+                            "integration_cost_estimated": True,
+                        }],
+                    },
+                )
+                paths = {item["path"]: item["score"] for item in result["ranked_paths"]}
+                self.assertEqual(paths["reuse"], 70)
+                self.assertEqual(result["recommended_path"], "reuse")
+
     def test_public_metadata_alone_does_not_establish_reuse_suitability(self):
         result = self.engine.evaluate(
             goal="Ship authentication",
