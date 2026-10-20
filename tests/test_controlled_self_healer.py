@@ -131,3 +131,21 @@ def test_repair_context_excludes_protected_contract_from_agent_input(tmp_path):
     context = build_repair_context(tmp_path, {"remediation_owner": "orchestrator", "message": "failure"})
     assert "safe source" in context
     assert "DO NOT MUTATE" not in context
+
+
+def test_patch_validator_bounds_patch_size_and_rejects_file_deletion():
+    huge = "diff --git a/tests/test_x.py b/tests/test_x.py\n--- a/tests/test_x.py\n+++ b/tests/test_x.py\n@@ -1 +1 @@\n" + ("x" * 31000)
+    ok, reason, _ = validate_patch(huge)
+    assert not ok
+    assert "30 KB" in reason
+
+    deletion = """diff --git a/tests/test_x.py b/tests/test_x.py
+index 1111111..2222222 100644
+--- a/tests/test_x.py
++++ /dev/null
+@@ -1 +0,0 @@
+-assert True
+"""
+    ok, reason, _ = validate_patch(deletion)
+    assert not ok
+    assert "deletions" in reason
