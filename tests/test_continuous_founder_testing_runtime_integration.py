@@ -9,8 +9,12 @@ class FakeASCMClient:
     def __init__(self, responses):
         self.responses = list(responses)
         self.gtm_calls = []
+        self.mentor_calls = []
 
     def send(self, agent_id, prompt, session_id):
+        if agent_id == "mentor":
+            self.mentor_calls.append((prompt, session_id))
+            return "Mentor review: validate target-customer demand before scaling outreach."
         if agent_id == "gtm":
             self.gtm_calls.append((prompt, session_id))
             return "Internal GTM review: do not claim unverified traction."
@@ -53,6 +57,8 @@ def test_single_terminal_runtime_runs_goal_gtm_and_testing_agents_together(tmp_p
     assert records[-1]["decision"]["decision"] == "deny"
     assert records[-1]["decision"]["is_real_authorization"] is False
     assert records[-1]["is_real_publish_enabled"] is False
+    assert client.mentor_calls, "Testing Agent must exercise Founder Mentor over A2A"
+    assert report["mentor_reviews_completed"] == 1
     assert client.gtm_calls, "GTM Status Agent must consult the actual GTM A2A specialist"
     review_path = Path(records[-1]["gtm_review_path"])
     assert "Internal GTM review" in review_path.read_text()
