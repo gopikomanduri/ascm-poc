@@ -256,7 +256,7 @@ class FounderProfile:
         if any(k in q for k in ("go no go", "threshold", "quantitative metric", "success criteria",
                                 "baseline", "conversion rate", "relative improvement", "how will you measure",
                                 "what metric", "qualitative or quantitative signals")):
-            return self.success_metrics + " Baselines and numeric go/no-go thresholds are not established; do not infer a threshold or fabricate a fact."
+            return self.success_metrics + " Baselines and numeric go/no-go thresholds are not established; do not infer a threshold; do not fabricate a fact."
         if any(k in q for k in ("budget holder", "holds the budget", "budget authority", "day to day operational",
                                 "who pays", "purchasing authority")):
             return "The current hypothesis names founders and engineering leaders, but the budget holder and day-to-day user have not been distinguished or validated."
