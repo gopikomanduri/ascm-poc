@@ -32,9 +32,9 @@ human review remain important.
 
 ## Empty model response diagnostics and fallback
 
-The adapter checks both the SDK convenience \`.text\` field and text parts on
+The adapter checks both the SDK convenience `.text` field and text parts on
 candidate content. If the primary model returns no text, it retries once using
-\`ASCM_SECURITY_REVIEW_FALLBACK_MODEL\` (default: \`gemini-3.6-flash\`). Set this
+`ASCM_SECURITY_REVIEW_FALLBACK_MODEL` (default: `gemini-3.6-flash`). Set this
 environment variable to another model available to your API key, or set it to
 an empty string to disable fallback. Empty responses include safe finish/block
 reason diagnostics when the provider supplies them. If both attempts are empty,
