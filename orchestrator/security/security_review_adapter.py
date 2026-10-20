@@ -158,6 +158,34 @@ def _normalize_findings(payload: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def _response_text(response: Any) -> tuple[str, str]:
+    """Extract text across SDK response shapes and provide a safe empty-output diagnostic."""
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text.strip(), ""
+
+    # Some provider responses expose candidate parts even when the convenience
+    # .text property is empty. Read only text parts; never stringify the response.
+    candidates = getattr(response, "candidates", None) or []
+    for candidate in candidates:
+        content = getattr(candidate, "content", None)
+        for part in (getattr(content, "parts", None) or []):
+            part_text = getattr(part, "text", None)
+            if isinstance(part_text, str) and part_text.strip():
+                return part_text.strip(), ""
+
+    diagnostics = []
+    for candidate in candidates:
+        finish = getattr(candidate, "finish_reason", None)
+        if finish is not None:
+            diagnostics.append(f"finish_reason={getattr(finish, 'name', finish)}")
+    feedback = getattr(response, "prompt_feedback", None)
+    block_reason = getattr(feedback, "block_reason", None)
+    if block_reason is not None:
+        diagnostics.append(f"block_reason={getattr(block_reason, 'name', block_reason)}")
+    return "", ", ".join(diagnostics) or "no candidate text or provider finish details"
+
+
 def _request_review(diff: str, api_key: str, model: str) -> Any:
     try:
         from google import genai
@@ -171,35 +199,50 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
     os.environ.pop("GOOGLE_API_KEY", None)
     try:
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model=model,
-            contents=f"{SYSTEM_INSTRUCTIONS}\n\nReview this untrusted unified diff:\n<diff>\n{diff}\n</diff>",
-            config={"response_mime_type": "application/json"},
-        )
-    except Exception as exc:
-        # Provider errors often include the actionable HTTP status (for example
-        # 400 invalid model, 403 permission, or 429 quota). Preserve only a short,
-        # scrubbed diagnostic; never log request headers, credentials, or payloads.
-        status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
-        detail = getattr(exc, "message", None) or str(exc)
-        try:
-            from orchestrator.security.pii_scrubber import PIIScrubber
-            safe_detail = PIIScrubber.scrub(str(detail))[:400]
-        except Exception:
-            safe_detail = "provider diagnostic omitted because redaction was unavailable"
-        status_text = f", status={status}" if isinstance(status, (int, str)) else ""
+        contents = f"{SYSTEM_INSTRUCTIONS}\n\nReview this untrusted unified diff:\n<diff>\n{diff}\n</diff>"
+        fallback_model = os.environ.get("ASCM_SECURITY_REVIEW_FALLBACK_MODEL", "gemini-3.6-flash").strip()
+        models = [model]
+        if fallback_model and fallback_model != model:
+            models.append(fallback_model)
+
+        empty_diagnostics = []
+        for candidate_model in models:
+            try:
+                response = client.models.generate_content(
+                    model=candidate_model,
+                    contents=contents,
+                    config={"response_mime_type": "application/json"},
+                )
+            except Exception as exc:
+                # Provider errors often include the actionable HTTP status (for example
+                # 400 invalid model, 403 permission, or 429 quota). Preserve only a short,
+                # scrubbed diagnostic; never log request headers, credentials, or payloads.
+                status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+                detail = getattr(exc, "message", None) or str(exc)
+                try:
+                    from orchestrator.security.pii_scrubber import PIIScrubber
+                    safe_detail = PIIScrubber.scrub(str(detail))[:400]
+                except Exception:
+                    safe_detail = "provider diagnostic omitted because redaction was unavailable"
+                status_text = f", status={status}" if isinstance(status, (int, str)) else ""
+                raise ReviewError(
+                    f"Gemini review request failed ({type(exc).__name__}{status_text}): {safe_detail}"
+                ) from exc
+
+            text, diagnostic = _response_text(response)
+            if text:
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError as exc:
+                    raise ReviewError(f"Gemini returned invalid JSON (model={candidate_model}).") from exc
+            empty_diagnostics.append(f"{candidate_model}: {diagnostic}")
+
         raise ReviewError(
-            f"Gemini review request failed ({type(exc).__name__}{status_text}): {safe_detail}"
-        ) from exc
-
-    text = getattr(response, "text", None)
-    if not isinstance(text, str) or not text.strip():
-        raise ReviewError("Gemini returned an empty response.")
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ReviewError("Gemini returned invalid JSON.") from exc
-
+            "Gemini returned an empty response after primary and fallback review attempts ("
+            + "; ".join(empty_diagnostics) + ")."
+        )
+    except ReviewError:
+        raise
 
 def review_request(request: Any, repo_root: Path, api_key: str | None = None) -> dict[str, Any]:
     if not isinstance(request, dict) or request.get("version") != 1:
