@@ -423,11 +423,19 @@ def run_product_scenario(
             targets = [agent_id for agent_id, _purpose, _terms in stages if agent_id != reviewer_id]
             if not targets:
                 continue
+            excerpt_limit = max(220, min(
+                MAX_CHALLENGE_ARTIFACT_CHARS, 8000 // max(1, len(targets))
+            ))
             artifact_bundle = [
-                {"agent_id": target, "artifact": _challenge_excerpt(artifact_by_agent.get(target, "")),
-                 "artifact_truncated": len(artifact_by_agent.get(target, "")) > 4000,
-                 "source_status": next((item.get("status") for item in agent_results
-                                        if item.get("agent_id") == target), "missing")}
+                {
+                    "agent_id": target,
+                    "artifact": _challenge_excerpt(artifact_by_agent.get(target, ""), limit=excerpt_limit),
+                    "artifact_truncated": len(re.sub(
+                        r"\\s+", " ", artifact_by_agent.get(target, "")
+                    ).strip()) > excerpt_limit,
+                    "source_status": next((item.get("status") for item in agent_results
+                                           if item.get("agent_id") == target), "missing"),
+                }
                 for target in targets
             ]
             prompt = (
