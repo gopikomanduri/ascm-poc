@@ -820,10 +820,16 @@ class ContinuousFounderTestingRuntime:
                 {"role": "assistant", "content": question},
                 {"role": "user", "content": answer},
             ])
+            exchange_metadata = {
+                "task_id": f"product-interview-{self.session_id}-{round_number}",
+                "correlation_id": self.session_id,
+                "focus": focus,
+                "round": round_number,
+            }
             self.story_log.record("PRODUCT AGENT", "TESTING AGENT", "question", question,
-                                  metadata={"focus": focus, "round": round_number})
+                                  metadata=exchange_metadata)
             self.story_log.record("TESTING AGENT (SIMULATED FOUNDER)", "PRODUCT AGENT", "answer", answer,
-                                  metadata={"focus": focus, "round": round_number})
+                                  metadata=exchange_metadata)
             print(f"[{utc_now()}] [PRODUCT AGENT → TESTING AGENT] {question}", flush=True)
             print(f"[{utc_now()}] [TESTING AGENT → PRODUCT AGENT] {answer}\n", flush=True)
             if self.review_delay_seconds:
