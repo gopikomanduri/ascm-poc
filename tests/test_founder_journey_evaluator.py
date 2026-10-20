@@ -11,11 +11,11 @@ def test_complete_founder_journey_passes_only_with_evidence_and_scoped_consent()
         event("mentor_recommendation_shown", ref="session:mentor-1"),
         event("gtm_cycle_generated", ref="experiment:exp-1"),
         event("action_approved", ref="approval:1", action="send_outreach",
-              approval_id="approval-1", approver="founder"),
+              approval_id="approval-1", approver="founder", is_real_authorization=True),
         event("external_action_completed", ref="audit:send-1", action="send_outreach"),
         event("handoff_started", task_id="task-1", correlation_id="corr-1"),
         event("handoff_completed", task_id="task-1", correlation_id="corr-1"),
-        event("customer_reply", ref="crm:reply-1"),
+        event("customer_reply", ref="crm:reply-1", verified=True, verified_by="founder"),
     ]
     report = FounderJourneyEvaluator().evaluate("founder-week-1", events)
     assert report.passed
