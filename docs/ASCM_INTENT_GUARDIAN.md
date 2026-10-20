@@ -40,7 +40,7 @@ It emits `self_healing_controller.status`, evidence-backed findings, a remediati
 The Testing Agent runtime now has a separate controlled repair stage in `orchestrator/controlled_self_healer.py`. It remains disabled unless `ASCM_CODE_REPAIR_ENABLED=1` is explicitly set.
 
 When enabled, it:
-1. Uses Testing Agent findings as the trigger and routes each candidate through a configured A2A repair agent.
+1. Uses Testing Agent findings as the trigger, asks the responsible domain specialist for a diagnosis, then asks the coder agent to produce the bounded patch.
 2. Requires a clean active checkout and creates a separate git worktree/branch; it never edits the active checkout.
 3. Allows changes only under `orchestrator/`, `products/`, and `tests/`. Product intent, docs, security policy, CI gates, dependency manifests, permissions, and publishing settings are protected.
 4. Requires a regression test, limits patches to 30 KB and eight files, rejects file deletions/symlinks, runs focused tests and the full test suite, then Bandit and pip-audit. Missing security tooling is a blocking result.
@@ -52,7 +52,7 @@ When enabled, it:
 ### Configuration
 
 - `ASCM_CODE_REPAIR_ENABLED=1`: explicitly enable the controlled code repair stage.
-- `ASCM_REPAIR_AGENT_ID`: configured A2A agent ID to ask for a patch; defaults to the gateway's `coder` specialist. Owner-specific `ASCM_REPAIR_AGENT_<OWNER>` variables override it (for example `ASCM_REPAIR_AGENT_ORCHESTRATOR=coder`).
+- `ASCM_REPAIR_AGENT_ID`: optional global specialist override. Defaults route product→`product`, mentor→`mentor`, GTM→`gtm`, governance→`security_auditor`, testing→`qa`, goal→`planner`, and orchestration→`coder`. Owner-specific `ASCM_REPAIR_AGENT_<OWNER>` variables override these mappings. `ASCM_REPAIR_CODER_AGENT` selects the implementation agent and defaults to `coder`.
 - `ASCM_REPAIR_ACCEPTANCE_COMMAND`: required command to run a fresh end-to-end Testing Agent journey in the isolated worktree. For example, `python -m orchestrator.testing_agent.runtime --workspace . --base-url http://127.0.0.1:8091 --sessions 1`. Use a separate loopback port; the repair runner forces a fresh gateway from the isolated worktree and fails closed if that port is already occupied, rather than reusing a server loaded from the active checkout. The runner sets `ASCM_CODE_REPAIR_ENABLED=0` for this child process to prevent recursive repair.
 - `ASCM_CODE_REPAIR_OPEN_PR=1`: opt in to pushing a verified branch and using the authenticated GitHub CLI (`gh`) to open a PR. Without it, the verified branch remains local.
 - `ASCM_REPAIR_BASE_BRANCH`: optional PR base; defaults to `main`.
