@@ -481,6 +481,12 @@ def run_product_scenario(
             "challenge_reviews_schema_valid": sum(bool(item.get("schema_valid")) for item in challenge_results),
             "challenge_reviews_needing_review": sum(item.get("status") != "passed" for item in challenge_results),
             "challenge_findings": sum(len(item.get("non_clear_findings", [])) for item in challenge_results),
+            "challenge_pairs_requested": len(stages) * (len(stages) - 1) if adversarial_review else 0,
+            "challenge_pairs_completed": sum(len(item.get("reviews", [])) for item in challenge_results),
+            "challenge_pairs_non_clear": sum(
+                1 for item in challenge_results for review in item.get("reviews", [])
+                if review.get("verdict") in {"CONCERN", "BLOCK"}
+            ),
             "challenge_handoffs_recorded": len(challenge_handoffs),
         },
         "evaluation_limitations": [
