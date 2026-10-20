@@ -992,7 +992,7 @@ class ContinuousFounderTestingRuntime:
         path = self.history / "founder_actions.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, sort_keys=True) + "\\n")
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
         try:
             path.chmod(0o600)
         except OSError:
