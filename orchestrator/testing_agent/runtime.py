@@ -432,6 +432,8 @@ class ContinuousFounderTestingRuntime:
         self.questions_asked = 0
         self.rounds_completed = 0
         self.consecutive_interface_failures = 0
+        self.mentor_reviews_completed = 0
+        self.last_mentor_review = ""
 
     def _product_prompt(self, area: str) -> str:
         transcript = json.dumps(self.transcript[-24:], ensure_ascii=False)
