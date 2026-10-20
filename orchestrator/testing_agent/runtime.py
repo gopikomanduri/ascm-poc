@@ -411,11 +411,13 @@ class GTMStatusAgent:
     def __init__(self, workspace: Path, status_path: Path, stop: threading.Event,
                  requests: queue.Queue, responses: queue.Queue, interval: float,
                  status_changed: threading.Event | None = None,
-                 client: ASCMJsonRpcClient | None = None):
+                 client: ASCMJsonRpcClient | None = None,
+                 journey_events: list[JourneyEvent] | None = None):
         self.workspace, self.status_path, self.stop = workspace, status_path, stop
         self.requests, self.responses, self.interval = requests, responses, interval
         self.status_changed = status_changed
         self.client = client
+        self.journey_events = journey_events if journey_events is not None else []
         self.state_path = self.workspace / ".ascm_history" / "gtm_status_agent_state.json"
         state = read_json(self.state_path, {})
         self._last_fingerprint: str | None = state.get("last_requested_fingerprint") if isinstance(state, dict) else None
@@ -472,6 +474,10 @@ class GTMStatusAgent:
                                 }, sort_keys=True),
                                 request_id,
                             )
+                            self.journey_events.append(JourneyEvent(
+                                "gtm_assessment_completed", "gtm_agent",
+                                evidence_ref=f"gtm-review:{request_id}",
+                            ))
                         except Exception as exc:
                             gtm_review = f"GTM specialist unavailable: {type(exc).__name__}: {exc}"
                             print(f"[GTM AGENT] A2A specialist review failed; keeping factual draft: {exc}", flush=True)
@@ -693,7 +699,8 @@ class ContinuousFounderTestingRuntime:
                     metadata=metadata,
                 )
                 raise ValueError(
-                    f"ProductAgent schema self-heal failed after one retry: "
+                    f"ProductAgent response validation failed ({type(validation_error).__name__}: "
+                    f"{validation_error}); schema self-heal failed after one retry: "
                     f"{type(repair_error).__name__}: {repair_error}"
                 ) from repair_error
             self.self_heal_successes += 1
@@ -761,6 +768,11 @@ class ContinuousFounderTestingRuntime:
             final = result
             self.rounds_completed += 1
             questions = result["clarification_questions"]
+            if result.get("is_clear") is True:
+                self.journey_events.append(JourneyEvent(
+                    "product_discovery_completed", "product_agent",
+                    evidence_ref=f"product-discovery:{self.session_id}:{round_number}",
+                ))
             if not questions:
                 if result.get("is_clear") is True and float(result.get("confidence_score", 0)) >= 0.90:
                     print(f"[PRODUCT AGENT] Focus '{focus}' is clear at confidence {result.get('confidence_score')}.", flush=True)
@@ -774,6 +786,10 @@ class ContinuousFounderTestingRuntime:
                 break
             answer = self.profile.answer(question)
             self.questions_asked += 1
+            self.journey_events.append(JourneyEvent(
+                "product_question", "product_agent",
+                evidence_ref=f"product-question:{self.session_id}:{self.questions_asked}",
+            ))
             self.transcript.extend([
                 {"role": "assistant", "content": question},
                 {"role": "user", "content": answer},
@@ -924,7 +940,7 @@ class ContinuousFounderTestingRuntime:
         goal = GoalAgent(self.workspace, self.status_path, self.stop, self.poll_interval, self.status_changed, getattr(self.client, "base_url", None))
         gtm = GTMStatusAgent(self.workspace, self.status_path, self.stop,
                              self.permission_requests, self.permission_responses, self.poll_interval,
-                             self.status_changed, self.client)
+                             self.status_changed, self.client, self.journey_events)
         threads = [
             threading.Thread(target=goal.run, name="ASCM-Goal-Agent", daemon=True),
             threading.Thread(target=gtm.run, name="ASCM-GTM-Status-Agent", daemon=True),
@@ -940,6 +956,7 @@ class ContinuousFounderTestingRuntime:
         try:
             while not self.stop.is_set() and (sessions == 0 or session_count < sessions):
                 focus = PROBE_AREAS[session_count % len(PROBE_AREAS)]
+                self.journey_events.append(JourneyEvent("goal_observed", "goal_agent", evidence_ref=f"founder-goal:{self.session_id}:{focus}"))
                 self.journey_events.append(JourneyEvent("mentor_goal_observed", "testing_agent", evidence_ref=f"focus:{focus}"))
                 previous_rounds = self.rounds_completed
                 result = self.run_product_session(focus)
