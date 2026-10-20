@@ -941,7 +941,7 @@ class ContinuousFounderTestingRuntime:
             "customer_reply", "customer_interview", "feature_request", "pilot_commitment",
             "waitlist_signup", "meeting_booked", "qualified_opportunity", "conversion",
         }
-        verified = [
+        outcome_records = [
             item for item in ledger
             if isinstance(item, dict) and item.get("event_type") in outcome_types
         ] if isinstance(ledger, list) else []
@@ -949,27 +949,30 @@ class ContinuousFounderTestingRuntime:
             item for item in ledger
             if isinstance(item, dict) and item.get("event_type") == "gtm_cycle_generated"
         ] if isinstance(ledger, list) else []
-        for item in verified:
-            evidence_ref = item.get("event_id") or item.get("experiment_id")
+        verified_count = 0
+        for item in outcome_records:
+            evidence_ref = item.get("evidence_ref") or item.get("source_evidence_ref") or item.get("evidence_uri")
+            is_verified = item.get("verified") is True or item.get("verification_status") == "verified"
+            if (item.get("event_type") in {"customer_reply", "meeting_booked", "qualified_opportunity", "conversion"}
+                    and is_verified and evidence_ref):
+                verified_count += 1
             events.append(JourneyEvent(
                 item["event_type"], "outcome_ledger",
                 evidence_ref=str(evidence_ref) if evidence_ref else None,
+                details={**item, "verified": is_verified},
             ))
-        outcome_status = "outcomes_observed" if verified else (
-            "awaiting_outcomes" if cycles else "no_gtm_cycles_recorded"
+        outcome_status = "outcomes_observed" if verified_count else (
+            "awaiting_outcomes" if cycles or outcome_records else "no_gtm_cycles_recorded"
         )
         events.append(JourneyEvent(
             "outcome_status_recorded", "outcome_ledger",
-            details={"status": outcome_status},
+            evidence_ref=f"outcome-status:{self.session_id}",
+            details={"status": outcome_status, "verified_count": verified_count},
         ))
         evaluation = FounderJourneyEvaluator().evaluate(self.session_id, events)
         criteria = [
-            {
-                "criterion": finding.criterion,
-                "passed": finding.passed,
-                "evidence": list(finding.evidence),
-                "message": finding.message,
-            }
+            {"criterion": finding.criterion, "passed": finding.passed, "status": finding.status,
+             "evidence": list(finding.evidence), "message": finding.message}
             for finding in evaluation.findings
         ]
         return {
@@ -979,6 +982,7 @@ class ContinuousFounderTestingRuntime:
             "verified_outcome_counts": evaluation.verified_outcome_counts,
             "generated_asset_count": evaluation.generated_asset_count,
             "outcome_status": outcome_status,
+            "unverified_outcome_count": len(outcome_records) - verified_count,
         }
 
     def _attach_self_healing_assessment(self, report: dict[str, Any]) -> dict[str, Any]:
@@ -1165,6 +1169,7 @@ class ContinuousFounderTestingRuntime:
                     "last_focus": focus,
                     "last_product_result": result,
                     "open_findings": list(self.findings),
+                    "open_questions": list(dict.fromkeys(self.open_questions)),
                     "external_publishing_enabled": False,
                     "simulated_founder_only": True,
                 }
