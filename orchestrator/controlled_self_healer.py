@@ -131,7 +131,7 @@ def build_repair_context(root: Path, finding: dict[str, Any]) -> str:
                 chunks.append(f"\n--- FILE {rel} ---\n{path.read_text(encoding='utf-8', errors='replace')[:3500]}\n--- END FILE ---")
         except (OSError, ValueError):
             continue
-    return "\n".join(chunks)
+    return "\n".join(chunks)[:12000]
 
 def _audit(root: Path, result: dict[str, Any]) -> None:
     history = root / ".ascm_history"
