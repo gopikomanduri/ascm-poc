@@ -938,6 +938,7 @@ class ContinuousFounderTestingRuntime:
                     str(repair_result.get("reason", "Controlled repair attempt completed.")),
                     metadata={
                         "finding_id": repair_result.get("finding_id"),
+                        "implementation_agent": repair_result.get("implementation_agent"),
                         "branch": repair_result.get("branch"),
                         "changed_files": repair_result.get("changed_files", []),
                         "checks": {key: value.get("passed") for key, value in repair_result.get("checks", {}).items()},
