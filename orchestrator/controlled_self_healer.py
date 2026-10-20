@@ -25,7 +25,16 @@ def _git(root: Path, *args: str) -> str:
 
 def route_owner(owner: str) -> str:
     key = "ASCM_REPAIR_AGENT_" + re.sub(r"[^A-Za-z0-9]", "_", owner).upper()
-    return os.getenv(key, "").strip() or os.getenv("ASCM_REPAIR_AGENT_ID", "").strip() or "coder"
+    defaults = {
+        "product": "product",
+        "mentor": "mentor",
+        "gtm": "gtm",
+        "governance": "security_auditor",
+        "testing_agent": "qa",
+        "goal": "planner",
+        "orchestrator": "coder",
+    }
+    return os.getenv(key, "").strip() or os.getenv("ASCM_REPAIR_AGENT_ID", "").strip() or defaults.get(owner, "coder")
 
 def _key(finding: dict[str, Any]) -> str:
     value = {k: finding.get(k) for k in ("invariant_id", "message", "remediation_owner", "evidence")}
@@ -166,7 +175,8 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
     root = Path(workspace).resolve()
     key = _key(finding)
     result: dict[str, Any] = {"finding_id": str(finding.get("invariant_id", "unknown")),
-        "finding_key": key, "finding": {
+        "finding_key": key, "implementation_agent": os.getenv("ASCM_REPAIR_CODER_AGENT", "coder"),
+        "finding": {
             "message": finding.get("message"),
             "severity": finding.get("severity"),
             "remediation_owner": finding.get("remediation_owner"),
