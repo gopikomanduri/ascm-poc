@@ -1,0 +1,42 @@
+{
+  "product_name": "ASCM",
+  "product_summary": "A local-first multi-agent software delivery operating system coordinating product, engineering, governance, founder mentorship, and go-to-market work across repositories.",
+  "problem_hypothesis": "AI-assisted software work may be fragmented across repositories and specialist roles. Context loss, conflicting constraints, and rework are hypotheses to validate, not established customer facts.",
+  "target_users_hypothesis": "Founders and engineering leaders managing multiple repositories. This segment has not yet been validated through customer interviews.",
+  "differentiators": [
+    "multi-repository coordination",
+    "specialist agent handoffs using A2A",
+    "founder mentorship and proactive guidance",
+    "governance and security checks",
+    "human approval gates",
+    "GTM workflows and learning from verified outcomes",
+    "local-first operation with optional model integrations"
+  ],
+  "alternatives_to_assess": [
+    "AI coding assistants",
+    "CI and developer-platform tooling",
+    "project-management tools",
+    "manual coordination",
+    "existing multi-agent frameworks"
+  ],
+  "constraints": [
+    "Do not invent customers, interviews, traction, pricing, or validation.",
+    "Label facts, hypotheses, assumptions, and open questions separately.",
+    "Do not execute code changes, contact customers, send outreach, or publish content.",
+    "Treat approval as action-scoped; simulated approval is not real authorization.",
+    "Keep credentials, secrets, and personal data out of outputs and logs."
+  ],
+  "success_hypotheses": [
+    "traceable cross-agent handoffs",
+    "useful founder interventions tied to explicit goals",
+    "reduced rework or integration failures (baseline not yet established)",
+    "qualified customer conversations and verified outcomes"
+  ],
+  "requested_deliverables": [
+    "product requirements and unresolved questions",
+    "architecture and implementation plan",
+    "QA and security review",
+    "founder validation plan",
+    "GTM experiment proposal with measurable hypotheses"
+  ]
+}
