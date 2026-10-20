@@ -889,7 +889,7 @@ class ContinuousFounderTestingRuntime:
             self.journey_events,
             workspace=self.workspace,
         )
-        repair_enabled = os.getenv("ASCM_CODE_REPAIR_ENABLED", "0") == "1"
+        repair_enabled = os.getenv("ASCM_CODE_REPAIR_ENABLED", "1") == "1"
         if repair_enabled and assessment.get("status") == "blocked_p0":
             assessment["code_repair"] = {
                 "status": "blocked_p0",
@@ -954,7 +954,7 @@ class ContinuousFounderTestingRuntime:
         else:
             assessment["code_repair"] = {
                 "status": "disabled",
-                "reason": "Set ASCM_CODE_REPAIR_ENABLED=1 to opt into isolated code repair.",
+                "reason": "ASCM_CODE_REPAIR_ENABLED=0 explicitly disabled autonomous repair.",
                 "human_merge_required": True,
             }
         report["self_healing_controller"] = assessment
