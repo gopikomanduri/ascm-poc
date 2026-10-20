@@ -573,12 +573,12 @@ def test_founder_action_lifecycle_requires_human_decisions_and_evidence(tmp_path
         "status": "proposed", "approved": False, "executed": False,
     }
     (history / "founder_actions.jsonl").write_text(json.dumps(proposal) + "\n")
-    with pytest.raises(ValueError, match="requires an evidence_ref"):
-        transition_action(tmp_path, "action-1", "complete", "founder", evidence_ref=None)
     approved = transition_action(tmp_path, "action-1", "approve", "founder")
     assert approved["new_status"] == "approved"
     started = transition_action(tmp_path, "action-1", "start", "founder")
     assert started["new_status"] == "in_progress"
+    with pytest.raises(ValueError, match="requires an evidence_ref"):
+        transition_action(tmp_path, "action-1", "complete", "founder", evidence_ref=None)
     completed = transition_action(
         tmp_path, "action-1", "complete", "founder", evidence_ref="interview-notes:batch-1"
     )
