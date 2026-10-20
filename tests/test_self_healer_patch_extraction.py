@@ -42,3 +42,27 @@ def test_json_evidence_without_patch_field_is_not_accepted_as_a_patch():
     extracted = extract_patch_payload(response)
     assert extracted == response
     assert validate_patch(extracted)[0] is False
+
+
+def test_extracts_patch_from_nested_a2a_transport_envelope():
+    import json
+
+    response = json.dumps({
+        "result": {
+            "content": {
+                "response": {"unified_diff": VALID_TEST_PATCH}
+            }
+        }
+    })
+    extracted = extract_patch_payload(response)
+    assert extracted == VALID_TEST_PATCH.strip()
+    assert validate_patch(extracted)[0] is True
+
+
+def test_nested_transport_envelope_without_explicit_diff_is_not_accepted():
+    response = '{"result": {"content": {"summary": "repair complete", "tests_passed": true}}}'
+    extracted = extract_patch_payload(response)
+    assert extracted == response
+    valid, reason, _ = validate_patch(extracted)
+    assert not valid
+    assert "unified diff" in reason
