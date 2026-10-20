@@ -28,6 +28,7 @@ from typing import Any, Callable
 
 import httpx
 from orchestrator.testing_agent.founder_journey import FounderJourneyEvaluator, JourneyEvent
+from orchestrator.self_healing_controller import assess_testing_results
 
 logger = logging.getLogger("ASCM.TestingAgent")
 
@@ -864,6 +865,26 @@ class ContinuousFounderTestingRuntime:
             "outcome_status": outcome_status,
         }
 
+    def _attach_self_healing_assessment(self, report: dict[str, Any]) -> dict[str, Any]:
+        """Launch the self-healing assessment using this Testing Agent report as input."""
+        assessment = assess_testing_results(
+            report,
+            self.journey_events,
+            workspace=self.workspace,
+        )
+        report["self_healing_controller"] = assessment
+        self.story_log.record(
+            "TESTING AGENT", "ASCM SELF-HEALING CONTROLLER", "testing_results_submitted",
+            "Testing Agent results submitted for product-intent and technical drift assessment.",
+            metadata={
+                "trigger": assessment["trigger"],
+                "status": assessment["status"],
+                "finding_count": len(assessment["findings"]),
+                "source_report_session_id": assessment.get("source_report_session_id"),
+            },
+        )
+        return report
+
     def _permission_worker(self) -> None:
         while not self.stop.is_set():
             try:
@@ -931,6 +952,7 @@ class ContinuousFounderTestingRuntime:
                     "external_publishing_enabled": False,
                     "simulated_founder_only": True,
                 }
+                report = self._attach_self_healing_assessment(report)
                 atomic_json(self.report_path, report)
                 # Force a fresh status snapshot after every completed session so a
                 # finite CI run exercises the GTM permission handoff as well.
@@ -977,6 +999,7 @@ class ContinuousFounderTestingRuntime:
                 "external_publishing_enabled": False,
                 "simulated_founder_only": True,
             }
+            report = self._attach_self_healing_assessment(report)
             atomic_json(self.report_path, report)
             print(f"[TESTING AGENT] Report written to {self.report_path}", flush=True)
         return report
