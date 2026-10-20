@@ -573,6 +573,53 @@ class ContinuousFounderTestingRuntime:
         print(f"[MENTOR AGENT → TESTING AGENT] {review[:1200]}\\n", flush=True)
         return review
 
+    def _acceptance_summary(self) -> dict[str, Any]:
+        events = list(self.journey_events)
+        ledger = read_json(self.history / "gtm_outcomes.json", [])
+        outcome_types = {
+            "customer_reply", "customer_interview", "feature_request", "pilot_commitment",
+            "waitlist_signup", "meeting_booked", "qualified_opportunity", "conversion",
+        }
+        verified = [
+            item for item in ledger
+            if isinstance(item, dict) and item.get("event_type") in outcome_types
+        ] if isinstance(ledger, list) else []
+        cycles = [
+            item for item in ledger
+            if isinstance(item, dict) and item.get("event_type") == "gtm_cycle_generated"
+        ] if isinstance(ledger, list) else []
+        for item in verified:
+            evidence_ref = item.get("event_id") or item.get("experiment_id")
+            events.append(JourneyEvent(
+                item["event_type"], "outcome_ledger",
+                evidence_ref=str(evidence_ref) if evidence_ref else None,
+            ))
+        outcome_status = "outcomes_observed" if verified else (
+            "awaiting_outcomes" if cycles else "no_gtm_cycles_recorded"
+        )
+        events.append(JourneyEvent(
+            "outcome_status_recorded", "outcome_ledger",
+            details={"status": outcome_status},
+        ))
+        evaluation = FounderJourneyEvaluator().evaluate(self.session_id, events)
+        criteria = [
+            {
+                "criterion": finding.criterion,
+                "passed": finding.passed,
+                "evidence": list(finding.evidence),
+                "message": finding.message,
+            }
+            for finding in evaluation.findings
+        ]
+        return {
+            "passed": evaluation.passed and not self.findings,
+            "criteria": criteria,
+            "runtime_findings": list(self.findings),
+            "verified_outcome_counts": evaluation.verified_outcome_counts,
+            "generated_asset_count": evaluation.generated_asset_count,
+            "outcome_status": outcome_status,
+        }
+
     def _permission_worker(self) -> None:
         while not self.stop.is_set():
             try:
