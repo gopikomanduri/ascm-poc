@@ -522,6 +522,28 @@ class ContinuousFounderTestingRuntime:
             print(f"[TESTING AGENT → PRODUCT AGENT] {answer}\n", flush=True)
         return final
 
+    def run_mentor_review(self, focus: str) -> str:
+        """Exercise the real Founder Mentor A2A route after product grilling."""
+        prompt = (
+            "Review this simulated founder/product-discovery session. State the founder goal you inferred, "
+            "one concrete next action, assumptions that remain unverified, and a measurable follow-up. "
+            "Do not execute actions, claim customer traction, or publish anything. "
+            f"Focus: {focus}. Transcript: {json.dumps(self.transcript[-24:], ensure_ascii=False)}"
+        )
+        try:
+            review = self.client.send("mentor", prompt, self.session_id).strip()
+        except Exception as exc:
+            self.findings.append(f"Founder Mentor A2A review failed for '{focus}': {type(exc).__name__}: {exc}")
+            print(f"[TESTING AGENT] FAIL: Founder Mentor review failed: {exc}", flush=True)
+            return ""
+        if not review:
+            self.findings.append(f"Founder Mentor returned an empty review for '{focus}'.")
+            return ""
+        self.mentor_reviews_completed += 1
+        self.last_mentor_review = review
+        print(f"[MENTOR AGENT → TESTING AGENT] {review[:1200]}\\n", flush=True)
+        return review
+
     def _permission_worker(self) -> None:
         while not self.stop.is_set():
             try:
