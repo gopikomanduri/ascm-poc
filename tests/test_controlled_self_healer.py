@@ -5,6 +5,8 @@ from pathlib import Path
 
 import orchestrator.controlled_self_healer as controlled
 from orchestrator.controlled_self_healer import (
+    _claim_attempt,
+    _ledger,
     build_repair_context,
     route_owner,
     run_controlled_repair,
@@ -192,3 +194,11 @@ def test_github_ci_gate_blocks_pr_when_workflow_fails(monkeypatch, tmp_path):
     passed, detail = controlled._wait_for_github_ci("gh", "ascm/repair-test", "abc123", tmp_path, timeout=1)
     assert passed is False
     assert "failure" in detail
+
+
+
+def test_corrupt_retry_ledger_fails_closed(tmp_path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    ledger = _ledger(tmp_path) / "ascm-controlled-repair-attempts.json"
+    ledger.write_text("{not-json", encoding="utf-8")
+    assert _claim_attempt(tmp_path, "finding-123") is False
