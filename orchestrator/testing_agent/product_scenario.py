@@ -424,7 +424,7 @@ def run_product_scenario(
             if not targets:
                 continue
             excerpt_limit = max(220, min(
-                MAX_CHALLENGE_ARTIFACT_CHARS, 8000 // max(1, len(targets))
+                MAX_CHALLENGE_ARTIFACT_CHARS, 4000 // max(1, len(targets))
             ))
             artifact_bundle = [
                 {
@@ -513,7 +513,9 @@ def run_product_scenario(
             "challenge_reviews_needing_review": sum(item.get("status") != "passed" for item in challenge_results),
             "challenge_findings": sum(len(item.get("non_clear_findings", [])) for item in challenge_results),
             "challenge_pairs_requested": len(stages) * (len(stages) - 1) if adversarial_review else 0,
-            "challenge_pairs_completed": sum(len(item.get("reviews", [])) for item in challenge_results),
+            "challenge_pairs_completed": sum(
+                len(item.get("reviews", [])) for item in challenge_results if item.get("schema_valid")
+            ),
             "challenge_pairs_non_clear": sum(
                 1 for item in challenge_results for review in item.get("reviews", [])
                 if review.get("verdict") in {"CONCERN", "BLOCK"}
