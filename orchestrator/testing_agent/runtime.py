@@ -491,7 +491,7 @@ class ContinuousFounderTestingRuntime:
 
     def run(self, *, sessions: int = 0) -> dict[str, Any]:
         self.history.mkdir(parents=True, exist_ok=True)
-        goal = GoalAgent(self.workspace, self.status_path, self.stop, self.poll_interval, self.status_changed, self.client.base_url)
+        goal = GoalAgent(self.workspace, self.status_path, self.stop, self.poll_interval, self.status_changed, getattr(self.client, "base_url", None))
         gtm = GTMStatusAgent(self.workspace, self.status_path, self.stop,
                              self.permission_requests, self.permission_responses, self.poll_interval,
                              self.status_changed)
