@@ -449,14 +449,30 @@ class ContinuousFounderTestingRuntime:
             print(f"[TESTING AGENT → PRODUCT AGENT] {answer}\n", flush=True)
         return final
 
+    def _permission_worker(self) -> None:
+        while not self.stop.is_set():
+            try:
+                request = self.permission_requests.get(timeout=0.25)
+            except queue.Empty:
+                continue
+            decision = self.profile.decide_permission(request["action"])
+            self.permission_responses.put({**decision, "request_id": request["request_id"]})
+            print(
+                f"[TESTING AGENT] Permission response: {decision['decision']} for "
+                f"{request['action']} — SIMULATED, not real authorization.",
+                flush=True,
+            )
+
     def run(self, *, sessions: int = 0) -> dict[str, Any]:
         self.history.mkdir(parents=True, exist_ok=True)
-        goal = GoalAgent(self.workspace, self.status_path, self.stop, self.poll_interval)
+        goal = GoalAgent(self.workspace, self.status_path, self.stop, self.poll_interval, self.status_changed)
         gtm = GTMStatusAgent(self.workspace, self.status_path, self.stop,
-                             self.permission_requests, self.permission_responses, self.poll_interval)
+                             self.permission_requests, self.permission_responses, self.poll_interval,
+                             self.status_changed)
         threads = [
             threading.Thread(target=goal.run, name="ASCM-Goal-Agent", daemon=True),
             threading.Thread(target=gtm.run, name="ASCM-GTM-Status-Agent", daemon=True),
+            threading.Thread(target=self._permission_worker, name="ASCM-Testing-Agent-Permissions", daemon=True),
         ]
         for thread in threads:
             thread.start()
@@ -483,9 +499,13 @@ class ContinuousFounderTestingRuntime:
                     "simulated_founder_only": True,
                 }
                 atomic_json(self.report_path, report)
-                self.status_path.parent.mkdir(parents=True, exist_ok=True)
+                # Force a fresh status snapshot after every completed session so a
+                # finite CI run exercises the GTM permission handoff as well.
+                goal.snapshot()
                 if sessions == 0 or session_count < sessions:
-                    self.stop.wait(max(1.0, self.poll_interval))
+                    deadline = time.monotonic() + max(1.0, self.poll_interval)
+                    while not self.stop.is_set() and time.monotonic() < deadline:
+                        self.stop.wait(0.1)
         except KeyboardInterrupt:
             print("\n[TESTING AGENT] Stop requested.", flush=True)
         finally:
