@@ -64,5 +64,5 @@ def test_a2a_roster_includes_the_implemented_specialists_without_placeholder_ids
         "coder", "security_auditor", "business_strategy", "gtm", "revenue_roi",
         "architecture_review", "code_review", "mentor",
     } <= ids
-    assert not ({"checker", "compliance", "qa", "sre", "apm", "oncall", "sales",
-                 "marketing", "advertising", "seo"} & ids)
+    assert {"checker", "compliance", "qa", "sre", "apm", "oncall", "sales",
+            "marketing", "advertising", "seo"} <= ids
