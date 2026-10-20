@@ -61,6 +61,16 @@ ASCM is not an autocomplete plugin or a chatbot wrapper. It is an **autonomous, 
   - `orchestrator/security/audit_logger.py`: Structured, PII-scrubbed local audit logs with bounded rotation. These logs are not tamper-proof or a compliance certification.
   - `orchestrator/security/pii_scrubber.py`: High-entropy secret and credential scrubber.
 
+### 2. Continuous Founder-Simulation Testing Agent
+
+Run the Testing Agent from one terminal to exercise ASCM through its A2A interface while the Goal Agent tracks repository progress and the GTM Status Agent drafts updates and requests simulated permission:
+
+```bash
+python -m orchestrator.testing_agent.runtime --workspace . --rounds-per-session 8
+```
+
+The harness runs until Ctrl-C. It starts the loopback A2A gateway when needed, records reports under `.ascm_history/`, and tests product clarification as a multi-turn simulated-founder dialogue. The GTM agent asks the Testing Agent for a LinkedIn approval decision when a new commit is observed. **This is a test persona: its decision is never real founder consent, and the harness cannot publish to LinkedIn or any other external service.** See [the detailed workflow and safety contract](docs/continuous-founder-testing-agent.md).
+
 ### 2. Codebase Directory Map
 - `orchestrator/`: The engine core (agents, domain profiles, execution sandbox, token budget forecaster, security, and knowledge engines).
 - `products/`: Reference applications generated and tested by ASCM:
