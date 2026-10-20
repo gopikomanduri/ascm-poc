@@ -46,3 +46,22 @@ Supported IDs are listed in the Agent Card: discovery, product, business_strateg
 - Task state is currently in memory and is lost when the gateway restarts. This is a local interoperability slice, not yet a production multi-user service.
 - The gateway advertises JSON-RPC only. Add other A2A bindings only after interoperability tests justify them.
 - Remote deployment still requires authenticated identity, per-agent authorization, rate limiting, durable task storage, observability and end-to-end tests with real A2A clients before production use.
+
+
+## ASCM governance envelope (extension profile v1.0)
+
+Standard A2A remains the transport and task lifecycle. ASCM adds a versioned governance envelope in `orchestrator/a2a/contracts.py` with task and correlation IDs, sender/recipient, goal, evidence with confidence, expected output, proposed action, scoped approval, status, result/error and follow-up. The extension is deliberately versioned independently of the A2A protocol.
+
+The first local coordinator is in `orchestrator/a2a/coordinator.py`. It validates the recipient, records audit events, retries transient handler errors within a bounded attempt count, rejects idempotency-key reuse with a different payload, returns prior results for identical replays, escalates conflicting recommendations, and blocks proposed side effects unless the approval record names the exact action and includes an approver, timestamp and approval ID.
+
+**Important limits:** the coordinator is an in-process foundation. It does not yet replace the A2A server's request handler, enforce authenticated caller identity, interrupt a handler that exceeds its deadline, or persist idempotency/audit state across restarts. Do not expose it as production-ready. Before production, connect the coordinator to the actual A2A request path, use durable transactional storage, add caller/agent authorization and cancellation, and test with a real A2A client.
+
+## Testing Agent strategy
+
+The Testing Agent is an independent evaluator, not an execution approver. Acceptance coverage must exercise founder journeys through the real ASCM interface and verify:
+- Mentor prompts are relevant to the founder's stated goal and distinguish evidence from assumptions.
+- GTM proposals are not reported as published/sent until a permitted, verified action occurs.
+- External actions require explicit, action-scoped consent; routing or recommendation never implies permission.
+- Handoffs retain correlation/task identity, handle retries and duplicates safely, and escalate disagreement.
+- Learning counts verified replies, meetings, qualified opportunities and conversions separately from generated assets.
+- The evaluator reports evidence and failed criteria; it cannot approve releases or grant permissions.
