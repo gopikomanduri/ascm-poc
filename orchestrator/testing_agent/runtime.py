@@ -284,15 +284,20 @@ class GTMStatusAgent:
         self._last_fingerprint: str | None = state.get("last_requested_fingerprint") if isinstance(state, dict) else None
         self._request_counter = int(state.get("request_counter", 0)) if isinstance(state, dict) else 0
 
+    @staticmethod
+    def status_fingerprint(status: dict[str, Any]) -> str:
+        """Stable deduplication key: round counters must not create social-post spam."""
+        return hashlib.sha256(json.dumps({
+            "commit": status.get("latest_commit"),
+        }, sort_keys=True).encode()).hexdigest()
+
     def run(self) -> None:
         while not self.stop.is_set():
             status = read_json(self.status_path, {})
             if status and int(status.get("testing_rounds", 0) or 0) > 0:
                 # Keep checking every poll, but request a social approval only once per
                 # repository commit. Test-round counters are deliberately not triggers.
-                fingerprint = hashlib.sha256(json.dumps({
-                    "commit": status.get("latest_commit"),
-                }, sort_keys=True).encode()).hexdigest()
+                fingerprint = self.status_fingerprint(status)
                 if fingerprint != self._last_fingerprint:
                     self._last_fingerprint = fingerprint
                     self._request_counter += 1
