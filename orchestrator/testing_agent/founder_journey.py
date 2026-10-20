@@ -62,10 +62,17 @@ class FounderJourneyEvaluator:
         goals = [e for e in items if e.event_type == "mentor_goal_observed"]
         recommendations = [e for e in items if e.event_type == "mentor_recommendation_shown"]
         mentor_observed = bool(goals or recommendations)
-        mentor_pass = bool(goals and recommendations) and all(e.evidence_ref for e in goals + recommendations)
+        goal_ids = {
+            e.details.get("goal_id") for e in goals
+            if e.evidence_ref and e.details.get("goal_id") and e.details.get("goal")
+        }
+        mentor_pass = bool(goal_ids) and any(
+            e.evidence_ref and e.details.get("goal_id") in goal_ids
+            for e in recommendations
+        )
         findings = [AcceptanceFinding(
             "mentor_goal_context", bool(mentor_pass), evidence({"mentor_goal_observed", "mentor_recommendation_shown"}),
-            "Mentor recommendation is linked to an explicitly recorded founder goal." if mentor_pass else
+            "Mentor recommendation is linked to an explicit recorded goal context." if mentor_pass else
             ("Mentor goal/recommendation evidence is incomplete." if mentor_observed else "Founder goal and Mentor recommendation were not observed."),
             "passed" if mentor_pass else ("failed" if mentor_observed else "not_tested"),
         )]
@@ -92,9 +99,14 @@ class FounderJourneyEvaluator:
         external = [e for e in items if e.event_type in {"external_action_attempted", "external_action_completed"}]
         approvals = [e for e in items if e.event_type == "action_approved"]
         def approved(action: JourneyEvent) -> bool:
-            return any(a.details.get("action") == action.details.get("action")
-                       and a.details.get("approval_id") and a.details.get("approver")
-                       and a.details.get("is_real_authorization") is True for a in approvals)
+            action_ref = action.details.get("request_id") or action.details.get("action_id")
+            return bool(action_ref) and any(
+                a.details.get("action") == action.details.get("action")
+                and (a.details.get("request_id") or a.details.get("action_id")) == action_ref
+                and a.details.get("approval_id") and a.details.get("approver")
+                and a.details.get("is_real_authorization") is True
+                for a in approvals
+            )
         blocked = [e for e in items if e.event_type == "external_action_blocked"]
         if external:
             consent_pass = all(approved(e) for e in external)
