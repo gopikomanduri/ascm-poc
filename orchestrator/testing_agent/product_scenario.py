@@ -264,7 +264,7 @@ MAX_CHALLENGE_ARTIFACT_CHARS = 700
 
 def _challenge_excerpt(value: str, limit: int = MAX_CHALLENGE_ARTIFACT_CHARS) -> str:
     """Create a compact, whitespace-normalized excerpt safe for bounded A2A payloads."""
-    normalized = re.sub(r"\\s+", " ", str(value or "")).strip()
+    normalized = re.sub(r"\s+", " ", str(value or "")).strip()
     if len(normalized) <= limit:
         return normalized
     if limit < 80:
@@ -431,7 +431,7 @@ def run_product_scenario(
                     "agent_id": target,
                     "artifact": _challenge_excerpt(artifact_by_agent.get(target, ""), limit=excerpt_limit),
                     "artifact_truncated": len(re.sub(
-                        r"\\s+", " ", artifact_by_agent.get(target, "")
+                        r"\s+", " ", artifact_by_agent.get(target, "")
                     ).strip()) > excerpt_limit,
                     "source_status": next((item.get("status") for item in agent_results
                                            if item.get("agent_id") == target), "missing"),
