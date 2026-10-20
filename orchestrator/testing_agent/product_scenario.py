@@ -331,6 +331,8 @@ def run_product_scenario(
     context: list[dict[str, Any]] = []
     agent_results: list[dict[str, Any]] = []
     handoffs: list[dict[str, Any]] = []
+    challenge_results: list[dict[str, Any]] = []
+    challenge_handoffs: list[dict[str, Any]] = []
     brief_json = json.dumps(product_brief, ensure_ascii=False, indent=2)
     for index, (agent_id, purpose, expected_terms) in enumerate(stages, start=1):
         previous = context[-3:]
@@ -395,6 +397,67 @@ def run_product_scenario(
         with story_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(terminal, ensure_ascii=False, sort_keys=True) + "\n")
 
+    # Every configured agent challenges every other configured agent in a second A2A pass.
+    artifact_by_agent = {item["agent_id"]: str(item.get("output_preview", "")) for item in agent_results}
+    for reviewer_id, purpose, _expected_terms in stages:
+        targets = [agent_id for agent_id, _purpose, _terms in stages if agent_id != reviewer_id]
+        if not targets:
+            continue
+        artifact_bundle = [
+            {"agent_id": target, "artifact": artifact_by_agent.get(target, "")[:1200],
+             "source_status": next((item.get("status") for item in agent_results
+                                    if item.get("agent_id") == target), "missing")}
+            for target in targets
+        ]
+        prompt = (
+            "ADVERSARIAL CHALLENGE REVIEW — try to break the other agents' work, not praise it. "
+            "Inspect every supplied artifact for unsupported customer/ROI claims, contradictions, ignored "
+            "constraints, missing verification, unsafe permissions, invented repository details, shallow "
+            "reasoning, and failure to advance the founder's goal. Do not perform external actions. "
+            "Do not assume claims are true because another agent said them. Review every target exactly once, "
+            "excluding yourself. Return ONLY JSON with keys reviewer and reviews. Each reviews item must contain "
+            "target_agent, verdict (CLEAR|CONCERN|BLOCK), severity (P0|P1|P2|P3), evidence (short quote or "
+            "precise artifact reference), and reason. Never invent evidence. If evidence is insufficient, use "
+            "CONCERN, not CLEAR.\n\n"
+            f"SCENARIO ID: {scenario_id}\nREVIEWER: {reviewer_id} — {purpose}\n"
+            f"REQUIRED_TARGETS_JSON: {json.dumps(targets)}\n"
+            f"ARTIFACTS_JSON: {json.dumps(artifact_bundle, ensure_ascii=False)}"
+        )
+        event = {"timestamp": utc_now(), "scenario_id": scenario_id,
+                 "sequence": len(stages) + len(challenge_results) + 1,
+                 "event_type": "challenge_started", "agent_id": reviewer_id,
+                 "task_id": f"{scenario_id}:challenge:{reviewer_id}", "correlation_id": scenario_id}
+        with story_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+        try:
+            raw_review = client.send(reviewer_id, prompt, scenario_id)
+            parsed = _parse_challenge_review(reviewer_id, raw_review, targets)
+            artifact_path = artifacts_dir / f"challenge-{reviewer_id}.json"
+            artifact_path.write_text(json.dumps({"reviewer_id": reviewer_id, "raw_response": raw_review,
+                                                  "parsed_review": parsed}, ensure_ascii=False, indent=2) + "\n",
+                                    encoding="utf-8")
+            try:
+                artifact_path.chmod(0o600)
+            except OSError:
+                pass
+            challenge_result = {**parsed, "response_received": True, "artifact_path": str(artifact_path)}
+            terminal, error = "challenge_completed", None
+        except Exception as exc:
+            challenge_result = {"reviewer_id": reviewer_id, "status": "review_required",
+                                "schema_valid": False, "response_received": False,
+                                "findings": [f"Adversarial review request failed: {type(exc).__name__}: {exc}"],
+                                "reviews": [], "non_clear_findings": []}
+            terminal, error = "challenge_failed", f"{type(exc).__name__}: {exc}"
+        challenge_results.append(challenge_result)
+        challenge_handoffs.append({"task_id": event["task_id"], "correlation_id": scenario_id,
+                                   "reviewer_id": reviewer_id, "terminal_event": terminal, "error": error})
+        terminal_event = {"timestamp": utc_now(), "scenario_id": scenario_id,
+                          "sequence": len(stages) + len(challenge_results) + 1,
+                          "event_type": terminal, "agent_id": reviewer_id,
+                          "task_id": event["task_id"], "correlation_id": scenario_id}
+        with story_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(terminal_event, ensure_ascii=False, sort_keys=True) + "\n")
+
     successful = sum(item["status"] == "passed" for item in agent_results)
     failed = sum(item["status"] == "failed" for item in agent_results)
     review_required = sum(item["status"] in {"needs_review", "review_required"} for item in agent_results)
@@ -403,22 +466,31 @@ def run_product_scenario(
         "created_at": utc_now(),
         "product_name": product_brief.get("product_name", "unnamed"),
         "evaluation_mode": "live_a2a_product_scenario",
-        "passed": bool(agent_results) and successful == len(agent_results) and failed == 0,
+        "passed": (bool(agent_results) and successful == len(agent_results) and failed == 0 and len(challenge_results) == (len(stages) if len(stages) > 1 else 0) and all(item.get("status") == "passed" for item in challenge_results)),
         "summary": {
             "agents_requested": len(stages), "agents_passed_heuristic": successful,
             "agents_failed": failed, "agents_needing_review": review_required,
             "handoffs_recorded": len(handoffs),
             "external_actions_enabled": False,
             "customer_outcomes_created": 0,
+            "challenge_reviews_requested": len(challenge_results),
+            "challenge_reviews_schema_valid": sum(bool(item.get("schema_valid")) for item in challenge_results),
+            "challenge_reviews_needing_review": sum(item.get("status") != "passed" for item in challenge_results),
+            "challenge_findings": sum(len(item.get("non_clear_findings", [])) for item in challenge_results),
+            "challenge_handoffs_recorded": len(challenge_handoffs),
         },
         "evaluation_limitations": [
             "Role-term and response-substance checks are deterministic heuristics, not semantic proof.",
             "A successful A2A response does not prove the agent's recommendations are correct.",
             "Customer validation and commercial outcomes require real, independently verified evidence.",
             "This runner does not execute code or external actions.",
+            "Adversarial CLEAR verdicts are model judgments, not semantic proof; inspect cited artifact evidence.",
+            "Each configured agent is asked to review every other configured agent in a second A2A pass.",
         ],
         "agent_results": agent_results,
         "handoffs": handoffs,
+        "challenge_results": challenge_results,
+        "challenge_handoffs": challenge_handoffs,
         "artifact_directory": str(artifacts_dir),
         "event_log": str(story_path),
     }
