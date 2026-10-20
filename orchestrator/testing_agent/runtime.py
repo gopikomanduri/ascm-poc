@@ -402,7 +402,7 @@ class GTMStatusAgent:
             f"The current test session has completed {rounds} founder-simulation round(s) and asked {questions} "
             "product clarification question(s). We're evaluating traceable handoffs, evidence-based product "
             "decisions, explicit approvals, and learning from verified outcomes. "
-            f"Latest repository signal: {commit}. These are progress signals, not customer traction claims."
+            "These are development progress signals, not customer traction claims."
         )
 
 
