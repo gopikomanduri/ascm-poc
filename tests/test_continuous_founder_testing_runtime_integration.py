@@ -8,8 +8,12 @@ from orchestrator.testing_agent.runtime import ContinuousFounderTestingRuntime
 class FakeASCMClient:
     def __init__(self, responses):
         self.responses = list(responses)
+        self.gtm_calls = []
 
     def send(self, agent_id, prompt, session_id):
+        if agent_id == "gtm":
+            self.gtm_calls.append((prompt, session_id))
+            return "Internal GTM review: do not claim unverified traction."
         assert agent_id == "product"
         return self.responses.pop(0)
 
@@ -49,4 +53,7 @@ def test_single_terminal_runtime_runs_goal_gtm_and_testing_agents_together(tmp_p
     assert records[-1]["decision"]["decision"] == "deny"
     assert records[-1]["decision"]["is_real_authorization"] is False
     assert records[-1]["is_real_publish_enabled"] is False
+    assert client.gtm_calls, "GTM Status Agent must consult the actual GTM A2A specialist"
+    review_path = Path(records[-1]["gtm_review_path"])
+    assert "Internal GTM review" in review_path.read_text()
     assert list((tmp_path / "artifacts" / "gtm_cycles").glob("*.md"))
