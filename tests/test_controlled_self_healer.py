@@ -120,6 +120,50 @@ def test_repair_refuses_dirty_active_checkout_before_agent_dispatch(tmp_path, mo
     assert called == []
 
 
+def test_repair_allows_untracked_diagnostics_and_preserves_them(tmp_path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "ascm-test@example.invalid"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "ASCM Test"], cwd=tmp_path, check=True)
+    (tmp_path / "README.md").write_text("baseline\\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "baseline"], cwd=tmp_path, check=True, capture_output=True)
+
+    diagnostics = {
+        "ascm_test_results.txt": "test evidence\\n",
+        "daemon_local_backup.patch": "backup patch\\n",
+        "orchestrator/mentor/daemon copy.py.bak.py": "backup source\\n",
+    }
+    for relative, value in diagnostics.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(value, encoding="utf-8")
+
+    calls = []
+
+    def invalid_proposal(finding, context):
+        calls.append(finding["repair_attempt"])
+        return "not a unified diff"
+
+    result = run_controlled_repair(
+        tmp_path,
+        {
+            "invariant_id": "untracked-diagnostics",
+            "severity": "P1",
+            "message": "Exercise isolated repair with untracked files",
+            "remediation_owner": "orchestrator",
+            "evidence": ["repro: untracked diagnostics should not block worktree creation"],
+        },
+        invalid_proposal,
+        acceptance_command="python -m orchestrator.testing_agent.runtime --sessions 1",
+    )
+
+    assert result["status"] == "repair_exhausted"
+    assert "dirty" not in result.get("reason", "").lower()
+    assert calls == [1, 2, 3]
+    for relative, expected in diagnostics.items():
+        assert (tmp_path / relative).read_text(encoding="utf-8") == expected
+
+
 def test_repair_refuses_non_git_workspace(tmp_path):
     result = run_controlled_repair(
         tmp_path,
