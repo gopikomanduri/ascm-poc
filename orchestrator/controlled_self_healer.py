@@ -56,7 +56,7 @@ def _claim_attempt(root: Path, key: str) -> bool:
     else:
         data = {}
     attempts = data.get(key, [])
-    if not isinstance(attempts, list) or len(attempts) >= MAX_REPAIR_ATTEMPTS:
+    if not isinstance(attempts, list) or len(attempts) >= 1:
         return False
     attempts.append({"started_at": _now(), "status": "started"})
     data[key] = attempts
@@ -181,7 +181,7 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
     root = Path(workspace).resolve()
     key = _key(finding)
     result: dict[str, Any] = {
-        "finding_id": str(finding.get("invariant_id", "unknown)),
+        "finding_id": str(finding.get("invariant_id", "unknown")),
         "finding_key": key,
         "implementation_agent": os.getenv("ASCM_REPAIR_CODER_AGENT", "coder"),
         "finding": {
