@@ -225,11 +225,11 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
         _audit(root, result)
         return result
 
-    command_text = acceptance_command or os.getenv(
-        "ASCM_REPAIR_ACCEPTANCE_COMMAND",
-        "python -m orchestrator.testing_agent.runtime --workspace . --base-url http://127.0.0.1:18091 --sessions 1",
-    )
-    command = shlex.split(command_text)
+    configured_acceptance = acceptance_command or os.getenv("ASCM_REPAIR_ACCEPTANCE_COMMAND")
+    command = shlex.split(configured_acceptance) if configured_acceptance else [
+        os.sys.executable, "-m", "orchestrator.testing_agent.runtime",
+        "--workspace", ".", "--base-url", "http://127.0.0.1:18091", "--sessions", "1",
+    ]
     if not command:
         result["reason"] = "The end-to-end acceptance command is empty."
         _audit(root, result)
