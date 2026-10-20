@@ -35,7 +35,7 @@ Use a standard A2A 1.0 `message/send` JSON-RPC request. The A2A Message must con
 }
 ```
 
-Supported IDs are listed in the Agent Card: discovery, product, business_strategy, revenue_roi, design, architect, architecture_review, planner, database, coder, security_auditor, code_review and mentor. `gtm` is accepted as a routing alias for `business_strategy`, but is not duplicated in the Agent Card. The roster intentionally includes only specialists that resolve to implemented runtime classes; it must not advertise placeholder IDs.
+Supported IDs are listed in the Agent Card: discovery, product, business_strategy, revenue_roi, design, architect, architecture_review, planner, database, coder, security_auditor, code_review, checker, compliance, qa, sre, apm, oncall, sales, marketing, advertising, seo and mentor. `gtm` is accepted as a routing alias for `business_strategy`, but is not duplicated in the Agent Card. The roster is expected to stay aligned with implemented specialist classes in `orchestrator.agents.all_agents` plus the separately implemented Founder Mentor.
 
 ## Scope and safety boundaries
 
