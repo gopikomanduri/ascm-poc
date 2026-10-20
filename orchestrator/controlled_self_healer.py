@@ -23,7 +23,7 @@ def _git(root: Path, *args: str) -> str:
 
 def route_owner(owner: str) -> str:
     key = "ASCM_REPAIR_AGENT_" + re.sub(r"[^A-Za-z0-9]", "_", owner).upper()
-    return os.getenv(key, "").strip() or os.getenv("ASCM_REPAIR_AGENT_ID", "").strip()
+    return os.getenv(key, "").strip() or os.getenv("ASCM_REPAIR_AGENT_ID", "").strip() or "coder"
 
 def _key(finding: dict[str, Any]) -> str:
     value = {k: finding.get(k) for k in ("invariant_id", "message", "remediation_owner", "evidence")}
@@ -88,12 +88,12 @@ def build_repair_context(root: Path, finding: dict[str, Any]) -> str:
                         candidates.append(path)
     owner = str(finding.get("remediation_owner", "orchestrator"))
     defaults = {
-        "product": ["orchestrator/intent_guardian.py"],
-        "mentor": ["orchestrator/intent_guardian.py"],
-        "gtm": ["orchestrator/intent_guardian.py"],
-        "governance": ["orchestrator/intent_guardian.py", "orchestrator/self_healing_controller.py"],
+        "product": ["orchestrator/testing_agent/runtime.py", "orchestrator/agents/all_agents.py"],
+        "mentor": ["orchestrator/mentor/proactive_mentor.py", "orchestrator/testing_agent/runtime.py"],
+        "gtm": ["orchestrator/testing_agent/runtime.py", "orchestrator/agents/all_agents.py"],
+        "governance": ["orchestrator/security/security_gate.py", "orchestrator/self_healing_controller.py"],
         "testing_agent": ["orchestrator/testing_agent/runtime.py", "orchestrator/self_healing_controller.py"],
-        "orchestrator": ["orchestrator/self_healing_controller.py", "orchestrator/intent_guardian.py"],
+        "orchestrator": ["orchestrator/self_healing_controller.py", "orchestrator/intent_guardian.py", "orchestrator/testing_agent/runtime.py"],
     }
     for path in defaults.get(owner, defaults["orchestrator"]):
         if path not in candidates:
@@ -109,7 +109,7 @@ def build_repair_context(root: Path, finding: dict[str, Any]) -> str:
             path = (root / rel).resolve()
             path.relative_to(root.resolve())
             if _safe_path(rel) and path.is_file():
-                chunks.append(f"\n--- FILE {rel} ---\n{path.read_text(encoding='utf-8', errors='replace')[:9000]}\n--- END FILE ---")
+                chunks.append(f"\n--- FILE {rel} ---\n{path.read_text(encoding='utf-8', errors='replace')[:3500]}\n--- END FILE ---")
         except (OSError, ValueError):
             continue
     return "\n".join(chunks)
