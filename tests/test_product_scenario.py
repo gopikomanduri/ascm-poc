@@ -90,7 +90,7 @@ def test_one_agent_failure_is_recorded_and_does_not_abort_remaining_stages(tmp_p
     client = FakeA2AClient(failures={"discovery"})
     report = run_product_scenario(
         client, DEFAULT_PRODUCT_BRIEF, workspace=tmp_path, scenario_id="test-partial",
-        stages=AGENT_STAGES[:3],
+        stages=AGENT_STAGES[:3], adversarial_review=False,
     )
     assert report["summary"]["agents_failed"] == 1
     assert report["passed"] is False
