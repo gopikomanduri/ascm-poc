@@ -234,3 +234,76 @@ def test_conversation_story_log_records_timestamped_ordered_events(tmp_path):
     assert "What is the founder's goal?" in story
     assert "Validate the core assumption first." in story
     assert "#0001" in story and "#0002" in story
+
+
+
+def test_product_response_schema_self_heals_once_and_continues_founder_journey(tmp_path):
+    malformed = json.dumps({
+        "detected_domain": "software engineering",
+        "confidence_score": 0.55,
+        "functional_completeness": 0.5,
+        "nfr_completeness": 0.4,
+        "is_clear": False,
+        "understanding": "ASCM is a multi-agent software delivery system.",
+        "clarification_questions": {"unexpected_shape": 7},
+        "checkpoint_clarification_items": [],
+    })
+    client = FakeASCMClient([
+        malformed,
+        product_response(question="Who is the target user and what evidence validates the need?"),
+    ])
+    runtime = ContinuousFounderTestingRuntime(
+        tmp_path, profile=FounderProfile(), client=client, rounds_per_session=1,
+        review_delay_seconds=0,
+    )
+
+    result = runtime.run_product_session("problem and value proposition")
+
+    assert result["clarification_questions"] == [
+        "Who is the target user and what evidence validates the need?"
+    ]
+    assert len(client.calls) == 2  # initial request + exactly one schema repair
+    assert runtime.questions_asked == 1
+    assert runtime.rounds_completed == 1
+    assert runtime.self_heal_attempts == 1
+    assert runtime.self_heal_successes == 1
+    assert runtime.self_heal_failures == 0
+    story = runtime.story_log.text_path.read_text()
+    assert "REPAIR_REQUESTED" in story
+    assert "REPAIR_SUCCEEDED" in story
+
+
+def test_product_response_schema_self_heal_is_bounded_and_fails_closed(tmp_path):
+    malformed = json.dumps({
+        "detected_domain": "software engineering",
+        "confidence_score": 0.55,
+        "is_clear": False,
+        "understanding": "Incomplete response",
+        "clarification_questions": {"unexpected_shape": 7},
+    })
+    client = FakeASCMClient([malformed, malformed, malformed])
+    runtime = ContinuousFounderTestingRuntime(
+        tmp_path, client=client, rounds_per_session=1, review_delay_seconds=0,
+    )
+
+    result = runtime.run_product_session("problem and value proposition")
+
+    assert result["is_clear"] is False
+    assert len(client.calls) == 2  # never loops on a bad response
+    assert runtime.self_heal_attempts == 1
+    assert runtime.self_heal_successes == 0
+    assert runtime.self_heal_failures == 1
+    assert runtime.rounds_completed == 0
+    assert any("self-heal failed after one retry" in finding for finding in runtime.findings)
+
+
+def test_product_response_normalizes_recognized_question_shapes_without_retry():
+    result = ContinuousFounderTestingRuntime._parse_product_result(json.dumps({
+        "detected_domain": "software engineering",
+        "confidence_score": 0.5,
+        "is_clear": False,
+        "understanding": "Needs clarification",
+        "clarification_questions": {"question": "Who is the target user?"},
+    }))
+
+    assert result["clarification_questions"] == ["Who is the target user?"]

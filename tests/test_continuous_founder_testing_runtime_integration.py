@@ -27,7 +27,13 @@ def test_single_terminal_runtime_runs_goal_gtm_and_testing_agents_together(tmp_p
     subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "ASCM Test"], cwd=tmp_path, check=True)
     (tmp_path / "README.md").write_text("test workspace")
-    subprocess.run(["git", "add", "README.md"], cwd=tmp_path, check=True)
+    # This isolated workspace must carry the same intent contract the runtime evaluates.
+    contract_source = Path(__file__).resolve().parents[1] / "docs" / "ASCM_INTENT_CONTRACT.md"
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "ASCM_INTENT_CONTRACT.md").write_text(
+        contract_source.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    subprocess.run(["git", "add", "README.md", "docs/ASCM_INTENT_CONTRACT.md"], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-m", "test milestone"], cwd=tmp_path, check=True, capture_output=True)
 
     client = FakeASCMClient([json.dumps({
