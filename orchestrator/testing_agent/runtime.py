@@ -9,6 +9,7 @@ the harness intentionally has no LinkedIn/social publishing adapter.
 from __future__ import annotations
 
 import argparse
+import builtins
 import hashlib
 import json
 import logging
@@ -16,6 +17,7 @@ import os
 import queue
 import subprocess
 import sys
+import shlex
 import threading
 import time
 import uuid
@@ -28,6 +30,76 @@ import httpx
 from orchestrator.testing_agent.founder_journey import FounderJourneyEvaluator, JourneyEvent
 
 logger = logging.getLogger("ASCM.TestingAgent")
+
+
+class AgentTerminalViews:
+    """Fan out runtime messages to one visible macOS Terminal window per agent."""
+
+    ROLES = ("product", "testing", "mentor", "goal", "gtm")
+
+    def __init__(self, workspace: Path):
+        self.log_dir = workspace / ".ascm_history" / "agent_terminals"
+        self.paths = {role: self.log_dir / f"{role}.log" for role in self.ROLES}
+        self._original_print = builtins.print
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def roles_for_line(line: str) -> tuple[str, ...]:
+        line = line.strip()
+        if line.startswith("[PRODUCT AGENT"):
+            return ("product", "testing")
+        if line.startswith("[TESTING AGENT"):
+            return ("testing",)
+        if line.startswith("[MENTOR AGENT"):
+            return ("mentor", "testing")
+        if line.startswith("[GOAL AGENT"):
+            return ("goal",)
+        if line.startswith("[GTM AGENT"):
+            return ("gtm",)
+        return ()
+
+    def _tee_print(self, *args: Any, **kwargs: Any) -> None:
+        self._original_print(*args, **kwargs)
+        sep = kwargs.get("sep", " ")
+        text = sep.join(str(arg) for arg in args)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            for line in text.splitlines():
+                for role in self.roles_for_line(line):
+                    with self.paths[role].open("a", encoding="utf-8") as handle:
+                        handle.write(f"{timestamp} {line.strip()}\\n")
+
+    def start(self) -> None:
+        if sys.platform != "darwin":
+            raise RuntimeError("--visible-terminals currently requires macOS and Terminal.app.")
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        for role, path in self.paths.items():
+            path.write_text(
+                f"ASCM {role.upper()} AGENT LIVE LOG\\n"
+                "Close this Terminal window when the test session is over.\\n\\n",
+                encoding="utf-8",
+            )
+        for role, path in self.paths.items():
+            command = f"tail -n +1 -F {shlex.quote(str(path))}"
+            apple_script_string = command.replace("\\\\", "\\\\\\\\").replace('"', '\\\\"')
+            script = f'tell application "Terminal" to do script "{apple_script_string}"'
+            subprocess.Popen(
+                ["osascript", "-e", script],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        builtins.print = self._tee_print
+        self._original_print(
+            "[ASCM] Opened five live Terminal windows: Product, Testing, Mentor, Goal, and GTM.",
+            flush=True,
+        )
+
+    def close(self) -> None:
+        if builtins.print == self._tee_print:
+            builtins.print = self._original_print
+
+
 PROBE_AREAS = (
     "problem and value proposition",
     "target user and ideal customer profile",
@@ -415,7 +487,8 @@ class ContinuousFounderTestingRuntime:
 
     def __init__(self, workspace: str | Path = ".", *, base_url: str = "http://127.0.0.1:8090",
                  profile: FounderProfile | None = None, poll_interval: float = 5.0,
-                 rounds_per_session: int = 8, client: ASCMJsonRpcClient | None = None):
+                 rounds_per_session: int = 8, client: ASCMJsonRpcClient | None = None,
+                 review_delay_seconds: float = 5.0):
         self.workspace = Path(workspace).expanduser().resolve()
         self.history = self.workspace / ".ascm_history"
         self.status_path = self.history / "testing_agent_status.json"
@@ -424,6 +497,7 @@ class ContinuousFounderTestingRuntime:
         self.profile = profile or FounderProfile()
         self.poll_interval = max(0.5, float(poll_interval))
         self.rounds_per_session = max(1, min(int(rounds_per_session), 50))
+        self.review_delay_seconds = max(0.0, float(review_delay_seconds))
         self.client = client or ASCMJsonRpcClient(base_url)
         self.stop = threading.Event()
         self.permission_requests: queue.Queue = queue.Queue()
@@ -546,6 +620,12 @@ class ContinuousFounderTestingRuntime:
             ])
             print(f"\n[PRODUCT AGENT → TESTING AGENT] {question}", flush=True)
             print(f"[TESTING AGENT → PRODUCT AGENT] {answer}\n", flush=True)
+            if self.review_delay_seconds:
+                print(
+                    f"[TESTING AGENT] Pausing {self.review_delay_seconds:g} seconds for your review before the next exchange.",
+                    flush=True,
+                )
+                time.sleep(self.review_delay_seconds)
         return final
 
     def run_mentor_review(self, focus: str) -> str:
@@ -767,6 +847,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", default="http://127.0.0.1:8090", help="ASCM A2A gateway URL.")
     parser.add_argument("--scenario", type=Path, help="Optional JSON simulated-founder profile.")
     parser.add_argument("--poll-interval", type=float, default=5.0)
+    parser.add_argument("--review-delay", type=float, default=5.0,
+                        help="Seconds to pause after each Product Agent question/Testing Agent answer (default: 5).")
+    parser.add_argument("--visible-terminals", action="store_true",
+                        help="On macOS, open one Terminal window per agent and stream its live log.")
     parser.add_argument("--rounds-per-session", type=int, default=8)
     parser.add_argument("--sessions", type=int, default=0, help="Number of sessions; 0 means keep running until Ctrl-C.")
     parser.add_argument("--no-start-server", action="store_true", help="Require an already-running A2A gateway.")
@@ -774,11 +858,15 @@ def main(argv: list[str] | None = None) -> int:
     workspace = Path(args.workspace).expanduser().resolve()
     profile = FounderProfile.load(args.scenario)
     process = None
+    terminal_views = AgentTerminalViews(workspace) if args.visible_terminals else None
     try:
+        if terminal_views is not None:
+            terminal_views.start()
         process = ensure_gateway(args.base_url, workspace, start_server=not args.no_start_server)
         runtime = ContinuousFounderTestingRuntime(
             workspace, base_url=args.base_url, profile=profile,
             poll_interval=args.poll_interval, rounds_per_session=args.rounds_per_session,
+            review_delay_seconds=args.review_delay,
         )
         runtime.run(sessions=args.sessions)
         return 0
@@ -787,6 +875,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[TESTING AGENT] FATAL: {exc}", file=sys.stderr, flush=True)
         return 2
     finally:
+        if terminal_views is not None:
+            terminal_views.close()
         if process is not None and process.poll() is None:
             process.terminate()
             try:
