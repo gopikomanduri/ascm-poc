@@ -120,15 +120,14 @@ def test_repair_refuses_dirty_active_checkout_before_agent_dispatch(tmp_path, mo
     assert called == []
 
 
-def test_repair_requires_fresh_acceptance_command(tmp_path):
+def test_repair_refuses_non_git_workspace(tmp_path):
     result = run_controlled_repair(
         tmp_path,
-        {"invariant_id": "missing-acceptance", "severity": "P1", "message": "failure"},
+        {"invariant_id": "missing-git-workspace", "severity": "P1", "message": "failure"},
         lambda finding, context: "",
-        acceptance_command=None,
     )
     assert result["status"] == "blocked"
-    assert "ASCM_REPAIR_ACCEPTANCE_COMMAND" in result["reason"]
+    assert "not a usable Git checkout" in result["reason"]
 
 
 def test_repair_context_excludes_protected_contract_from_agent_input(tmp_path):
