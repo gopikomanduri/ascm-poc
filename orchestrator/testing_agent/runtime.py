@@ -954,12 +954,58 @@ class ContinuousFounderTestingRuntime:
             return ""
         self.mentor_reviews_completed += 1
         self.last_mentor_review = review
+        review_ref = f"mentor-review:{self.session_id}:{self.mentor_reviews_completed}"
         self.journey_events.append(JourneyEvent(
-            "mentor_recommendation_shown", "ascm_mentor",
-            evidence_ref=f"mentor-review:{self.session_id}:{self.mentor_reviews_completed}",
+            "mentor_recommendation_shown", "ascm_mentor", evidence_ref=review_ref,
         ))
+        self._record_mentor_action(focus, review, review_ref)
         print(f"[MENTOR AGENT → TESTING AGENT] {review[:1200]}\\n", flush=True)
         return review
+
+    def _record_mentor_action(self, focus: str, review: str, review_ref: str) -> None:
+        """Persist a proposed founder follow-up without approving or executing it."""
+        parsed: dict[str, Any] = {}
+        try:
+            start, end = review.find("{"), review.rfind("}")
+            if start >= 0 and end > start:
+                candidate = json.loads(review[start:end + 1])
+                if isinstance(candidate, dict):
+                    parsed = candidate
+        except (json.JSONDecodeError, TypeError):
+            pass
+        plan = parsed.get("pre_build_validation_plan", [])
+        if isinstance(plan, str):
+            plan = [plan]
+        action = next((x.strip() for x in plan if isinstance(x, str) and x.strip()), None) if isinstance(plan, list) else None
+        if not action and isinstance(parsed.get("mentor_advice"), str):
+            action = parsed["mentor_advice"].strip()
+        action = action or "Review the Mentor recommendation and choose a measurable next action."
+        action_id = "founder-action-" + str(uuid.uuid4())
+        record = {
+            "action_id": action_id, "session_id": self.session_id, "focus": focus,
+            "action": action, "source": "mentor_agent", "source_evidence_ref": review_ref,
+            "status": "proposed", "approved": False, "executed": False,
+            "outcome_status": "awaiting_evidence",
+            "follow_up": "Record the founder's decision and attach evidence before marking this action complete.",
+            "created_at": utc_now(),
+        }
+        path = self.history / "founder_actions.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\\n")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+        self.journey_events.append(JourneyEvent(
+            "mentor_action_proposed", "mentor_agent", evidence_ref=action_id,
+            details={"status": "proposed", "approved": False, "executed": False, "focus": focus},
+        ))
+        self.story_log.record(
+            "MENTOR AGENT", "FOUNDER ACTION QUEUE", "action_proposed",
+            json.dumps(record, sort_keys=True),
+            metadata={"task_id": action_id, "correlation_id": self.session_id, "focus": focus},
+        )
 
     def _acceptance_summary(self) -> dict[str, Any]:
         events = list(self.journey_events)
