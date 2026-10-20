@@ -342,3 +342,79 @@ def test_forced_acceptance_gateway_starts_from_isolated_workspace(tmp_path, monk
     assert calls["popen"]["cwd"] == tmp_path
     assert calls["popen"]["env"]["ASCM_A2A_WORKSPACE"] == str(tmp_path)
     assert calls["popen"]["env"]["ASCM_A2A_PORT"] == "18091"
+
+
+def test_testing_agent_logs_successful_a2a_handoff_with_correlation_ids(tmp_path):
+    client = FakeASCMClient(["Mentor recommends validating demand before implementation."])
+    runtime = ContinuousFounderTestingRuntime(
+        tmp_path, client=client, rounds_per_session=1, review_delay_seconds=0,
+    )
+
+    response = runtime._send_agent("mentor", "Review founder goal", runtime.session_id)
+
+    assert response == "Mentor recommends validating demand before implementation."
+    events = [json.loads(line) for line in runtime.story_log.jsonl_path.read_text().splitlines()]
+    handoff = [event for event in events if event["metadata"].get("agent_id") == "mentor"]
+    assert [event["event_type"] for event in handoff] == ["request", "response"]
+    assert handoff[0]["metadata"]["task_id"] == handoff[1]["metadata"]["task_id"]
+    assert handoff[0]["metadata"]["correlation_id"] == runtime.session_id
+    assert handoff[0]["speaker"] == "TESTING AGENT"
+    assert handoff[1]["speaker"] == "MENTOR AGENT"
+
+
+def test_testing_agent_logs_failed_a2a_handoff_with_correlation_ids(tmp_path):
+    class BrokenClient:
+        def send(self, agent_id, prompt, session_id):
+            raise TimeoutError("simulated A2A timeout")
+
+    runtime = ContinuousFounderTestingRuntime(
+        tmp_path, client=BrokenClient(), rounds_per_session=1, review_delay_seconds=0,
+    )
+
+    with pytest.raises(TimeoutError, match="simulated A2A timeout"):
+        runtime._send_agent("mentor", "Review founder goal", runtime.session_id)
+
+    events = [json.loads(line) for line in runtime.story_log.jsonl_path.read_text().splitlines()]
+    handoff = [event for event in events if event["metadata"].get("agent_id") == "mentor"]
+    assert [event["event_type"] for event in handoff] == ["request", "request_failed"]
+    assert handoff[0]["metadata"]["task_id"] == handoff[1]["metadata"]["task_id"]
+    assert handoff[0]["metadata"]["correlation_id"] == runtime.session_id
+    assert "TimeoutError" in handoff[1]["message"]
+
+
+def test_gtm_specialist_request_and_response_are_written_to_conversation_story(tmp_path):
+    import queue
+    import threading
+
+    history = tmp_path / ".ascm_history"
+    history.mkdir()
+    status_path = history / "testing_agent_status.json"
+    status_path.write_text(json.dumps({
+        "latest_commit": "abc123 test",
+        "testing_rounds": 1,
+        "product_questions": 1,
+        "sessions_completed": 1,
+        "open_findings": [],
+    }))
+    stop = threading.Event()
+    story = ConversationStoryLog(history, "gtm-story-session")
+    agent = GTMStatusAgent(
+        tmp_path, status_path, stop, queue.Queue(), queue.Queue(), 0.5,
+        client=FakeASCMClient(["Position this as a workflow-coordination tool; avoid traction claims."]),
+        story_log=story,
+    )
+    timer = threading.Timer(0.25, stop.set)
+    timer.start()
+    try:
+        agent.run()
+    finally:
+        stop.set()
+        timer.cancel()
+
+    events = [json.loads(line) for line in story.jsonl_path.read_text().splitlines()]
+    handoff = [event for event in events if event["metadata"].get("channel") == "internal_gtm_review"]
+    assert [event["event_type"] for event in handoff] == ["request", "response"]
+    assert handoff[0]["metadata"]["task_id"] == handoff[1]["metadata"]["task_id"]
+    assert handoff[0]["metadata"]["correlation_id"] == handoff[1]["metadata"]["correlation_id"]
+    assert handoff[0]["speaker"] == "GTM STATUS AGENT"
+    assert handoff[1]["speaker"] == "GTM AGENT"
