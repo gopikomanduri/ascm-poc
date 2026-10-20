@@ -47,6 +47,7 @@ When enabled, it:
 5. Requires a fresh end-to-end Testing Agent run whose report has `acceptance_passed=true` and an aligned Intent Guardian result. The original failed report is never rewritten as a pass.
 6. Records an audit event in `.ascm_history/controlled_self_healing.jsonl` and a one-attempt-per-finding ledger under the Git common directory.
 7. Can push a verified branch and open a PR only when `ASCM_CODE_REPAIR_OPEN_PR=1`; it never merges. The worktree and branch are retained for review and diagnosis.
+8. Before opening that PR, dispatches `ci-cd.yml` for the repair commit and waits for all GitHub CI/security/Docker jobs to pass. If CI fails or times out, it leaves the branch pushed but does not open a PR.
 
 ### Configuration
 
