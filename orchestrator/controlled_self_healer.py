@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 MAX_PATCH_BYTES = 30000
 MAX_PATCH_PATHS = 8
+MAX_REPAIR_ATTEMPTS = 3
 ALLOWED_ROOTS = ("orchestrator/", "products/", "tests/")
 PROTECTED_PREFIXES = (".github/", "docs/", "security/", ".ascm_history/")
 PROTECTED_NAMES = {"ASCM_INTENT_CONTRACT.md", "SECURITY.md", "requirements.txt", "pyproject.toml", "pytest.ini", "tox.ini"}
@@ -55,7 +56,7 @@ def _claim_attempt(root: Path, key: str) -> bool:
     else:
         data = {}
     attempts = data.get(key, [])
-    if not isinstance(attempts, list) or len(attempts) >= 1:
+    if not isinstance(attempts, list) or len(attempts) >= MAX_REPAIR_ATTEMPTS:
         return False
     attempts.append({"started_at": _now(), "status": "started"})
     data[key] = attempts
@@ -175,131 +176,256 @@ def _wait_for_github_ci(gh: str, branch: str, commit: str, cwd: Path, *, timeout
 
 def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
                           proposal_provider: Callable[[dict[str, Any], str], str], *,
-                          acceptance_command: str | None, open_pr: bool = False) -> dict[str, Any]:
+                          acceptance_command: str | None = None, open_pr: bool = False) -> dict[str, Any]:
+    """Autonomously repair a finding in an isolated worktree, retrying with verifier feedback."""
     root = Path(workspace).resolve()
     key = _key(finding)
-    result: dict[str, Any] = {"finding_id": str(finding.get("invariant_id", "unknown")),
-        "finding_key": key, "implementation_agent": os.getenv("ASCM_REPAIR_CODER_AGENT", "coder"),
+    result: dict[str, Any] = {
+        "finding_id": str(finding.get("invariant_id", "unknown)),
+        "finding_key": key,
+        "implementation_agent": os.getenv("ASCM_REPAIR_CODER_AGENT", "coder"),
         "finding": {
             "message": finding.get("message"),
             "severity": finding.get("severity"),
             "remediation_owner": finding.get("remediation_owner"),
             "evidence": finding.get("evidence", []),
         },
-        "expected_outcome": "minimal scoped fix, regression test, all verification gates pass, human-reviewed PR only",
-        "status": "blocked", "branch": None, "changed_files": [],
-        "checks": {}, "pr_url": None, "human_merge_required": True}
+        "expected_outcome": "verified fix with regression test, full test/security/intent gates, and human-reviewed PR",
+        "status": "blocked",
+        "branch": None,
+        "changed_files": [],
+        "checks": {},
+        "attempts": [],
+        "pr_url": None,
+        "human_merge_required": True,
+    }
     if str(finding.get("severity", "")).upper() == "P0":
         result["reason"] = "P0 finding: stop and escalate; automatic repair is forbidden."
-        _audit(root, result); return result
-    if not acceptance_command:
-        result["reason"] = "ASCM_REPAIR_ACCEPTANCE_COMMAND is required for fresh product-intent verification."
-        _audit(root, result); return result
+        _audit(root, result)
+        return result
     if _git(root, "status", "--porcelain"):
         result["reason"] = "Active checkout is dirty; refusing to create a repair worktree."
-        _audit(root, result); return result
+        _audit(root, result)
+        return result
     if not _claim_attempt(root, key):
-        result["reason"] = "The single repair attempt for this finding was already consumed."
-        _audit(root, result); return result
-    agent = route_owner(str(finding.get("remediation_owner", "orchestrator")))
-    result["routed_agent"] = agent
-    if not agent:
-        result["reason"] = "No repair agent configured. Set ASCM_REPAIR_AGENT_ID or owner-specific ASCM_REPAIR_AGENT_*."
-        _audit(root, result); return result
+        result["reason"] = f"The bounded budget of {MAX_REPAIR_ATTEMPTS} repair attempts for this finding is exhausted or its ledger is invalid."
+        _audit(root, result)
+        return result
+
+    owner = str(finding.get("remediation_owner", "orchestrator"))
+    result["routed_agent"] = route_owner(owner)
+    if not result["routed_agent"]:
+        result["reason"] = f"No A2A diagnosis agent configured for owner '{owner}'."
+        _audit(root, result)
+        return result
+
+    command_text = acceptance_command or os.getenv(
+        "ASCM_REPAIR_ACCEPTANCE_COMMAND",
+        "python -m orchestrator.testing_agent.runtime --workspace . --base-url http://127.0.0.1:18091 --sessions 1",
+    )
+    command = shlex.split(command_text)
+    if not command:
+        result["reason"] = "The end-to-end acceptance command is empty."
+        _audit(root, result)
+        return result
+
     base_sha = _git(root, "rev-parse", "HEAD")
     slug = re.sub(r"[^a-z0-9]+", "-", str(finding.get("invariant_id", "finding")).lower()).strip("-")[:28] or "finding"
     branch = f"ascm/repair-{slug}-{key}"
-    worktree = Path(tempfile.mkdtemp(prefix=f"ascm-repair-{key}-")); worktree.rmdir()
+    worktree = Path(tempfile.mkdtemp(prefix=f"ascm-repair-{key}-"))
+    worktree.rmdir()
     result.update({"branch": branch, "base_sha": base_sha, "worktree": str(worktree)})
     created = False
+    feedback: list[str] = []
     try:
         add = _run(["git", "worktree", "add", "-b", branch, str(worktree), base_sha], root, timeout=120)
         if add.returncode:
-            result["reason"] = "Could not create isolated worktree: " + add.stderr[-1500:]; return result
+            result["reason"] = "Could not create isolated worktree: " + add.stderr[-1500:]
+            return result
         created = True
-        response = proposal_provider(finding, build_repair_context(root, finding)).strip()
-        fence = chr(96) * 3
-        if response.startswith(fence):
-            response = re.sub(r"^" + re.escape(fence) + r"(?:diff|patch)?\s*\n", "", response)
-            response = re.sub(r"\n" + re.escape(fence) + r"\s*$", "", response)
-        if "diff --git " in response:
-            response = response[response.index("diff --git "):]
-        valid, why, paths = validate_patch(response)
-        if not valid:
-            result["reason"], result["proposal_paths"] = why, paths; return result
-        patch_file = worktree.parent / (worktree.name + ".patch")
-        patch_file.write_text(response, encoding="utf-8")
-        try:
-            check = _run(["git", "apply", "--check", str(patch_file)], worktree)
-            if check.returncode:
-                result["reason"] = "Patch check failed: " + check.stderr[-1500:]; return result
-            applied = _run(["git", "apply", str(patch_file)], worktree)
-            if applied.returncode:
-                result["reason"] = "Patch application failed: " + applied.stderr[-1500:]; return result
-        finally:
-            patch_file.unlink(missing_ok=True)
-        changed = _git(worktree, "diff", "--name-only", base_sha).splitlines()
-        if not changed or any(not _safe_path(p) for p in changed) or not any(p.startswith("tests/") for p in changed):
-            result["reason"], result["changed_files"] = "Post-apply diff failed scope/regression-test policy.", changed; return result
-        result["changed_files"] = changed
-        test_files = [p for p in changed if p.startswith("tests/") and p.endswith(".py")]
-        if not test_files:
-            result["reason"] = "No Python regression test changed."; return result
         env = os.environ.copy()
-        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(worktree), str(worktree / "products" / "paypulse-sentinel" / "api-gateway"), env.get("PYTHONPATH", "")]))
-        focused = _run([os.sys.executable, "-m", "pytest", "-q", *test_files], worktree, env=env)
-        result["checks"]["focused_tests"] = {"passed": focused.returncode == 0, "output": (focused.stdout + focused.stderr)[-5000:]}
-        if focused.returncode:
-            result["reason"] = "Focused regression tests failed."; return result
-        full = _run([os.sys.executable, "-m", "pytest", "-q"], worktree, timeout=1800, env=env)
-        result["checks"]["full_tests"] = {"passed": full.returncode == 0, "output": (full.stdout + full.stderr)[-5000:]}
-        if full.returncode:
-            result["reason"] = "Full test suite failed."; return result
-        py_files = [p for p in changed if p.endswith(".py") and not p.startswith("tests/")]
-        bandit = shutil.which("bandit")
-        if py_files:
-            if not bandit:
-                result["reason"] = "Bandit unavailable; fail-closed security gate."
-                result["checks"]["bandit"] = {"passed": False, "reason": "tool_unavailable"}; return result
-            scan = _run([bandit, "-ll", "--skip", "B603,B607", *py_files], worktree, env=env)
-            result["checks"]["bandit"] = {"passed": scan.returncode == 0, "output": (scan.stdout + scan.stderr)[-5000:]}
-            if scan.returncode:
-                result["reason"] = "Bandit security scan failed."; return result
-        audit = shutil.which("pip-audit")
-        if not audit:
-            result["reason"] = "pip-audit unavailable; fail-closed security gate."
-            result["checks"]["pip_audit"] = {"passed": False, "reason": "tool_unavailable"}; return result
-        audited = _run([audit, "-r", "requirements.txt"], worktree, timeout=900, env=env)
-        result["checks"]["pip_audit"] = {"passed": audited.returncode == 0, "output": (audited.stdout + audited.stderr)[-5000:]}
-        if audited.returncode:
-            result["reason"] = "Dependency audit failed."; return result
-        command = shlex.split(acceptance_command)
-        if not command:
-            result["reason"] = "Configured product-intent acceptance command is empty."; return result
-        env["ASCM_CODE_REPAIR_ENABLED"] = "0"
-        env["ASCM_A2A_FORCE_START_SERVER"] = "1"
-        accepted = _run(command, worktree, timeout=1800, env=env)
-        report_path = worktree / ".ascm_history" / "testing_agent_report.json"
-        try:
-            report = json.loads(report_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            report = {}
-        controller = report.get("self_healing_controller", {}) if isinstance(report, dict) else {}
-        ok = accepted.returncode == 0 and report.get("acceptance_passed") is True and controller.get("status") == "aligned"
-        result["checks"]["product_intent_acceptance"] = {"passed": ok, "exit_code": accepted.returncode,
-            "acceptance_passed": report.get("acceptance_passed") is True, "intent_status": controller.get("status"),
-            "output": (accepted.stdout + accepted.stderr)[-5000:]}
-        if not ok:
-            result["reason"] = "Fresh end-to-end product-intent acceptance failed or produced no aligned report."; return result
-        _git(worktree, "add", "--", *changed)
-        _git(worktree, "commit", "-m", f"Repair ASCM finding: {finding.get('invariant_id', key)}")
-        result["repair_commit"] = _git(worktree, "rev-parse", "HEAD")
-        result["status"] = "verified_pr_ready"
-        result["reason"] = "Focused/full tests, security gates, and fresh product-intent acceptance passed."
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [
+            str(worktree),
+            str(worktree / "products" / "paypulse-sentinel" / "api-gateway"),
+            env.get("PYTHONPATH", ""),
+        ]))
+
+        for attempt in range(1, MAX_REPAIR_ATTEMPTS + 1):
+            attempt_result: dict[str, Any] = {"attempt": attempt, "status": "repairing", "checks": {}}
+            result["attempts"].append(attempt_result)
+            # Discard only the previous uncommitted attempt inside the isolated worktree.
+            _run(["git", "reset", "--hard", base_sha], worktree)
+            _run(["git", "clean", "-fd"], worktree)
+            attempt_finding = dict(finding)
+            attempt_finding["repair_attempt"] = attempt
+            attempt_finding["repair_attempt_limit"] = MAX_REPAIR_ATTEMPTS
+            attempt_finding["previous_verification_feedback"] = feedback[-8:]
+            context = build_repair_context(root, attempt_finding)
+            if feedback:
+                context += "\n\nPrevious repair attempts failed verification. Correct the underlying issue; do not weaken tests, acceptance criteria, security controls, or the approved product contract.\n"
+                context += "\n".join(f"- {item}" for item in feedback[-8:])
+            try:
+                proposed = proposal_provider(attempt_finding, context).strip()
+            except Exception as exc:
+                note = f"attempt {attempt}: repair agent call failed: {type(exc).__name__}: {exc}"
+                attempt_result.update({"status": "failed", "failure": note})
+                feedback.append(note)
+                continue
+
+            fence = chr(96) * 3
+            if proposed.startswith(fence):
+                proposed = re.sub(r"^" + re.escape(fence) + r"(?:diff|patch)?\s*\n", "", proposed)
+                proposed = re.sub(r"\n" + re.escape(fence) + r"\s*$", "", proposed)
+            if "diff --git " in proposed:
+                proposed = proposed[proposed.index("diff --git "):]
+            valid, why, paths = validate_patch(proposed)
+            if not valid:
+                note = f"attempt {attempt}: invalid patch: {why}"
+                attempt_result.update({"status": "failed", "failure": note, "proposal_paths": paths})
+                feedback.append(note)
+                continue
+
+            patch_file = worktree.parent / (worktree.name + f"-{attempt}.patch")
+            patch_file.write_text(proposed, encoding="utf-8")
+            try:
+                check = _run(["git", "apply", "--check", str(patch_file)], worktree)
+                if check.returncode:
+                    note = "patch did not apply cleanly: " + check.stderr[-2000:]
+                    attempt_result.update({"status": "failed", "failure": note})
+                    feedback.append(f"attempt {attempt}: {note}")
+                    continue
+                applied = _run(["git", "apply", str(patch_file)], worktree)
+                if applied.returncode:
+                    note = "patch application failed: " + applied.stderr[-2000:]
+                    attempt_result.update({"status": "failed", "failure": note})
+                    feedback.append(f"attempt {attempt}: {note}")
+                    continue
+            finally:
+                patch_file.unlink(missing_ok=True)
+
+            changed = _git(worktree, "ls-files", "--modified", "--others", "--exclude-standard").splitlines()
+            if not changed or any(not _safe_path(p) for p in changed) or not any(p.startswith("tests/") for p in changed):
+                note = "post-apply diff is empty or violates allowed-path/regression-test policy"
+                attempt_result.update({"status": "failed", "failure": note, "changed_files": changed})
+                feedback.append(f"attempt {attempt}: {note}")
+                continue
+            test_files = [p for p in changed if p.startswith("tests/") and p.endswith(".py")]
+            if not test_files:
+                note = "patch must change at least one Python regression test"
+                attempt_result.update({"status": "failed", "failure": note})
+                feedback.append(f"attempt {attempt}: {note}")
+                continue
+            attempt_result["changed_files"] = changed
+
+            focused = _run([os.sys.executable, "-m", "pytest", "-q", *test_files], worktree, env=env)
+            attempt_result["checks"]["focused_tests"] = {
+                "passed": focused.returncode == 0,
+                "output": (focused.stdout + focused.stderr)[-6000:],
+            }
+            if focused.returncode:
+                note = "focused regression tests failed:\n" + (focused.stdout + focused.stderr)[-3500:]
+                attempt_result.update({"status": "failed", "failure": note})
+                feedback.append(f"attempt {attempt}: {note}")
+                continue
+
+            full = _run([os.sys.executable, "-m", "pytest", "-q"], worktree, timeout=1800, env=env)
+            attempt_result["checks"]["full_tests"] = {
+                "passed": full.returncode == 0,
+                "output": (full.stdout + full.stderr)[-6000:],
+            }
+            if full.returncode:
+                note = "full test suite failed:\n" + (full.stdout + full.stderr)[-3500:]
+                attempt_result.update({"status": "failed", "failure": note})
+                feedback.append(f"attempt {attempt}: {note}")
+                continue
+
+            py_files = [p for p in changed if p.endswith(".py") and not p.startswith("tests/")]
+            bandit = shutil.which("bandit")
+            if py_files:
+                if not bandit:
+                    note = "Bandit unavailable; fail-closed security gate."
+                    attempt_result.update({"status": "failed", "failure": note})
+                    feedback.append(f"attempt {attempt}: {note}")
+                    continue
+                scan = _run([bandit, "-ll", "--skip", "B603,B607", *py_files], worktree, env=env)
+                attempt_result["checks"]["bandit"] = {
+                    "passed": scan.returncode == 0,
+                    "output": (scan.stdout + scan.stderr)[-5000:],
+                }
+                if scan.returncode:
+                    note = "Bandit security scan failed:\n" + (scan.stdout + scan.stderr)[-3000:]
+                    attempt_result.update({"status": "failed", "failure": note})
+                    feedback.append(f"attempt {attempt}: {note}")
+                    continue
+
+            audit = shutil.which("pip-audit")
+            if not audit:
+                note = "pip-audit unavailable; fail-closed security gate."
+                attempt_result.update({"status": "failed", "failure": note})
+                feedback.append(f"attempt {attempt}: {note}")
+                continue
+            audited = _run([audit, "-r", "requirements.txt"], worktree, timeout=900, env=env)
+            attempt_result["checks"]["pip_audit"] = {
+                "passed": audited.returncode == 0,
+                "output": (audited.stdout + audited.stderr)[-5000:],
+            }
+            if audited.returncode:
+                note = "dependency audit failed:\n" + (audited.stdout + audited.stderr)[-3000:]
+                attempt_result.update({"status": "failed", "failure": note})
+                feedback.append(f"attempt {attempt}: {note}")
+                continue
+
+            acceptance_env = dict(env)
+            acceptance_env["ASCM_CODE_REPAIR_ENABLED"] = "0"
+            acceptance_env["ASCM_A2A_FORCE_START_SERVER"] = "1"
+            accepted = _run(command, worktree, timeout=1800, env=acceptance_env)
+            report_path = worktree / ".ascm_history" / "testing_agent_report.json"
+            try:
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                report = {}
+            controller = report.get("self_healing_controller", {}) if isinstance(report, dict) else {}
+            acceptance_ok = (
+                accepted.returncode == 0
+                and report.get("acceptance_passed") is True
+                and controller.get("status") == "aligned"
+            )
+            attempt_result["checks"]["product_intent_acceptance"] = {
+                "passed": acceptance_ok,
+                "exit_code": accepted.returncode,
+                "acceptance_passed": report.get("acceptance_passed") is True,
+                "intent_status": controller.get("status"),
+                "output": (accepted.stdout + accepted.stderr)[-5000:],
+            }
+            if not acceptance_ok:
+                note = "fresh end-to-end product-intent acceptance failed:\n" + (
+                    accepted.stdout + accepted.stderr
+                )[-3000:]
+                attempt_result.update({"status": "failed", "failure": note})
+                feedback.append(f"attempt {attempt}: {note}")
+                continue
+
+            _git(worktree, "add", "--", *changed)
+            _git(worktree, "commit", "-m", f"Repair ASCM finding: {finding.get('invariant_id', key)}")
+            result["repair_commit"] = _git(worktree, "rev-parse", "HEAD")
+            result["changed_files"] = changed
+            result["checks"] = attempt_result["checks"]
+            attempt_result["status"] = "verified"
+            result["status"] = "verified_pr_ready"
+            result["reason"] = f"Repair verified successfully on attempt {attempt}/{MAX_REPAIR_ATTEMPTS}."
+            break
+
+        if result["status"] != "verified_pr_ready":
+            result["status"] = "repair_exhausted"
+            result["reason"] = f"Could not verify a repair after {MAX_REPAIR_ATTEMPTS} bounded attempts. See attempt feedback and audit log."
+            result["verification_feedback"] = feedback[-8:]
+            return result
+
         if open_pr:
             pushed = _run(["git", "push", "-u", "origin", branch], worktree, timeout=300)
             if pushed.returncode:
-                result["status"] = "verified_local_branch"; result["push_error"] = pushed.stderr[-2000:]
+                result["status"] = "verified_local_branch"
+                result["push_error"] = pushed.stderr[-2000:]
             elif shutil.which("gh"):
                 gh = shutil.which("gh")
                 ci_ok, ci_detail = _wait_for_github_ci(gh, branch, result["repair_commit"], worktree)
@@ -308,22 +434,24 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
                     result["status"] = "verified_remote_branch"
                     result["reason"] += " Full GitHub CI did not pass; no PR was opened."
                 else:
-                    pr = _run([gh, "pr", "create", "--base", os.getenv("ASCM_REPAIR_BASE_BRANCH", "main"),
+                    pr = _run([
+                        gh, "pr", "create", "--base", os.getenv("ASCM_REPAIR_BASE_BRANCH", "main"),
                         "--head", branch, "--title", f"ASCM repair: {finding.get('invariant_id', key)}",
-                        "--body", "Automated repair proposal. Focused/full tests, security gates, fresh product-intent acceptance, and GitHub CI passed. Human review and merge approval are required; this automation never merges."], worktree, timeout=300)
+                        "--body", "Automated repair proposal. Focused/full tests, security gates, fresh product-intent acceptance, and GitHub CI passed. Human review and merge approval are required; this automation never merges.",
+                    ], worktree, timeout=300)
                     if pr.returncode == 0:
                         match = re.search(r"https://github\.com/\S+/pull/\d+", pr.stdout)
                         result["pr_url"] = match.group(0) if match else pr.stdout.strip()[-1000:]
                     else:
                         result["status"] = "verified_remote_branch"
-                        result["reason"] += " PR creation failed; branch is pushed for manual PR creation."
                         result["pr_error"] = (pr.stdout + pr.stderr)[-2000:]
             else:
                 result["status"] = "verified_remote_branch"
                 result["reason"] += " GitHub CLI unavailable; branch pushed but PR not opened."
         return result
     except Exception as exc:
-        result["reason"] = f"Repair stopped safely: {type(exc).__name__}: {exc}"; return result
+        result["reason"] = f"Repair stopped safely: {type(exc).__name__}: {exc}"
+        return result
     finally:
         result["worktree_retained"] = created
         _audit(root, result)
