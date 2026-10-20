@@ -76,7 +76,7 @@ class A2ACoordinator:
             return dict(prior["result"])
 
         # Recommendations and routing do not grant permission to perform side effects.
-        if envelope.proposed_action and not envelope.approval_scope.authorized:
+        if envelope.proposed_action and not envelope.approval_scope.authorizes(envelope.proposed_action):
             envelope.transition(HandoffStatus.REJECTED, error_code="approval_required",
                                 follow_up="Obtain explicit, action-scoped founder approval before execution.")
             self._audit(envelope, "approval_gate_rejected", proposed_action=envelope.proposed_action)
