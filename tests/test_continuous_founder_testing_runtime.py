@@ -561,3 +561,58 @@ def test_mentor_review_persists_proposed_action_without_approval_or_execution(tm
     assert records[0]["approved"] is False
     assert records[0]["executed"] is False
     assert records[0]["outcome_status"] == "awaiting_evidence"
+
+
+def test_founder_action_lifecycle_requires_human_decisions_and_evidence(tmp_path):
+    from orchestrator.testing_agent.founder_actions import action_states, transition_action
+
+    history = tmp_path / ".ascm_history"
+    history.mkdir()
+    proposal = {
+        "action_id": "action-1", "action": "Conduct discovery interviews.",
+        "status": "proposed", "approved": False, "executed": False,
+    }
+    (history / "founder_actions.jsonl").write_text(json.dumps(proposal) + "\n")
+    with pytest.raises(ValueError, match="requires an evidence_ref"):
+        transition_action(tmp_path, "action-1", "complete", "founder", evidence_ref=None)
+    approved = transition_action(tmp_path, "action-1", "approve", "founder")
+    assert approved["new_status"] == "approved"
+    started = transition_action(tmp_path, "action-1", "start", "founder")
+    assert started["new_status"] == "in_progress"
+    completed = transition_action(
+        tmp_path, "action-1", "complete", "founder", evidence_ref="interview-notes:batch-1"
+    )
+    assert completed["new_status"] == "completed"
+    assert completed["executed_by_this_module"] is False
+    assert action_states(tmp_path)["action-1"]["current_status"] == "completed"
+
+
+def test_outcome_ledger_requires_verifier_and_evidence_and_preserves_records(tmp_path):
+    from orchestrator.testing_agent.outcome_ledger import record_verified_outcome
+
+    with pytest.raises(ValueError, match="evidence_ref is required"):
+        record_verified_outcome(tmp_path, "customer_reply", "", "founder")
+    first = record_verified_outcome(
+        tmp_path, "customer_interview", "interview-notes:customer-1", "founder",
+        notes="Customer interview completed; no purchase commitment claimed.",
+    )
+    second = record_verified_outcome(
+        tmp_path, "meeting_booked", "calendar-event:meeting-1", "founder",
+    )
+    ledger = json.loads((tmp_path / ".ascm_history" / "gtm_outcomes.json").read_text())
+    assert len(ledger) == 2
+    assert first["verified"] is True and second["verified_by"] == "founder"
+    assert ledger[0]["evidence_ref"] == "interview-notes:customer-1"
+    assert ledger[1]["event_type"] == "meeting_booked"
+
+
+def test_outcome_ledger_refuses_to_overwrite_corrupt_ledger(tmp_path):
+    from orchestrator.testing_agent.outcome_ledger import record_verified_outcome
+
+    history = tmp_path / ".ascm_history"
+    history.mkdir()
+    path = history / "gtm_outcomes.json"
+    path.write_text("{not valid json")
+    with pytest.raises(ValueError, match="refusing to overwrite"):
+        record_verified_outcome(tmp_path, "customer_reply", "crm:reply-1", "founder")
+    assert path.read_text() == "{not valid json"
