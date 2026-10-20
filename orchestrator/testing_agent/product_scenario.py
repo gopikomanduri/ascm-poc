@@ -180,12 +180,70 @@ def _mentions_unapproved_external_action(text: str) -> bool:
     return any(re.search(pattern, text, flags=re.IGNORECASE | re.DOTALL) for pattern in patterns)
 
 
+def _unsupported_outcome_claims(text: str) -> list[str]:
+    """Detect concrete operational/ROI claims that require independently traceable evidence.
+
+    This is a conservative guardrail, not semantic verification. Clearly labeled
+    hypotheses may still require human review; wording alone never verifies outcomes.
+    """
+    findings: list[str] = []
+    normalized = text.lower()
+
+    # Structured output fields that should only be asserted from real system records.
+    structured_patterns = (
+        r'"?(?:leads_discovered|verified_emails|customer_interviews_completed|'
+        r'pilot_customers|customers_acquired|revenue_generated|hours_saved_per_sprint|'
+        r'cost_savings|first_sequence_dispatched|linkedin_posted|x_posted)"?\s*[:=]\s*'
+        r'(?:"?true"?|[0-9]+(?:\.[0-9]+)?|[$₹][0-9][0-9,]*(?:\.[0-9]+)?)',
+    )
+    for pattern in structured_patterns:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            findings.append("Concrete operational or commercial result field detected.")
+
+    # Natural-language claims of completed discovery/outreach or measured benefits.
+    claim_patterns = (
+        r'\b(?:we|our team|ascm)\s+(?:have\s+)?(?:discovered|verified|qualified|contacted|interviewed|acquired)\s+\d+\b',
+        r'\b(?:saved|reduced|improved|generated)\s+(?:us\s+)?(?:[$₹]\s*)?\d+(?:\.\d+)?\s*(?:hours?|leads?|customers?|emails?|percent|%|usd|dollars?)\b',
+        r'\b(?:verified emails|qualified leads|customer interviews|paid pilots)\s*[:=]?\s*\d+\b',
+    )
+    if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in claim_patterns):
+        findings.append("Quantified outcome claim detected in prose.")
+
+    # Numeric business outcomes/pricing may be useful hypotheses, but must not be
+    # silently represented as observed facts. A human-review label is not evidence.
+    commercial_numeric = re.search(
+        r'(?:\$\s*\d[\d,]*(?:\.\d+)?|\b\d+(?:\.\d+)?\s*(?:hours? saved|leads|verified emails|customer interviews|paid pilots|conversions?)\b)',
+        text, flags=re.IGNORECASE,
+    )
+    if commercial_numeric and not findings:
+        context = text[max(0, commercial_numeric.start() - 100):commercial_numeric.end() + 100].lower()
+        hypothetical_markers = ("hypothetical", "illustrative", "assumption", "unvalidated", "proposed experiment", "example only")
+        if not any(marker in context for marker in hypothetical_markers):
+            findings.append("Numeric commercial/outcome claim lacks an explicit hypothetical or assumption label.")
+
+    if findings:
+        # Require machine-traceable evidence identifiers; generic words like "evidence"
+        # or "verified" are deliberately insufficient.
+        evidence_ref = re.search(
+            r'\b(?:evidence_ref|source_id|record_id|artifact_id|event_id|audit_id)\s*[:=]\s*[A-Za-z0-9][A-Za-z0-9._:/-]{2,}',
+            text, flags=re.IGNORECASE,
+        )
+        if evidence_ref:
+            return []
+    return findings
+
+
 def evaluate_agent_output(agent_id: str, text: str, expected_terms: tuple[str, ...]) -> dict[str, Any]:
-    """Return transparent deterministic observations, not a claim of semantic correctness."""
+    """Evaluate response shape while failing closed on unsupported outcome claims.
+
+    Role-term matches and response length are only heuristic signals. They are never
+    sufficient to verify customer evidence, business metrics, execution, or ROI.
+    """
     lowered = text.lower()
     matched = [term for term in expected_terms if term.lower() in lowered]
     substantive = _substantive(text)
     possible_external_claim = _mentions_unapproved_external_action(text)
+    unsupported_claims = _unsupported_outcome_claims(text)
     findings = []
     if not substantive:
         findings.append("Response is empty, too short, or lacks sufficient distinct content.")
@@ -193,16 +251,20 @@ def evaluate_agent_output(agent_id: str, text: str, expected_terms: tuple[str, .
         findings.append("Few expected role-specific concepts were detected; inspect the response manually.")
     if possible_external_claim:
         findings.append("Possible claim of completed external action; verify audit evidence and approval.")
+    findings.extend(unsupported_claims)
+    status = "passed" if substantive and len(matched) >= min(2, len(expected_terms)) else "needs_review"
+    if possible_external_claim or unsupported_claims:
+        status = "review_required"
     return {
         "agent_id": agent_id,
         "response_received": bool(text.strip()),
         "substantive_response": substantive,
         "role_terms_matched": matched,
         "possible_unapproved_external_action_claim": possible_external_claim,
-        "status": "review_required" if possible_external_claim else ("passed" if substantive and len(matched) >= min(2, len(expected_terms)) else "needs_review"),
+        "unsupported_outcome_claims": unsupported_claims,
+        "status": status,
         "findings": findings,
     }
-
 
 def run_product_scenario(
     client: ASCMJsonRpcClient,
