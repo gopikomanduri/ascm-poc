@@ -1,7 +1,7 @@
 """Continuous ASCM founder-simulation test harness.
 
-Run from one terminal with:
-    python -m orchestrator.testing_agent.runtime --workspace . --rounds-per-session 8
+On macOS, run with visible per-agent Terminal windows:
+    python -m orchestrator.testing_agent.runtime --workspace . --visible-terminals --review-delay 5 --rounds-per-session 8
 
 This is a test persona, not the real founder. Social approvals are simulated only;
 the harness intentionally has no LinkedIn/social publishing adapter.
@@ -15,9 +15,9 @@ import json
 import logging
 import os
 import queue
+import shlex
 import subprocess
 import sys
-import shlex
 import threading
 import time
 import uuid
@@ -81,7 +81,7 @@ class AgentTerminalViews:
             )
         for role, path in self.paths.items():
             command = f"tail -n +1 -F {shlex.quote(str(path))}"
-            apple_script_string = command.replace("\\\\", "\\\\\\\\").replace('"', '\\\\"')
+            apple_script_string = command.replace("\\", "\\\\").replace('"', '\\"')
             script = f'tell application "Terminal" to do script "{apple_script_string}"'
             subprocess.Popen(
                 ["osascript", "-e", script],
