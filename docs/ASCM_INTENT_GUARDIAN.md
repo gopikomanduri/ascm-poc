@@ -51,8 +51,8 @@ When enabled, it:
 ### Configuration
 
 - `ASCM_CODE_REPAIR_ENABLED=1`: explicitly enable the controlled code repair stage.
-- `ASCM_REPAIR_AGENT_ID`: configured A2A agent ID to ask for a patch; owner-specific `ASCM_REPAIR_AGENT_<OWNER>` variables override it (for example `ASCM_REPAIR_AGENT_ORCHESTRATOR`).
-- `ASCM_REPAIR_ACCEPTANCE_COMMAND`: required command to run a fresh end-to-end Testing Agent journey in the isolated worktree. For example, `python -m orchestrator.testing_agent.runtime --workspace . --sessions 1`, provided the A2A gateway and its agents are available. The runner sets `ASCM_CODE_REPAIR_ENABLED=0` for this child process to prevent recursive repair.
+- `ASCM_REPAIR_AGENT_ID`: configured A2A agent ID to ask for a patch; defaults to the gateway's `coder` specialist. Owner-specific `ASCM_REPAIR_AGENT_<OWNER>` variables override it (for example `ASCM_REPAIR_AGENT_ORCHESTRATOR=coder`).
+- `ASCM_REPAIR_ACCEPTANCE_COMMAND`: required command to run a fresh end-to-end Testing Agent journey in the isolated worktree. For example, `python -m orchestrator.testing_agent.runtime --workspace . --base-url http://127.0.0.1:8091 --sessions 1`. Use a separate loopback port so the acceptance run starts an A2A gateway from the isolated worktree rather than reusing a server loaded from the active checkout. The runner sets `ASCM_CODE_REPAIR_ENABLED=0` for this child process to prevent recursive repair.
 - `ASCM_CODE_REPAIR_OPEN_PR=1`: opt in to pushing a verified branch and using the authenticated GitHub CLI (`gh`) to open a PR. Without it, the verified branch remains local.
 - `ASCM_REPAIR_BASE_BRANCH`: optional PR base; defaults to `main`.
 
