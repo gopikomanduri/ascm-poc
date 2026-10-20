@@ -1092,12 +1092,16 @@ class ContinuousFounderTestingRuntime:
 
 
 def ensure_gateway(base_url: str, workspace: Path, *, start_server: bool) -> subprocess.Popen | None:
-    try:
-        response = httpx.get(base_url.rstrip("/") + "/.well-known/agent-card.json", timeout=1.5)
-        if response.status_code == 200:
-            return None
-    except httpx.HTTPError:
-        pass
+    # Repair acceptance must load agents from its isolated worktree, never reuse a
+    # gateway that may have imported code from the active checkout.
+    force_isolated = os.getenv("ASCM_A2A_FORCE_START_SERVER", "0") == "1"
+    if not force_isolated:
+        try:
+            response = httpx.get(base_url.rstrip("/") + "/.well-known/agent-card.json", timeout=1.5)
+            if response.status_code == 200:
+                return None
+        except httpx.HTTPError:
+            pass
     if not start_server:
         raise RuntimeError(f"ASCM A2A gateway is unavailable at {base_url}. Start it or remove --no-start-server.")
     host_port = base_url.removeprefix("http://").removeprefix("https://")
