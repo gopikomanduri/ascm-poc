@@ -118,3 +118,33 @@ def test_a2a_client_extracts_final_text_artifact():
     }
     texts = ASCMJsonRpcClient._collect_text(body["result"])
     assert texts[-1] == "{\"is_clear\": true}"
+
+
+
+def test_gtm_deduplicates_post_requests_by_commit_not_test_round():
+    first = {"latest_commit": "abc123", "testing_rounds": 1, "product_questions": 1}
+    later_same_commit = {"latest_commit": "abc123", "testing_rounds": 20, "product_questions": 15}
+    next_commit = {"latest_commit": "def456", "testing_rounds": 21, "product_questions": 16}
+    assert GTMStatusAgent.status_fingerprint(first) == GTMStatusAgent.status_fingerprint(later_same_commit)
+    assert GTMStatusAgent.status_fingerprint(first) != GTMStatusAgent.status_fingerprint(next_commit)
+
+
+def test_product_agent_unclear_without_question_is_not_a_pass(tmp_path):
+    client = FakeASCMClient([product_response(clear=False, confidence=0.4)])
+    runtime = ContinuousFounderTestingRuntime(tmp_path, client=client, rounds_per_session=1)
+    result = runtime.run_product_session("customer evidence")
+    assert result["is_clear"] is False
+    assert any("did not establish clarity" in finding for finding in runtime.findings)
+
+
+def test_three_consecutive_interface_failures_trip_circuit_breaker(tmp_path):
+    class BrokenClient:
+        base_url = None
+        def send(self, agent_id, prompt, session_id):
+            raise ConnectionError("gateway down")
+
+    runtime = ContinuousFounderTestingRuntime(tmp_path, client=BrokenClient(), rounds_per_session=1)
+    # The run loop should stop after three consecutive failures, without infinite retries.
+    report = runtime.run(sessions=0)
+    assert runtime.stop.is_set()
+    assert any("Circuit breaker" in finding for finding in report["open_findings"])
