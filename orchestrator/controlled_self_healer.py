@@ -77,6 +77,44 @@ def _safe_path(value: str) -> bool:
         return False
     return value.startswith(ALLOWED_ROOTS)
 
+def extract_patch_payload(response: str) -> str:
+    """Extract a unified diff from common agent response envelopes without relaxing validation.
+
+    Only explicit patch/diff JSON fields or fenced patch blocks are unwrapped.
+    Arbitrary prose or source code is never converted into a patch.
+    """
+    proposed = str(response or "").strip()
+    if not proposed:
+        return ""
+
+    # Some A2A model adapters return a JSON envelope rather than the field text.
+    try:
+        payload = json.loads(proposed)
+    except (TypeError, json.JSONDecodeError):
+        payload = None
+    if isinstance(payload, dict):
+        for key in ("patch", "diff", "unified_diff"):
+            candidate = payload.get(key)
+            if isinstance(candidate, str) and "diff --git " in candidate:
+                proposed = candidate.strip()
+                break
+
+    # Accept an explicit fenced patch even when the model adds a short preamble.
+    fenced = re.findall(
+        r"\x60{3}(?:\s*(?:diff|patch|git diff|unified diff))?\s*\n(.*?)\x60{3}",
+        proposed, flags=re.IGNORECASE | re.DOTALL,
+    )
+    for candidate in fenced:
+        if "diff --git " in candidate and "\n@@ " in candidate:
+            proposed = candidate.strip()
+            break
+
+    # If a preamble remains, discard it only when a real git diff header is present.
+    if "diff --git " in proposed:
+        proposed = proposed[proposed.index("diff --git "):]
+    return proposed.strip()
+
+
 def validate_patch(patch: str) -> tuple[bool, str, list[str]]:
     if len(patch.encode("utf-8")) > MAX_PATCH_BYTES:
         return False, "Patch exceeds the 30 KB bounded-repair limit.", []
@@ -280,12 +318,7 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
                 feedback.append(note)
                 continue
 
-            fence = chr(96) * 3
-            if proposed.startswith(fence):
-                proposed = re.sub(r"^" + re.escape(fence) + r"(?:diff|patch)?\s*\n", "", proposed)
-                proposed = re.sub(r"\n" + re.escape(fence) + r"\s*$", "", proposed)
-            if "diff --git " in proposed:
-                proposed = proposed[proposed.index("diff --git "):]
+            proposed = extract_patch_payload(proposed)
             valid, why, paths = validate_patch(proposed)
             if not valid:
                 note = f"attempt {attempt}: invalid patch: {why}"
