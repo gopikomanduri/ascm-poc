@@ -148,3 +148,32 @@ def test_three_consecutive_interface_failures_trip_circuit_breaker(tmp_path):
     report = runtime.run(sessions=0)
     assert runtime.stop.is_set()
     assert any("Circuit breaker" in finding for finding in report["open_findings"])
+
+
+
+def test_a2a_client_uses_version_one_jsonrpc_and_agent_metadata(monkeypatch):
+    from types import SimpleNamespace
+    import httpx
+
+    captured = {}
+    class Response:
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"jsonrpc": "2.0", "result": {
+                "history": [{"parts": [{"text": "original question"}]}],
+                "artifacts": [{"name": "product-response", "parts": [{"text": "next question"}]}],
+            }}
+
+    def fake_post(url, *, headers, json, timeout):
+        captured.update(url=url, headers=headers, body=json, timeout=timeout)
+        return Response()
+
+    monkeypatch.setattr("orchestrator.testing_agent.runtime.httpx.post", fake_post)
+    client = ASCMJsonRpcClient("http://127.0.0.1:8090")
+    result = client.send("product", "Ask one question", "session-123")
+    assert result == "next question"
+    assert captured["headers"]["A2A-Version"] == "1.0"
+    assert captured["body"]["method"] == "SendMessage"
+    assert captured["body"]["params"]["message"]["metadata"]["ascm"]["agent_id"] == "product"
+    assert captured["body"]["params"]["message"]["contextId"] == "session-123"
