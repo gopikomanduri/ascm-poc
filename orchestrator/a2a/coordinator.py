@@ -31,7 +31,6 @@ class A2ACoordinator:
         self.max_attempts = max_attempts
         self.audit_sink = audit_sink or (lambda event: logger.info("a2a_audit %s", json.dumps(event, sort_keys=True)))
         self._results: dict[str, dict[str, Any]] = {}
-        self._audit_events: list[dict[str, Any]] = {}
 
     @staticmethod
     def _fingerprint(envelope: HandoffEnvelope) -> str:
@@ -98,6 +97,10 @@ class A2ACoordinator:
                 result = handler(envelope)
                 if not isinstance(result, Mapping):
                     raise TypeError("A2A handler must return a mapping.")
+                if time.monotonic() >= deadline:
+                    envelope.transition(HandoffStatus.TIMED_OUT, error_code="deadline_exceeded")
+                    self._audit(envelope, "timed_out", attempt=attempt, handler_returned_after_deadline=True)
+                    raise HandoffError("A2A handoff deadline exceeded after handler returned.")
                 normalized = dict(result)
                 if "conflicting_recommendations" in normalized and normalized["conflicting_recommendations"]:
                     envelope.transition(HandoffStatus.NEEDS_HUMAN_REVIEW, result=normalized,
@@ -110,6 +113,12 @@ class A2ACoordinator:
                 return normalized
             except Exception as exc:
                 last_error = exc
+                if envelope.status is HandoffStatus.TIMED_OUT:
+                    raise HandoffError("A2A handoff deadline exceeded.") from exc
+                if time.monotonic() >= deadline:
+                    envelope.transition(HandoffStatus.TIMED_OUT, error_code="deadline_exceeded")
+                    self._audit(envelope, "timed_out", attempt=attempt, error_type=type(exc).__name__)
+                    raise HandoffError("A2A handoff deadline exceeded.") from exc
                 self._audit(envelope, "attempt_failed", attempt=attempt, error_type=type(exc).__name__)
                 if attempt < self.max_attempts:
                     continue
