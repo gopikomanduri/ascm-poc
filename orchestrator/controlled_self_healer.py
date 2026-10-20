@@ -206,13 +206,13 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
         _audit(root, result)
         return result
     try:
-        checkout_status = _git(root, "status", "--porcelain")
+        checkout_status = _git(root, "status", "--porcelain", "--untracked-files=no")
     except RuntimeError as exc:
         result["reason"] = f"Workspace is not a usable Git checkout; cannot safely repair: {exc}"
         _audit(root, result)
         return result
     if checkout_status:
-        result["reason"] = "Active checkout is dirty; refusing to create a repair worktree."
+        result["reason"] = "Active checkout has tracked changes; refusing to create a repair worktree."
         _audit(root, result)
         return result
     if not _claim_attempt(root, key):
