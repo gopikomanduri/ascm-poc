@@ -445,11 +445,6 @@ def run_product_scenario(
                 f"REQUIRED_TARGETS_JSON: {json.dumps(targets)}\n"
                 f"ARTIFACTS_JSON: {json.dumps(artifact_bundle, ensure_ascii=False)}"
             )
-            if len(prompt) > MAX_CHALLENGE_PROMPT_CHARS:
-                raise ValueError(
-                    f"Adversarial review prompt is {len(prompt)} characters; "
-                    f"limit is {MAX_CHALLENGE_PROMPT_CHARS}."
-                )
             event = {"timestamp": utc_now(), "scenario_id": scenario_id,
                      "sequence": len(stages) + len(challenge_results) + 1,
                      "event_type": "challenge_started", "agent_id": reviewer_id,
@@ -457,6 +452,11 @@ def run_product_scenario(
             with story_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
             try:
+                if len(prompt) > MAX_CHALLENGE_PROMPT_CHARS:
+                    raise ValueError(
+                        f"Adversarial review prompt is {len(prompt)} characters; "
+                        f"limit is {MAX_CHALLENGE_PROMPT_CHARS}."
+                    )
                 raw_review = client.send(reviewer_id, prompt, scenario_id)
                 parsed = _parse_challenge_review(reviewer_id, raw_review, targets)
                 artifact_path = artifacts_dir / f"challenge-{reviewer_id}.json"
