@@ -20,7 +20,7 @@ OUTCOME_TYPES = {
 
 def record_verified_outcome(
     workspace: str | Path, event_type: str, evidence_ref: str, verified_by: str,
-    *, notes: str = "",
+    *, notes: str = "", cycle_id: str | None = None,
 ) -> dict[str, Any]:
     if event_type not in OUTCOME_TYPES:
         raise ValueError(f"Unsupported outcome type: {event_type}")
@@ -49,6 +49,7 @@ def record_verified_outcome(
         "verified_by": verified_by.strip(),
         "verified_at": datetime.now(timezone.utc).isoformat(),
         "source": "human_verified_outcome_ledger",
+        "cycle_id": cycle_id.strip() if isinstance(cycle_id, str) and cycle_id.strip() else None,
         "notes": notes.strip(),
     }
     existing.append(record)
@@ -73,9 +74,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence-ref", required=True, help="CRM record, approved interview note, meeting record, or other source reference.")
     parser.add_argument("--verified-by", required=True)
     parser.add_argument("--notes", default="")
+    parser.add_argument("--cycle-id", help="Optional GTM cycle ID for outcome attribution.")
     args = parser.parse_args(argv)
     try:
-        record = record_verified_outcome(args.workspace, args.event_type, args.evidence_ref, args.verified_by, notes=args.notes)
+        record = record_verified_outcome(
+            args.workspace, args.event_type, args.evidence_ref, args.verified_by,
+            notes=args.notes, cycle_id=args.cycle_id,
+        )
     except ValueError as exc:
         parser.error(str(exc))
     print(json.dumps(record, indent=2, sort_keys=True))
