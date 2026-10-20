@@ -70,6 +70,8 @@ def test_full_configured_stage_set_is_challenged_by_every_other_agent(tmp_path):
     challenge_calls = [call for call in client.calls if "ADVERSARIAL CHALLENGE REVIEW" in call[1]]
     assert [call[0] for call in challenge_calls] == ["product", "mentor", "qa"]
     assert report["summary"]["challenge_reviews_requested"] == 3
+    assert report["summary"]["challenge_pairs_requested"] == 6
+    assert report["summary"]["challenge_pairs_completed"] == 6
     assert report["summary"]["challenge_handoffs_recorded"] == 3
     assert all(result["status"] == "passed" for result in report["challenge_results"])
     for reviewer_id, prompt, _ in challenge_calls:
@@ -92,4 +94,5 @@ def test_adversarial_concern_blocks_scenario_pass(tmp_path):
     )
     assert report["passed"] is False
     assert report["summary"]["challenge_findings"] == 1
+    assert report["summary"]["challenge_pairs_non_clear"] == 1
     assert report["summary"]["challenge_reviews_needing_review"] == 1
