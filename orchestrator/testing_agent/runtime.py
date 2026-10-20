@@ -873,6 +873,26 @@ class ContinuousFounderTestingRuntime:
             workspace=self.workspace,
         )
         report["self_healing_controller"] = assessment
+        # Intent drift is a product acceptance failure even if ordinary tests are green.
+        report["acceptance_passed"] = (
+            report.get("acceptance_passed") is True and assessment["status"] == "aligned"
+        )
+        acceptance = report.get("acceptance")
+        if isinstance(acceptance, dict):
+            acceptance["passed"] = report["acceptance_passed"]
+            if assessment["status"] != "aligned":
+                acceptance.setdefault("criteria", []).append({
+                    "criterion": "approved_product_intent_alignment",
+                    "passed": False,
+                    "evidence": [
+                        str(item.get("invariant_id", "intent_drift"))
+                        for item in assessment["findings"]
+                    ],
+                    "message": (
+                        "Self-healing assessment found product-intent or testing drift; "
+                        "see self_healing_controller.findings."
+                    ),
+                })
         self.story_log.record(
             "TESTING AGENT", "ASCM SELF-HEALING CONTROLLER", "testing_results_submitted",
             "Testing Agent results submitted for product-intent and technical drift assessment.",
