@@ -24,6 +24,13 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime, timezone
 
+# Support both `python -m orchestrator.mentor.daemon` and direct script execution
+# from an arbitrary working directory. Direct execution otherwise puts only
+# orchestrator/mentor on sys.path and fails to resolve the top-level package.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 from orchestrator.gtm.strategy.outcome_ledger import OutcomeLedger
 from orchestrator.mentor.notifier import CrossPlatformNotifier
 from orchestrator.mentor.proactive_mentor import ASCMProactiveMentor
@@ -922,6 +929,7 @@ class UniversalASCMDaemon:
                 },
                 "RunAtLoad": True,
                 "KeepAlive": True,
+                "ThrottleInterval": 30,
                 "StandardOutPath": str(self.history_dir / "daemon_stdout.log"),
                 "StandardErrorPath": str(self.history_dir / "daemon_stderr.log"),
             }
@@ -945,11 +953,13 @@ class UniversalASCMDaemon:
                 "[Unit]\n"
                 "Description=ASCM Proactive Founder & Engineering Mentor\n"
                 "After=default.target\n\n"
+                "StartLimitIntervalSec=300\n"
+                "StartLimitBurst=3\n\n"
                 "[Service]\n"
                 f"WorkingDirectory={_systemd_quote(str(project_root))}\n"
                 f"Environment={_systemd_quote('ASCM_ACTIVE_WINDOW_MONITOR=' + os.environ.get('ASCM_ACTIVE_WINDOW_MONITOR', '0'))}\n"
                 f"ExecStart={_systemd_quote(py_exe)} -m orchestrator.mentor.daemon --repo {_systemd_quote(str(self.repo_path))}\n"
-                "Restart=always\n"
+                "Restart=on-failure\n"
                 "RestartSec=30\n"
                 f"StandardOutput={_systemd_quote('file:' + str(self.history_dir / 'daemon_stdout.log'))}\n"
                 f"StandardError={_systemd_quote('file:' + str(self.history_dir / 'daemon_stderr.log'))}\n\n"
