@@ -27,7 +27,7 @@ Use the A2A SDK v1 JSON-RPC binding shown below. The SDK version pinned by the p
   "params": {
     "message": {
       "messageId": "message-1",
-      "role": "user",
+      "role": "ROLE_USER",
       "parts": [{"text": "Review this feature idea and identify missing requirements."}],
       "metadata": {"ascm": {"agent_id": "product"}}
     }
