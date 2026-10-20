@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import httpx
+from orchestrator.testing_agent.founder_journey import FounderJourneyEvaluator, JourneyEvent
 
 logger = logging.getLogger("ASCM.TestingAgent")
 PROBE_AREAS = (
@@ -435,6 +436,7 @@ class ContinuousFounderTestingRuntime:
         self.consecutive_interface_failures = 0
         self.mentor_reviews_completed = 0
         self.last_mentor_review = ""
+        self.journey_events: list[JourneyEvent] = []
 
     def _product_prompt(self, area: str) -> str:
         transcript = json.dumps(self.transcript[-24:], ensure_ascii=False)
