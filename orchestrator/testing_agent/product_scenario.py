@@ -258,12 +258,19 @@ def evaluate_agent_output(agent_id: str, text: str, expected_terms: tuple[str, .
         "findings": findings,
     }
 
-def _challenge_excerpt(value: str, limit: int = 4000) -> str:
-    """Keep both ends of a long artifact so trailing claims are not silently lost."""
-    if len(value) <= limit:
-        return value
-    half = limit // 2
-    return value[:half] + "\n...[middle omitted; reviewer must not infer unseen content]...\n" + value[-half:]
+MAX_CHALLENGE_PROMPT_CHARS = 16000
+MAX_CHALLENGE_ARTIFACT_CHARS = 700
+
+
+def _challenge_excerpt(value: str, limit: int = MAX_CHALLENGE_ARTIFACT_CHARS) -> str:
+    """Create a compact, whitespace-normalized excerpt safe for bounded A2A payloads."""
+    normalized = re.sub(r"\\s+", " ", str(value or "")).strip()
+    if len(normalized) <= limit:
+        return normalized
+    if limit < 80:
+        return normalized[:limit]
+    half = (limit - 58) // 2
+    return normalized[:half] + " ...[middle omitted; do not infer unseen content]... " + normalized[-half:]
 
 
 def _parse_challenge_review(reviewer_id: str, raw: str, expected_targets: list[str]) -> dict[str, Any]:
@@ -438,6 +445,11 @@ def run_product_scenario(
                 f"REQUIRED_TARGETS_JSON: {json.dumps(targets)}\n"
                 f"ARTIFACTS_JSON: {json.dumps(artifact_bundle, ensure_ascii=False)}"
             )
+            if len(prompt) > MAX_CHALLENGE_PROMPT_CHARS:
+                raise ValueError(
+                    f"Adversarial review prompt is {len(prompt)} characters; "
+                    f"limit is {MAX_CHALLENGE_PROMPT_CHARS}."
+                )
             event = {"timestamp": utc_now(), "scenario_id": scenario_id,
                      "sequence": len(stages) + len(challenge_results) + 1,
                      "event_type": "challenge_started", "agent_id": reviewer_id,
