@@ -1,6 +1,6 @@
 """Opt-in bounded code repair in an isolated git worktree; never merges to main."""
 from __future__ import annotations
-import hashlib, json, os, re, shlex, shutil, subprocess, tempfile
+import hashlib, json, os, re, shlex, shutil, subprocess, tempfile, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -135,6 +135,31 @@ def _audit(root: Path, result: dict[str, Any]) -> None:
     except OSError:
         pass
 
+
+def _wait_for_github_ci(gh: str, branch: str, commit: str, cwd: Path, *, timeout: int = 2400) -> tuple[bool, str]:
+    """Dispatch the full workflow and wait for its result before opening a PR."""
+    started = _run([gh, "workflow", "run", "ci-cd.yml", "--ref", branch], cwd, timeout=60)
+    if started.returncode:
+        return False, "Could not dispatch ci-cd.yml: " + (started.stdout + started.stderr)[-2000:]
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        listed = _run([
+            gh, "run", "list", "--workflow", "ci-cd.yml", "--branch", branch,
+            "--commit", commit, "--json", "databaseId,status,conclusion,headSha", "--limit", "5",
+        ], cwd, timeout=60)
+        if listed.returncode:
+            return False, "Could not inspect GitHub Actions status: " + (listed.stdout + listed.stderr)[-2000:]
+        try:
+            runs = json.loads(listed.stdout)
+        except json.JSONDecodeError:
+            return False, "GitHub CLI returned invalid workflow status JSON."
+        matching = next((item for item in runs if item.get("headSha") == commit), None)
+        if matching and matching.get("status") == "completed":
+            return matching.get("conclusion") == "success", json.dumps(matching, sort_keys=True)
+        time.sleep(5)
+    return False, "Timed out waiting for all ci-cd.yml jobs to finish."
+
+
 def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
                           proposal_provider: Callable[[dict[str, Any], str], str], *,
                           acceptance_command: str | None, open_pr: bool = False) -> dict[str, Any]:
@@ -262,14 +287,23 @@ def run_controlled_repair(workspace: str | Path, finding: dict[str, Any],
             if pushed.returncode:
                 result["status"] = "verified_local_branch"; result["push_error"] = pushed.stderr[-2000:]
             elif shutil.which("gh"):
-                pr = _run([shutil.which("gh"), "pr", "create", "--base", os.getenv("ASCM_REPAIR_BASE_BRANCH", "main"),
-                    "--head", branch, "--title", f"ASCM repair: {finding.get('invariant_id', key)}",
-                    "--body", "Automated repair proposal. Focused/full tests, security gates, and fresh product-intent acceptance passed. Human review and merge approval are required; this automation never merges."], worktree, timeout=300)
-                if pr.returncode == 0:
-                    match = re.search(r"https://github\.com/\S+/pull/\d+", pr.stdout)
-                    result["pr_url"] = match.group(0) if match else pr.stdout.strip()[-1000:]
+                gh = shutil.which("gh")
+                ci_ok, ci_detail = _wait_for_github_ci(gh, branch, result["repair_commit"], worktree)
+                result["checks"]["github_ci"] = {"passed": ci_ok, "detail": ci_detail}
+                if not ci_ok:
+                    result["status"] = "verified_remote_branch"
+                    result["reason"] += " Full GitHub CI did not pass; no PR was opened."
                 else:
-                    result["status"] = "verified_remote_branch"; result["pr_error"] = (pr.stdout + pr.stderr)[-2000:]
+                    pr = _run([gh, "pr", "create", "--base", os.getenv("ASCM_REPAIR_BASE_BRANCH", "main"),
+                        "--head", branch, "--title", f"ASCM repair: {finding.get('invariant_id', key)}",
+                        "--body", "Automated repair proposal. Focused/full tests, security gates, fresh product-intent acceptance, and GitHub CI passed. Human review and merge approval are required; this automation never merges."], worktree, timeout=300)
+                    if pr.returncode == 0:
+                        match = re.search(r"https://github\.com/\S+/pull/\d+", pr.stdout)
+                        result["pr_url"] = match.group(0) if match else pr.stdout.strip()[-1000:]
+                    else:
+                        result["status"] = "verified_remote_branch"
+                        result["reason"] += " PR creation failed; branch is pushed for manual PR creation."
+                        result["pr_error"] = (pr.stdout + pr.stderr)[-2000:]
             else:
                 result["status"] = "verified_remote_branch"
                 result["reason"] += " GitHub CLI unavailable; branch pushed but PR not opened."
