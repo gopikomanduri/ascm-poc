@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-VERIFIED_OUTCOME_EVENTS = {"customer_reply", "meeting_booked", "qualified_opportunity", "conversion"}
+VERIFIED_OUTCOME_EVENTS = {
+    "customer_reply", "customer_interview", "feature_request", "pilot_commitment",
+    "waitlist_signup", "meeting_booked", "qualified_opportunity", "conversion",
+}
 PROPOSAL_EVENTS = {"gtm_asset_generated", "gtm_cycle_generated", "message_drafted", "gtm_proposal_recorded"}
 HANDOFF_EVENTS = {"handoff_started", "handoff_completed", "handoff_failed"}
 
