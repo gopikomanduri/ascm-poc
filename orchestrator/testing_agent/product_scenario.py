@@ -222,14 +222,14 @@ def _unsupported_outcome_claims(text: str) -> list[str]:
             findings.append("Numeric commercial/outcome claim lacks an explicit hypothetical or assumption label.")
 
     if findings:
-        # Require machine-traceable evidence identifiers; generic words like "evidence"
-        # or "verified" are deliberately insufficient.
+        # A reference helps a reviewer, but the evaluator cannot prove that the
+        # record exists or supports the claim. Never pass on an agent-supplied ID.
         evidence_ref = re.search(
-            r'\b(?:evidence_ref|source_id|record_id|artifact_id|event_id|audit_id)\s*[:=]\s*[A-Za-z0-9][A-Za-z0-9._:/-]{2,}',
+            r'\\b(?:evidence_ref|source_id|record_id|artifact_id|event_id|audit_id)\\s*[:=]\\s*[A-Za-z0-9][A-Za-z0-9._:/-]{2,}',
             text, flags=re.IGNORECASE,
         )
         if evidence_ref:
-            return []
+            findings.append("Evidence identifier supplied but not independently resolved or validated.")
     return findings
 
 
