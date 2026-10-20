@@ -152,9 +152,6 @@ def test_three_consecutive_interface_failures_trip_circuit_breaker(tmp_path):
 
 
 def test_a2a_client_uses_version_one_jsonrpc_and_agent_metadata(monkeypatch):
-    from types import SimpleNamespace
-    import httpx
-
     captured = {}
     class Response:
         def raise_for_status(self):
