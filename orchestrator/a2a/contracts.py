@@ -49,17 +49,16 @@ class ApprovalScope:
     approved_at: str | None = None
     approval_id: str | None = None
 
-    @property
-    def authorized(self) -> bool:
+    def authorizes(self, action: str | None) -> bool:
         # An approval is scoped and attributable. A boolean alone is not consent.
+        if not self.required:
+            return True
         return bool(
-            self.required is False
-            or (
-                self.approved_by
-                and self.approved_at
-                and self.approval_id
-                and self.actions
-            )
+            action
+            and self.approved_by
+            and self.approved_at
+            and self.approval_id
+            and action in self.actions
         )
 
 
