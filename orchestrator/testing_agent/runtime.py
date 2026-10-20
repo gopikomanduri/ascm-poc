@@ -366,6 +366,7 @@ class ContinuousFounderTestingRuntime:
         self.findings: list[str] = []
         self.questions_asked = 0
         self.rounds_completed = 0
+        self.consecutive_interface_failures = 0
 
     def _product_prompt(self, area: str) -> str:
         transcript = json.dumps(self.transcript[-24:], ensure_ascii=False)
@@ -423,8 +424,13 @@ class ContinuousFounderTestingRuntime:
                 result = self._parse_product_result(raw)
             except Exception as exc:
                 self.findings.append(f"ProductAgent interface failure in {focus}, round {round_number}: {type(exc).__name__}: {exc}")
+                self.consecutive_interface_failures += 1
                 print(f"[TESTING AGENT] FAIL: ProductAgent interaction failed: {exc}", flush=True)
+                if self.consecutive_interface_failures >= 3:
+                    self.findings.append("Circuit breaker stopped repeated ProductAgent interface failures after three consecutive failures.")
+                    self.stop.set()
                 break
+            self.consecutive_interface_failures = 0
             final = result
             self.rounds_completed += 1
             questions = result["clarification_questions"]
@@ -478,6 +484,8 @@ class ContinuousFounderTestingRuntime:
             thread.start()
         print(f"[TESTING AGENT] Session {self.session_id}; workspace={self.workspace}", flush=True)
         print("[TESTING AGENT] Goal Agent and GTM status agent are running in parallel. Ctrl-C stops the harness.", flush=True)
+        permission_log = self.history / "gtm_permission_requests.jsonl"
+        initial_permission_log_size = permission_log.stat().st_size if permission_log.exists() else 0
         session_count = 0
         try:
             while not self.stop.is_set() and (sessions == 0 or session_count < sessions):
@@ -502,6 +510,15 @@ class ContinuousFounderTestingRuntime:
                 # Force a fresh status snapshot after every completed session so a
                 # finite CI run exercises the GTM permission handoff as well.
                 goal.snapshot()
+                if sessions > 0 and session_count >= sessions:
+                    # Finite CI runs must allow the parallel GTM agent to request a
+                    # simulated permission and record the response before shutdown.
+                    deadline = time.monotonic() + min(5.0, max(2.0, self.poll_interval))
+                    while not self.stop.is_set() and time.monotonic() < deadline:
+                        current_size = permission_log.stat().st_size if permission_log.exists() else 0
+                        if current_size > initial_permission_log_size:
+                            break
+                        self.stop.wait(0.1)
                 if sessions == 0 or session_count < sessions:
                     deadline = time.monotonic() + max(1.0, self.poll_interval)
                     while not self.stop.is_set() and time.monotonic() < deadline:
