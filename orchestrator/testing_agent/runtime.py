@@ -579,7 +579,10 @@ class ContinuousFounderTestingRuntime:
         try:
             while not self.stop.is_set() and (sessions == 0 or session_count < sessions):
                 focus = PROBE_AREAS[session_count % len(PROBE_AREAS)]
+                previous_rounds = self.rounds_completed
                 result = self.run_product_session(focus)
+                if self.rounds_completed > previous_rounds and not self.stop.is_set():
+                    self.run_mentor_review(focus)
                 session_count += 1
                 self._answer_permission_requests()
                 report = {
@@ -589,6 +592,8 @@ class ContinuousFounderTestingRuntime:
                     "sessions_completed": session_count,
                     "rounds_completed": self.rounds_completed,
                     "questions_asked": self.questions_asked,
+                    "mentor_reviews_completed": self.mentor_reviews_completed,
+                    "last_mentor_review": self.last_mentor_review,
                     "last_focus": focus,
                     "last_product_result": result,
                     "open_findings": list(self.findings),
@@ -625,6 +630,8 @@ class ContinuousFounderTestingRuntime:
                 "sessions_completed": session_count,
                 "rounds_completed": self.rounds_completed,
                 "questions_asked": self.questions_asked,
+                "mentor_reviews_completed": self.mentor_reviews_completed,
+                "last_mentor_review": self.last_mentor_review,
                 "open_findings": list(self.findings),
                 "external_publishing_enabled": False,
                 "simulated_founder_only": True,
