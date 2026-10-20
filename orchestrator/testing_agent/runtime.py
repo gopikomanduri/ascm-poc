@@ -67,7 +67,7 @@ class AgentTerminalViews:
             for line in text.splitlines():
                 for role in self.roles_for_line(line):
                     with self.paths[role].open("a", encoding="utf-8") as handle:
-                        handle.write(f"{timestamp} {line.strip()}\\n")
+                        handle.write(f"{timestamp} {line.strip()}\n")
 
     def start(self) -> None:
         if sys.platform != "darwin":
@@ -75,8 +75,8 @@ class AgentTerminalViews:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         for role, path in self.paths.items():
             path.write_text(
-                f"ASCM {role.upper()} AGENT LIVE LOG\\n"
-                "Close this Terminal window when the test session is over.\\n\\n",
+                f"ASCM {role.upper()} AGENT LIVE LOG\n"
+                "Close this Terminal window when the test session is over.\n\n",
                 encoding="utf-8",
             )
         for role, path in self.paths.items():
