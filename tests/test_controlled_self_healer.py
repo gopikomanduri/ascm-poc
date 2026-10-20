@@ -72,6 +72,8 @@ def test_repair_agent_routing_is_explicit_and_configurable(monkeypatch):
     monkeypatch.setenv("ASCM_REPAIR_AGENT_ID", "fallback")
     assert route_owner("product") == "product-reviewer"
     assert route_owner("orchestrator") == "fallback"
+    monkeypatch.delenv("ASCM_REPAIR_AGENT_ID")
+    assert route_owner("orchestrator") == "coder"
 
 
 def test_repair_blocks_p0_and_records_audit_without_calling_provider(tmp_path):
