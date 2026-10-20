@@ -19,7 +19,7 @@ def test_fabricated_sales_operational_metrics_never_pass_heuristic_evaluation():
 def test_roi_numbers_without_assumption_label_are_review_required():
     output = (
         "Revenue ROI pricing and metrics: expected savings are $1885 and "
-        "14.5 hours saved per sprint. Evidence and next steps are included. Assumptions are documented separately."
+        "14.5 hours saved per sprint. Evidence and next steps are included."
     )
     result = evaluate_agent_output("revenue_roi", output, ("pricing", "assumption", "metric", "unvalidated"))
     assert result["status"] == "review_required"
