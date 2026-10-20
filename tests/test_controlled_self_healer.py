@@ -202,3 +202,38 @@ def test_corrupt_retry_ledger_fails_closed(tmp_path):
     ledger = _ledger(tmp_path) / "ascm-controlled-repair-attempts.json"
     ledger.write_text("{not-json", encoding="utf-8")
     assert _claim_attempt(tmp_path, "finding-123") is False
+
+
+
+def test_repair_loop_retries_with_feedback_up_to_three_attempts(tmp_path, monkeypatch):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "ascm-test@example.invalid"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "ASCM Test"], cwd=tmp_path, check=True)
+    (tmp_path / "README.md").write_text("baseline\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "baseline"], cwd=tmp_path, check=True, capture_output=True)
+    calls = []
+
+    def invalid_proposal(finding, context):
+        calls.append((finding["repair_attempt"], context))
+        return "not a unified diff"
+
+    result = run_controlled_repair(
+        tmp_path,
+        {
+            "invariant_id": "broken-journey",
+            "severity": "P1",
+            "message": "Goal Agent event missing",
+            "remediation_owner": "orchestrator",
+            "evidence": ["repro: missing goal event"],
+        },
+        invalid_proposal,
+        acceptance_command="python -m orchestrator.testing_agent.runtime --sessions 1",
+    )
+
+    assert result["status"] == "repair_exhausted"
+    assert len(calls) == 3
+    assert [call[0] for call in calls] == [1, 2, 3]
+    assert "Previous repair attempts failed verification" in calls[1][1]
+    assert len(result["attempts"]) == 3
+    assert all(attempt["status"] == "failed" for attempt in result["attempts"])
