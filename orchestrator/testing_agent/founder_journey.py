@@ -124,7 +124,17 @@ class FounderJourneyEvaluator:
         ))
 
         outcome_events = [e for e in items if e.event_type in VERIFIED_OUTCOME_EVENTS]
-        outcomes_have_evidence = all(bool(e.evidence_ref) for e in outcome_events)
+        # A zero-outcome experiment is valid only when the system explicitly records
+        # that outcome attribution is pending; absence of evidence is not a pass.
+        outcome_status_recorded = any(
+            e.event_type == "outcome_status_recorded"
+            and e.details.get("status") in {"awaiting_outcomes", "no_gtm_cycles_recorded", "outcomes_observed"}
+            for e in items
+        )
+        outcomes_have_evidence = (
+            all(bool(e.evidence_ref) for e in outcome_events)
+            and (bool(outcome_events) or outcome_status_recorded)
+        )
         findings.append(AcceptanceFinding(
             "verified_outcome_learning", outcomes_have_evidence,
             evidence(VERIFIED_OUTCOME_EVENTS),
