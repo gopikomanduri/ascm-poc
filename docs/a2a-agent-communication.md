@@ -54,7 +54,7 @@ Standard A2A remains the transport and task lifecycle. ASCM adds a versioned gov
 
 The first local coordinator is in `orchestrator/a2a/coordinator.py`. It validates the recipient, records audit events, retries transient handler errors within a bounded attempt count, rejects idempotency-key reuse with a different payload, returns prior results for identical replays, escalates conflicting recommendations, and blocks proposed side effects unless the approval record names the exact action and includes an approver, timestamp and approval ID.
 
-**Important limits:** the coordinator is an in-process foundation. It does not yet replace the A2A server's request handler, enforce authenticated caller identity, interrupt a handler that exceeds its deadline, or persist idempotency/audit state across restarts. Do not expose it as production-ready. Before production, connect the coordinator to the actual A2A request path, use durable transactional storage, add caller/agent authorization and cancellation, and test with a real A2A client.
+**Important limits:** the coordinator is wired into the A2A server request path, and the HTTP integration test exercises JSON-RPC through that path. It is still an in-process foundation: it does not enforce authenticated caller identity, forcibly interrupt a handler that exceeds its deadline, or persist idempotency/audit state across restarts. Do not expose it as production-ready. Before production, use durable transactional storage, add caller/agent authorization and cancellation, and expand real-client interoperability tests.
 
 ## Testing Agent strategy
 
