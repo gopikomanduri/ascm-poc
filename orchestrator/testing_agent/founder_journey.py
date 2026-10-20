@@ -1,20 +1,11 @@
-"""Evidence-based acceptance evaluator for founder journeys.
-
-This module consumes observations captured by a real interface driver. It never
-executes actions, grants approvals, or treats model-generated claims as verified
-customer outcomes.
-"""
+"""Evidence-based acceptance gates. Missing evidence is never a pass."""
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-
-VERIFIED_OUTCOME_EVENTS = {
-    "customer_reply", "meeting_booked", "qualified_opportunity", "conversion"
-}
-PROHIBITED_AS_SUCCESS = {"gtm_asset_generated", "gtm_cycle_generated", "message_drafted"}
-
+VERIFIED_OUTCOME_EVENTS = {"customer_reply", "meeting_booked", "qualified_opportunity", "conversion"}
+PROPOSAL_EVENTS = {"gtm_asset_generated", "gtm_cycle_generated", "message_drafted", "gtm_proposal_recorded"}
+HANDOFF_EVENTS = {"handoff_started", "handoff_completed", "handoff_failed"}
 
 @dataclass(frozen=True)
 class JourneyEvent:
@@ -23,14 +14,13 @@ class JourneyEvent:
     evidence_ref: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
 
-
 @dataclass(frozen=True)
 class AcceptanceFinding:
     criterion: str
     passed: bool
     evidence: tuple[str, ...]
     message: str
-
+    status: str = "not_tested"
 
 @dataclass(frozen=True)
 class JourneyReport:
@@ -40,113 +30,134 @@ class JourneyReport:
     verified_outcome_counts: dict[str, int]
     generated_asset_count: int
 
-
 class FounderJourneyEvaluator:
-    """Evaluate recorded interface journeys using deterministic acceptance gates."""
-
+    """Evaluate captured journeys; never infer evidence from missing observations."""
     REQUIRED_CRITERIA = (
-        "mentor_goal_context",
-        "gtm_proposal_distinguished_from_outcome",
-        "explicit_action_scoped_consent",
-        "handoff_traceability",
-        "verified_outcome_learning",
+        "mentor_goal_context", "gtm_proposal_distinguished_from_outcome",
+        "explicit_action_scoped_consent", "handoff_traceability", "verified_outcome_learning",
     )
 
     def evaluate(self, scenario_id: str, events: Iterable[JourneyEvent]) -> JourneyReport:
-        if not scenario_id.strip():
+        if not isinstance(scenario_id, str) or not scenario_id.strip():
             raise ValueError("scenario_id is required.")
         items = tuple(events)
-        if any(not event.event_type.strip() or not event.source.strip() for event in items):
+        if any(not isinstance(e.event_type, str) or not e.event_type.strip()
+               or not isinstance(e.source, str) or not e.source.strip() for e in items):
             raise ValueError("Every journey event must include event_type and source.")
 
-        def has(event_type: str) -> bool:
-            return any(event.event_type == event_type for event in items)
+        def has(kind: str) -> bool:
+            return any(e.event_type == kind for e in items)
 
-        def evidence(event_types: set[str]) -> tuple[str, ...]:
-            return tuple(
-                event.evidence_ref or f"{event.source}:{event.event_type}"
-                for event in items if event.event_type in event_types
-            )
+        def evidence(kinds: set[str]) -> tuple[str, ...]:
+            refs = []
+            for e in items:
+                if e.event_type not in kinds:
+                    continue
+                if e.evidence_ref:
+                    refs.append(e.evidence_ref)
+                elif e.event_type in HANDOFF_EVENTS and e.details.get("task_id") and e.details.get("correlation_id"):
+                    refs.append(f"handoff:{e.details['task_id']}:{e.event_type}:{e.details['correlation_id']}")
+            return tuple(refs)
 
-        mentor_events = evidence({"mentor_goal_observed", "mentor_recommendation_shown"})
-        findings = [
-            AcceptanceFinding(
-                "mentor_goal_context",
-                has("mentor_goal_observed") and has("mentor_recommendation_shown"),
-                mentor_events,
-                "Mentor recommendation is tied to an observed founder goal."
-                if has("mentor_goal_observed") and has("mentor_recommendation_shown")
-                else "Missing observed founder goal or Mentor recommendation in the captured journey.",
-            )
-        ]
+        goals = [e for e in items if e.event_type == "mentor_goal_observed"]
+        recommendations = [e for e in items if e.event_type == "mentor_recommendation_shown"]
+        mentor_observed = bool(goals or recommendations)
+        mentor_pass = bool(goals and recommendations) and all(e.evidence_ref for e in goals + recommendations)
+        findings = [AcceptanceFinding(
+            "mentor_goal_context", bool(mentor_pass), evidence({"mentor_goal_observed", "mentor_recommendation_shown"}),
+            "Mentor recommendation is linked to an explicitly recorded founder goal." if mentor_pass else
+            ("Mentor goal/recommendation evidence is incomplete." if mentor_observed else "Founder goal and Mentor recommendation were not observed."),
+            "passed" if mentor_pass else ("failed" if mentor_observed else "not_tested"),
+        )]
 
-        generated = sum(event.event_type in PROHIBITED_AS_SUCCESS for event in items)
-        verified = sum(event.event_type in VERIFIED_OUTCOME_EVENTS for event in items)
-        success_claims = [e for e in items if e.event_type == "gtm_success_claimed"]
-        gtm_pass = not success_claims or any(
-            e.event_type in VERIFIED_OUTCOME_EVENTS and e.evidence_ref
-            for e in items
-        )
+        proposals = [e for e in items if e.event_type in PROPOSAL_EVENTS]
+        claims = [e for e in items if e.event_type == "gtm_success_claimed"]
+        outcomes = [e for e in items if e.event_type in VERIFIED_OUTCOME_EVENTS]
+        verified = [e for e in outcomes if e.evidence_ref and
+                    (e.details.get("verified") is True or e.details.get("verification_status") == "verified")]
+        def claim_supported(claim: JourneyEvent) -> bool:
+            cycle = claim.details.get("cycle_id") or claim.details.get("gtm_cycle_id")
+            return any(not cycle or (o.details.get("cycle_id") or o.details.get("gtm_cycle_id")) == cycle for o in verified)
+        unsupported = [c for c in claims if not claim_supported(c)]
+        gtm_pass = bool(proposals) and not unsupported
+        gtm_status = "passed" if gtm_pass else ("failed" if unsupported else "not_tested")
         findings.append(AcceptanceFinding(
-            "gtm_proposal_distinguished_from_outcome",
-            gtm_pass,
-            evidence(PROHIBITED_AS_SUCCESS | VERIFIED_OUTCOME_EVENTS | {"gtm_success_claimed"}),
-            "Generated GTM assets are not confused with verified outcomes."
-            if gtm_pass else "GTM success was claimed without a referenced, verified customer outcome.",
+            "gtm_proposal_distinguished_from_outcome", gtm_pass,
+            evidence(PROPOSAL_EVENTS | {"gtm_success_claimed"} | VERIFIED_OUTCOME_EVENTS),
+            "A GTM proposal is distinct from outcomes and every success claim is evidence-linked." if gtm_pass else
+            ("A GTM success claim lacks a linked, verified outcome." if unsupported else "No GTM proposal was recorded; separation was not tested."),
+            gtm_status,
         ))
 
         external = [e for e in items if e.event_type in {"external_action_attempted", "external_action_completed"}]
         approvals = [e for e in items if e.event_type == "action_approved"]
-        consent_pass = all(
-            any(
-                approval.details.get("action") == action.details.get("action")
-                and approval.details.get("approval_id")
-                and approval.details.get("approver")
-                for approval in approvals
-            )
-            for action in external
-        )
+        def approved(action: JourneyEvent) -> bool:
+            return any(a.details.get("action") == action.details.get("action")
+                       and a.details.get("approval_id") and a.details.get("approver")
+                       and a.details.get("is_real_authorization") is True for a in approvals)
+        blocked = [e for e in items if e.event_type == "external_action_blocked"]
+        if external:
+            consent_pass = all(approved(e) for e in external)
+            consent_status = "passed" if consent_pass else "failed"
+            consent_message = "Every external action has attributable real approval." if consent_pass else "An external action lacks matching, attributable real approval."
+        elif blocked:
+            consent_pass, consent_status = False, "partial"
+            consent_message = "Default-deny blocking was observed, but positive action-scoped approval was not tested."
+        else:
+            consent_pass, consent_status = False, "not_tested"
+            consent_message = "No external-action approval or blocking path was observed."
         findings.append(AcceptanceFinding(
             "explicit_action_scoped_consent", consent_pass,
-            evidence({"action_approved", "external_action_attempted", "external_action_completed"}),
-            "Every observed external action has a matching, attributable action-scoped approval."
-            if consent_pass else "An external action lacks a matching approval with approver and approval ID.",
+            evidence({"action_approved", "external_action_attempted", "external_action_completed", "external_action_blocked"}),
+            consent_message, consent_status,
         ))
 
-        traced = all(bool(e.details.get("task_id")) and bool(e.details.get("correlation_id"))
-                     for e in items if e.event_type in {"handoff_started", "handoff_completed", "handoff_failed"})
-        has_handoff = has("handoff_started") or has("handoff_completed") or has("handoff_failed")
+        handoffs = [e for e in items if e.event_type in HANDOFF_EVENTS]
+        starts, terminals = {}, {}
+        trace_problem = False
+        for e in handoffs:
+            task, corr = e.details.get("task_id"), e.details.get("correlation_id")
+            if not task or not corr:
+                trace_problem = True
+                continue
+            task = str(task)
+            if e.event_type == "handoff_started":
+                if task in starts:
+                    trace_problem = True
+                starts[task] = e
+            else:
+                terminals.setdefault(task, []).append(e)
+        for task, start in starts.items():
+            end_events = terminals.get(task, [])
+            if len(end_events) != 1 or end_events[0].details.get("correlation_id") != start.details.get("correlation_id"):
+                trace_problem = True
+        if set(terminals) - set(starts):
+            trace_problem = True
+        handoff_pass = bool(handoffs and starts) and not trace_problem and all(len(terminals.get(t, [])) == 1 for t in starts)
         findings.append(AcceptanceFinding(
-            "handoff_traceability", has_handoff and traced,
-            evidence({"handoff_started", "handoff_completed", "handoff_failed"}),
-            "Observed handoffs carry task and correlation IDs."
-            if has_handoff and traced else "No handoff was observed or one lacks task/correlation IDs.",
+            "handoff_traceability", handoff_pass, evidence(HANDOFF_EVENTS),
+            "Every handoff has one matching terminal event and stable task/correlation IDs." if handoff_pass else
+            ("Handoff starts/terminal events or task/correlation IDs do not match." if handoffs else "No handoff was observed."),
+            "passed" if handoff_pass else ("failed" if handoffs else "not_tested"),
         ))
 
-        outcome_events = [e for e in items if e.event_type in VERIFIED_OUTCOME_EVENTS]
-        # A zero-outcome experiment is valid only when the system explicitly records
-        # that outcome attribution is pending; absence of evidence is not a pass.
-        outcome_status_recorded = any(
-            e.event_type == "outcome_status_recorded"
-            and e.details.get("status") in {"awaiting_outcomes", "no_gtm_cycles_recorded", "outcomes_observed"}
-            for e in items
-        )
-        outcomes_have_evidence = (
-            all(bool(e.evidence_ref) for e in outcome_events)
-            and (bool(outcome_events) or outcome_status_recorded)
-        )
+        invalid = [e for e in outcomes if not e.evidence_ref or not
+                   (e.details.get("verified") is True or e.details.get("verification_status") == "verified")]
+        if outcomes and invalid:
+            outcome_pass, outcome_status = False, "failed"
+            outcome_message = "One or more customer outcomes lack explicit verification and an evidence reference."
+        elif verified:
+            outcome_pass, outcome_status = True, "passed"
+            outcome_message = "At least one customer outcome is explicitly verified and linked to evidence."
+        else:
+            outcome_pass, outcome_status = False, "not_tested"
+            outcome_message = "No verified, evidence-linked customer outcome was observed; learning remains pending."
         findings.append(AcceptanceFinding(
-            "verified_outcome_learning", outcomes_have_evidence,
-            evidence(VERIFIED_OUTCOME_EVENTS),
-            "Customer outcomes are recorded with evidence references."
-            if outcomes_have_evidence else "At least one customer outcome lacks an evidence reference.",
+            "verified_outcome_learning", outcome_pass, evidence(VERIFIED_OUTCOME_EVENTS),
+            outcome_message, outcome_status,
         ))
-
-        counts = {name: sum(e.event_type == name for e in items) for name in sorted(VERIFIED_OUTCOME_EVENTS)}
-        return JourneyReport(
-            scenario_id=scenario_id,
-            passed=all(f.passed for f in findings),
-            findings=tuple(findings),
-            verified_outcome_counts=counts,
-            generated_asset_count=generated,
-        )
+        counts = {name: sum(e.event_type == name and bool(e.evidence_ref) and
+                            (e.details.get("verified") is True or e.details.get("verification_status") == "verified")
+                            for e in items) for name in sorted(VERIFIED_OUTCOME_EVENTS)}
+        return JourneyReport(scenario_id, all(f.passed for f in findings), tuple(findings), counts,
+                             sum(e.event_type in PROPOSAL_EVENTS for e in items))
