@@ -28,3 +28,14 @@ exceeds the configured size limit, or the model response does not match the
 expected schema. A clean model review is an additional signal, not proof that
 code is secure; deterministic scanning, Bandit, dependency audit, tests, and
 human review remain important.
+
+
+## Empty model response diagnostics and fallback
+
+The adapter checks both the SDK convenience \`.text\` field and text parts on
+candidate content. If the primary model returns no text, it retries once using
+\`ASCM_SECURITY_REVIEW_FALLBACK_MODEL\` (default: \`gemini-3.6-flash\`). Set this
+environment variable to another model available to your API key, or set it to
+an empty string to disable fallback. Empty responses include safe finish/block
+reason diagnostics when the provider supplies them. If both attempts are empty,
+the review still fails closed; the fallback is not treated as an approval.
