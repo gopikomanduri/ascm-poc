@@ -40,6 +40,8 @@ logger = logging.getLogger("ASCM.A2A")
 
 # Keep aliases stable even if Python class names or module paths change.
 AGENT_ALIASES = {
+    # Every non-mentor target below is defined or aliased by orchestrator.agents.all_agents.
+    # Keep this list aligned with the real runtime roster; never advertise placeholder agents.
     "discovery": "DiscoveryAgent",
     "product": "ProductAgent",
     "business_strategy": "BusinessStrategyAgent",
@@ -53,23 +55,13 @@ AGENT_ALIASES = {
     "coder": "GoCoderAgent",
     "security_auditor": "SecurityAuditorAgent",
     "code_review": "CodeReviewAgent",
-    "checker": "CheckerAgent",
-    "compliance": "ComplianceAgent",
-    "qa": "QAAgent",
-    "sre": "SREAgent",
-    "apm": "APMAgent",
-    "oncall": "OnCallAgent",
-    "sales": "SalesAgent",
-    "marketing": "MarketingAgent",
-    "advertising": "AdAgent",
-    "seo": "SEOAgent",
     "mentor": "ASCMProactiveMentor",
 }
 AGENT_DESCRIPTIONS = {
     "discovery": "Classify repository topology and cross-repository dependencies.",
     "product": "Clarify requirements, identify ambiguity and produce a product specification.",
     "business_strategy": "Produce domain-specific market and go-to-market strategy.",
-    "gtm": "Produce domain-specific market and go-to-market strategy.",
+    "gtm": "Alias for the Business Strategy specialist's go-to-market capabilities.",
     "revenue_roi": "Analyze ROI, pricing, revenue metrics and unit economics.",
     "design": "Produce high-level and low-level software designs.",
     "architect": "Decompose requirements into implementation tasks and contracts.",
@@ -79,16 +71,6 @@ AGENT_DESCRIPTIONS = {
     "coder": "Generate implementation proposals and code artifacts.",
     "security_auditor": "Review proposed artifacts for security issues.",
     "code_review": "Adversarially review code and tests.",
-    "checker": "Check implementation artifacts.",
-    "compliance": "Review applicable compliance requirements.",
-    "qa": "Design quality assurance and test plans.",
-    "sre": "Review reliability, deployment and operational concerns.",
-    "apm": "Analyze application performance concerns.",
-    "oncall": "Assist with incident response and operational triage.",
-    "sales": "Assist with sales research and messaging.",
-    "marketing": "Assist with marketing strategy and content.",
-    "advertising": "Assist with advertising proposals.",
-    "seo": "Assist with search optimization proposals.",
     "mentor": "Clarify founder goals, challenge assumptions and recommend validation steps.",
 }
 
