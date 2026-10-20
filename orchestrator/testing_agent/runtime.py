@@ -12,6 +12,8 @@ import argparse
 import builtins
 import hashlib
 import json
+import difflib
+import re
 import logging
 import os
 import queue
@@ -114,6 +116,21 @@ PROBE_AREAS = (
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _normalized_text(value: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.lower()).split())
+
+
+def _text_similarity(left: str, right: str) -> float:
+    """Cheap deterministic similarity check to stop near-duplicate interview loops."""
+    a, b = _normalized_text(left), _normalized_text(right)
+    if not a or not b:
+        return 0.0
+    sequence_score = difflib.SequenceMatcher(None, a, b).ratio()
+    a_tokens, b_tokens = set(a.split()), set(b.split())
+    token_score = len(a_tokens & b_tokens) / max(1, len(a_tokens | b_tokens))
+    return max(sequence_score, token_score)
 
 
 class ConversationStoryLog:
