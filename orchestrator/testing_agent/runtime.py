@@ -1109,6 +1109,8 @@ def ensure_gateway(base_url: str, workspace: Path, *, start_server: bool) -> sub
     env = os.environ.copy()
     env["ASCM_A2A_HOST"] = "127.0.0.1"
     env["ASCM_A2A_PORT"] = str(port)
+    # Ensure an isolated acceptance run loads the gateway from its repair worktree.
+    env["ASCM_A2A_WORKSPACE"] = str(workspace)
     process = subprocess.Popen(
         [sys.executable, "-m", "orchestrator.a2a.server"],
         cwd=workspace, env=env, stdout=log_handle, stderr=subprocess.STDOUT,
