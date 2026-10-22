@@ -1005,6 +1005,9 @@ class OrchestratorEngine:
                             break
 
                         try:
+                            # Re-check the generated patch against the contract before any write.
+                            # validate_and_write repeats this check immediately before filesystem writes.
+                            SandboxEngine.validate(contract.repo_path, contract.allowed_paths, fixed_patch)
                             SandboxEngine.validate_and_write(contract.repo_path, contract.allowed_paths, fixed_patch)
                             files.update(fixed_patch)
                         except PathViolationError as err:
