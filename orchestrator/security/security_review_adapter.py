@@ -12,10 +12,12 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 MAX_DIFF_CHARS = 20_000
 MAX_FINDINGS = 200
+MAX_REVIEW_WORKERS = 3
 DEFAULT_MODEL = "gemini-3.8-flash"
 
 SYSTEM_INSTRUCTIONS = """You are a security reviewer for a software change.
@@ -126,18 +128,24 @@ def _split_diff_into_chunks(diff: str, max_chars: int = MAX_DIFF_CHARS) -> list[
     return chunks
 
 
-def _review_oversized_path(
-    repo_root: Path, base: str, head: str, path: str, api_key: str, model: str,
-) -> list[dict[str, Any]]:
-    """Review every hunk of an oversized file in bounded, independently identified requests."""
+def _oversized_path_chunks(repo_root: Path, base: str, head: str, path: str) -> list[str]:
+    """Return every bounded hunk chunk for one oversized file; never silently skip a file."""
     diff = _raw_git_diff(repo_root, base, head, [path], context_lines=0)
     chunks = _split_diff_into_chunks(diff)
     if not chunks and diff.strip():
         raise ReviewError(f"Changed file {path!r} could not be split for security review.")
+    if any(len(chunk) > MAX_DIFF_CHARS for chunk in chunks):
+        raise ReviewError(f"Security review chunk for {path!r} exceeds the configured limit.")
+    return chunks
+
+
+def _review_oversized_path(
+    repo_root: Path, base: str, head: str, path: str, api_key: str, model: str,
+) -> list[dict[str, Any]]:
+    """Review every hunk of an oversized file in bounded, independently identified requests."""
+    chunks = _oversized_path_chunks(repo_root, base, head, path)
     findings: list[dict[str, Any]] = []
     for chunk in chunks:
-        if len(chunk) > MAX_DIFF_CHARS:
-            raise ReviewError(f"Security review chunk for {path!r} exceeds the configured limit.")
         findings.extend(_normalize_findings(_request_review(chunk, api_key, model)))
         if len(findings) > MAX_FINDINGS:
             raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
@@ -147,11 +155,11 @@ def _review_oversized_path(
 def _batched_review(
     repo_root: Path, base: str, head: str, api_key: str, model: str,
 ) -> list[dict[str, Any]]:
-    """Review an oversized PR in bounded path batches; never silently skip files."""
+    """Review an oversized PR in bounded path batches and parallelize provider calls."""
     paths = _changed_paths(repo_root, base, head)
     if not paths:
         return []
-    findings: list[dict[str, Any]] = []
+    review_diffs: list[str] = []
 
     def review_group(group: list[str]) -> None:
         try:
@@ -160,22 +168,16 @@ def _batched_review(
             if "exceeds the" not in str(exc):
                 raise
             if len(group) == 1:
-                findings.extend(_review_oversized_path(
-                    repo_root, base, head, group[0], api_key, model
+                review_diffs.extend(_oversized_path_chunks(
+                    repo_root, base, head, group[0]
                 ))
-                if len(findings) > MAX_FINDINGS:
-                    raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
                 return
             midpoint = len(group) // 2
             review_group(group[:midpoint])
             review_group(group[midpoint:])
             return
-        if not diff.strip():
-            return
-        payload = _request_review(diff, api_key, model)
-        findings.extend(_normalize_findings(payload))
-        if len(findings) > MAX_FINDINGS:
-            raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
+        if diff.strip():
+            review_diffs.append(diff)
 
     # Greedy grouping limits provider calls while ensuring every changed path is reviewed.
     batch: list[str] = []
@@ -186,11 +188,9 @@ def _batched_review(
             except ReviewError as exc:
                 if "exceeds the" not in str(exc):
                     raise
-                findings.extend(_review_oversized_path(
-                    repo_root, base, head, path, api_key, model
+                review_diffs.extend(_oversized_path_chunks(
+                    repo_root, base, head, path
                 ))
-                if len(findings) > MAX_FINDINGS:
-                    raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
             else:
                 batch = [path]
             continue
@@ -207,11 +207,9 @@ def _batched_review(
             except ReviewError as single_exc:
                 if "exceeds the" not in str(single_exc):
                     raise
-                findings.extend(_review_oversized_path(
-                    repo_root, base, head, path, api_key, model
+                review_diffs.extend(_oversized_path_chunks(
+                    repo_root, base, head, path
                 ))
-                if len(findings) > MAX_FINDINGS:
-                    raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
                 batch = []
             else:
                 batch = [path]
@@ -219,6 +217,19 @@ def _batched_review(
             batch = candidate
     if batch:
         review_group(batch)
+
+    # Bound concurrency to reduce wall-clock time without overwhelming the provider.
+    # executor.map preserves input ordering, so finding aggregation remains deterministic.
+    with ThreadPoolExecutor(max_workers=MAX_REVIEW_WORKERS) as executor:
+        payloads = list(executor.map(
+            lambda diff: _request_review(diff, api_key, model), review_diffs
+        ))
+
+    findings: list[dict[str, Any]] = []
+    for payload in payloads:
+        findings.extend(_normalize_findings(payload))
+        if len(findings) > MAX_FINDINGS:
+            raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
     return findings
 
 
