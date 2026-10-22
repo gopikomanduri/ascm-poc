@@ -1,6 +1,9 @@
 import ipaddress
 import json
 import os
+import random
+import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -79,6 +82,77 @@ def parse_json_lenient(raw: str):
     if m2:
         return json.loads(m2.group(0), strict=False)
     raise last_err
+
+
+class LLMBudgetExceeded(RuntimeError):
+    """Raised when the per-process LLM call budget is exhausted (a runaway-loop / cost circuit breaker)."""
+
+
+_LLM_CALLS = 0
+_LLM_LOCK = threading.Lock()
+
+
+def reset_llm_budget() -> None:
+    global _LLM_CALLS
+    with _LLM_LOCK:
+        _LLM_CALLS = 0
+
+
+def _charge_llm_call() -> None:
+    global _LLM_CALLS
+    limit = int(os.environ.get("ASCM_MAX_LLM_CALLS", "300"))
+    with _LLM_LOCK:
+        _LLM_CALLS += 1
+        if limit > 0 and _LLM_CALLS > limit:
+            raise LLMBudgetExceeded(
+                f"LLM call budget of {limit} calls exceeded; stopping to protect cost. "
+                "Raise ASCM_MAX_LLM_CALLS if this run is legitimately large."
+            )
+
+
+_RETRYABLE_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
+
+
+def _is_rate_limited(err: Exception) -> bool:
+    """Gemini wraps quota errors in RuntimeError/ClientError text; a per-minute quota clears if we wait."""
+    text = str(err)
+    return "429" in text or "RESOURCE_EXHAUSTED" in text or "rate limit" in text.lower()
+
+
+def _is_transient(err: Exception) -> bool:
+    import urllib.error
+    if _is_rate_limited(err):
+        return True
+    if isinstance(err, urllib.error.HTTPError):
+        return err.code in _RETRYABLE_STATUS
+    return isinstance(err, (urllib.error.URLError, TimeoutError, ConnectionError))
+
+
+def _with_retries(fn):
+    """Retry transient provider failures (429/5xx/timeouts) with exponential backoff and jitter."""
+    attempts = max(0, int(os.environ.get("ASCM_LLM_RETRIES", "2"))) + 1
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except LLMBudgetExceeded:
+            raise
+        except Exception as err:
+            if attempt == attempts - 1 or not _is_transient(err):
+                raise
+            if _is_rate_limited(err):
+                time.sleep(min(60.0, 20.0 * (attempt + 1)))  # quota windows are per-minute: wait, don't hammer
+            else:
+                time.sleep(min(30.0, (2 ** attempt) + random.random()))
+
+
+def _strip_json_fences(text: str) -> str:
+    """Models sometimes wrap JSON in ```json fences; agents parse with json.loads, so unwrap them."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", stripped)
+        stripped = re.sub(r"\s*```$", "", stripped)
+        return stripped.strip()
+    return text
 
 
 class BaseLLMProvider(ABC):
@@ -227,7 +301,7 @@ class AnthropicProvider(BaseLLMProvider):
 
         payload = {
             "model": self.model,
-            "max_tokens": 4096,
+            "max_tokens": int(os.environ.get("ASCM_MAX_OUTPUT_TOKENS", "8192")),
             "system": sys_prompt,
             "messages": [
                 {"role": "user", "content": prompt}
@@ -552,12 +626,30 @@ class BaseAgent:
         start_time = time.time()
         agent_name = self.__class__.__name__
         try:
+            _charge_llm_call()  # cost circuit breaker: raises when the per-process call budget is spent
             gen_kwargs = dict(prompt=sanitized_prompt, system_instruction=self.system_instruction, json_mode=json_mode)
             temp = getattr(self, "temperature", None)   # set by creative agents; None = provider default (0.1)
-            try:
-                response = self.provider.generate(**gen_kwargs, **({"temperature": temp} if temp is not None else {}))
-            except TypeError:   # custom/mocked provider without a temperature parameter
-                response = self.provider.generate(**gen_kwargs)
+
+            def _generate():
+                try:
+                    return self.provider.generate(**gen_kwargs, **({"temperature": temp} if temp is not None else {}))
+                except TypeError:   # custom/mocked provider without a temperature parameter
+                    return self.provider.generate(**gen_kwargs)
+
+            response = _with_retries(_generate)
+            if json_mode and isinstance(response, str):
+                response = _strip_json_fences(response)
+                for _ in range(max(0, int(os.environ.get("ASCM_JSON_RETRIES", "2")))):
+                    try:
+                        json.loads(response)
+                        break
+                    except ValueError as bad:
+                        _charge_llm_call()
+                        gen_kwargs["prompt"] = (
+                            f"{sanitized_prompt}\n\nYour previous reply was not valid JSON ({bad}). "
+                            "Reply again with ONLY one valid JSON object and nothing else."
+                        )
+                        response = _strip_json_fences(_with_retries(_generate))
             elapsed_ms = (time.time() - start_time) * 1000
             provider_type = self.provider.__class__.__name__
             raw_m = getattr(self.provider, "model", "default")
@@ -581,7 +673,9 @@ class BaseAgent:
                 details={"error": str(err), "latency_ms": round(elapsed_ms, 2)},
                 level="ERROR",
             )
-            allow_fallback = os.environ.get("ALLOW_SYNTHETIC_FALLBACK", "1").lower() in ("true", "1", "yes")
+            allow_fallback = os.environ.get("ALLOW_SYNTHETIC_FALLBACK", "0").lower() in ("true", "1", "yes")
+            # Synthetic output is canned demo data (it can "approve" code with a fake score), so it is
+            # opt-in only. A failed model call must surface as a failure, not as fabricated success.
             if allow_fallback:
                 AUDIT_LOGGER.log_event(
                     event_type="LLM_FALLBACK_ENGAGED",

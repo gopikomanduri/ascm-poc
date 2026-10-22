@@ -65,8 +65,9 @@ Output JSON format:
         test_cases = list(files.keys()) if files else kwargs.get("test_cases", ["test_core"])
         framework = kwargs.get("framework", kwargs.get("language", "pytest"))
         results = self.run_tests(test_cases=test_cases, test_framework=framework)
-        results["passed"] = results.get("verdict") in ("PASS", "PASS_WITH_WARNINGS")
-        results["coverage_percentage"] = results.get("coverage_pct", 85.0)
+        # Only an executed run can pass. A run that never happened must not look like a pass.
+        results["passed"] = bool(results.get("executed")) and results.get("verdict") in ("PASS", "PASS_WITH_WARNINGS")
+        results["coverage_percentage"] = results.get("coverage_pct")
         return results
 
     def generate_test_plan(
@@ -115,19 +116,22 @@ Output JSON format:
         test_framework: str,
         coverage_target: float = 80.0,
     ) -> Dict[str, Any]:
-        """Execute test suite (mock implementation)."""
-        # In production, this would actually run the test command
-        # For now, return structured test results
+        """Not implemented: this agent does not execute tests, so it reports that and nothing else.
 
+        Real execution lives in orchestrator.engine.verifier.VerifierEngine. Returning invented pass counts,
+        coverage or latency here would present fiction as verification.
+        """
         return {
             "test_framework": test_framework,
+            "executed": False,
             "total_tests": len(test_cases),
-            "tests_passed": max(0, len(test_cases) - 1),  # Mock: 1 flaky test
-            "tests_failed": 1,
-            "coverage_pct": coverage_target - 5,  # Mock
-            "p99_latency_ms": 250,
-            "error_rate_pct": 0.05,
-            "verdict": "PASS_WITH_WARNINGS",
+            "tests_passed": None,
+            "tests_failed": None,
+            "coverage_pct": None,
+            "p99_latency_ms": None,
+            "error_rate_pct": None,
+            "verdict": "NOT_VERIFIED",
+            "reason": "QAAgent does not run tests; use VerifierEngine for real execution.",
         }
 
     def check_sla_gates(

@@ -45,9 +45,10 @@ class SREAgent(BaseAgent):
         return {
             "provider": cloud_provider,
             "strategy": deployment_strategy,
-            "iac_generated": True,
+            "iac_generated": False,
+            "reason": "infrastructure-as-code generation is not implemented",
         }
 
     def create_runbooks(self, deployment_plan: Dict[str, Any]) -> str:
         """Create incident runbooks."""
-        return "Runbook: Monitor logs. If error rate > 1%, trigger failover. Escalate if MTTR > 15min."
+        return "GENERIC TEMPLATE (not derived from your system): Monitor logs. If error rate > 1%, trigger failover. Escalate if MTTR > 15min."

@@ -3,6 +3,20 @@ from typing import Dict, Any, List, Optional
 from orchestrator.agents.base import BaseAgent, BaseLLMProvider
 
 
+def review_scope(lang: str) -> str:
+    """Anchors reviewers to the stated goal. Keyword-detected 'domain' guidance must not invent requirements."""
+    return (
+        "REVIEW SCOPE (overrides any domain guidance above): the ONLY requirements are the stated goal/PRD given below. "
+        "Domain guidance, HLD and LLD are background and may be inaccurate; never fail a change because it lacks a "
+        "requirement, language, framework, compliance regime, encryption, tenancy, audit trail or architecture that the "
+        f"goal does not ask for. The repository language is {lang.upper()}; code in that language is correct by definition. "
+        "Judge only what THIS CHANGE introduces or breaks: correctness against the goal, regressions of existing behaviour, "
+        "tests that cover the new behaviour, and vulnerabilities introduced by the diff. Do NOT fail the change for "
+        "pre-existing properties of the surrounding code. If there is no such concrete defect, approve. "
+        "List only concrete, actionable defects and name the file for each."
+    )
+
+
 class DiscoveryAgent(BaseAgent):
     def __init__(self, provider: Optional[BaseLLMProvider] = None):
         super().__init__(
@@ -74,16 +88,21 @@ class DesignAgent(BaseAgent):
             tier="primary",
         )
 
-    def run(self, clarified_prd: str, contracts: Dict[str, Any]) -> Dict[str, str]:
+    def run(self, clarified_prd: str, contracts: Dict[str, Any], language: Optional[str] = None,
+            repo_context: Optional[str] = None) -> Dict[str, str]:
         from orchestrator.domain import DomainAdapter
         domain = DomainAdapter.detect_domain(clarified_prd)
-        lang = DomainAdapter.detect_language(clarified_prd, domain)
+        lang = language or DomainAdapter.detect_language(clarified_prd, domain)
         role_prompt = DomainAdapter.get_agent_domain_prompt("architect", domain, lang)
+        context_block = f"Existing repository code (the design must fit it):\n{repo_context}\n\n" if repo_context else ""
         prompt = (
             f"{role_prompt}\n"
             f"Clarified Requirement / PRD:\n{clarified_prd}\n\n"
             f"Repository Contracts:\n{json.dumps(contracts, indent=2)}\n\n"
-            f"Produce comprehensive HLD (architecture, modules, component flow) and LLD (functions, data structures, error handling) for {domain.display_name} in {lang.upper()}."
+            f"{context_block}"
+            f"Design ONLY the change the PRD asks for, as a small modification of the existing code above, in {lang.upper()}. "
+            f"Do not introduce new modules, services, languages or compliance/audit/encryption work the PRD does not request. "
+            f"Produce a concise HLD (components touched, data flow) and LLD (functions, data structures, error handling) for {domain.display_name}."
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
@@ -95,17 +114,18 @@ class ArchitectAgent(BaseAgent):
             "You are a Principal Systems Architect. Break down the user requirement and design specs into discrete execution sub-tasks. "
             "Output JSON with this exact schema:\n"
             '{\n  "tasks": [\n'
-            '    {\n      "id": "TASK-1",\n      "title": "short title",\n      "description": "detailed instructions",\n      "assigned_agent": "coder|database|security",\n      "target_file": "relative/file/path"\n    }\n  ]\n}',
+            '    {\n      "id": "TASK-1",\n      "title": "short title",\n      "description": "detailed instructions",\n      "assigned_agent": "coder|database|security",\n      "target_file": "relative/file/path",\n      "repo": "name of the one repository this task changes"\n    }\n  ]\n}',
             provider=provider,
             tier="primary",
         )
 
-    def run(self, clarified_prd: str, hld: str, lld: str, contracts: Dict[str, Any], kg_context: Optional[str] = None) -> Dict[str, Any]:
+    def run(self, clarified_prd: str, hld: str, lld: str, contracts: Dict[str, Any], kg_context: Optional[str] = None,
+            language: Optional[str] = None) -> Dict[str, Any]:
         from orchestrator.domain import DomainAdapter
         domain = DomainAdapter.detect_domain(clarified_prd)
-        lang = DomainAdapter.detect_language(clarified_prd, domain)
+        lang = language or DomainAdapter.detect_language(clarified_prd, domain)
         role_prompt = DomainAdapter.get_agent_domain_prompt("architect", domain, lang)
-        ext = ".py" if lang == "python" else ".go" if lang == "go" else ".ts" if lang == "typescript" else ".rs" if lang == "rust" else ".go"
+        ext = {"python": ".py", "go": ".go", "typescript": ".ts", "javascript": ".js", "rust": ".rs"}.get(lang, ".go")
         kg_block = f"\n\nCross-Repository Knowledge Graph:\n{kg_context}" if kg_context else ""
         prompt = (
             f"{role_prompt}\n"
@@ -115,6 +135,11 @@ class ArchitectAgent(BaseAgent):
             f"Repository Contracts:\n{json.dumps(contracts, indent=2)}"
             f"{kg_block}\n\n"
             f"Decompose this work into granular execution tasks assigned to specialized agents ('coder', 'database', 'security'). "
+            f"SCOPE RULE: create only the tasks strictly required to satisfy the PRD, usually 1-3. Modify the existing files "
+            f"shown in the repository snapshot (use their exact paths as target_file) instead of inventing new modules. "
+            f"Do NOT add registries, audit trails, services, compliance programs or any feature the PRD does not ask for. "
+            f"Give every task a 'repo' naming the single repository it changes (one of: "
+            f"{', '.join(str(c.get('name', k)) for k, c in contracts.items() if isinstance(c, dict))}). "
             f"Target file extensions should use '{ext}' matching target language {lang.upper()}."
         )
         raw = self.call(prompt, json_mode=True)
@@ -132,10 +157,10 @@ class PlannerAgent(BaseAgent):
             tier="fast",
         )
 
-    def run(self, task: Dict[str, Any], context: str) -> Dict[str, Any]:
+    def run(self, task: Dict[str, Any], context: str, language: Optional[str] = None) -> Dict[str, Any]:
         from orchestrator.domain import DomainAdapter
         domain = DomainAdapter.detect_domain(context)
-        lang = DomainAdapter.detect_language(context, domain)
+        lang = language or DomainAdapter.detect_language(context, domain)
         role_prompt = DomainAdapter.get_agent_domain_prompt("orchestrator", domain, lang)
         prompt = (
             f"{role_prompt}\n"
@@ -189,18 +214,29 @@ class PolyglotCoderAgent(BaseAgent):
             tier="primary",
         )
 
-    def run(self, existing_code: str, selected_arch: str, source_filename: str, test_filename: str, contract: str) -> Dict[str, str]:
+    def run(self, existing_code: str, selected_arch: str, source_filename: str, test_filename: str, contract: str,
+            language: Optional[str] = None, existing_tests: str = "") -> Dict[str, str]:
         from orchestrator.domain import DomainAdapter
         domain = DomainAdapter.detect_domain(selected_arch)
-        lang = DomainAdapter.detect_language(selected_arch, domain)
+        # The repository's real language wins over keyword guessing from the instruction text (which once
+        # told the coder to write Go for a Python repo).
+        lang = language or DomainAdapter.detect_language(selected_arch, domain)
         role_prompt = DomainAdapter.get_agent_domain_prompt("coder", domain, lang)
         prompt = (
             f"{role_prompt}\n"
             f"Existing Code:\n{existing_code}\n\n"
-            f"Repository Contract:\n{contract}\n\n"
+            + (
+                f"Existing Tests in '{test_filename}' (KEEP every existing test; update an assertion only where the "
+                f"requested behaviour change makes it wrong; append tests for the new behaviour):\n{existing_tests}\n\n"
+                if existing_tests else ""
+            )
+            + f"Repository Contract:\n{contract}\n\n"
             f"Selected Architecture / Instructions:\n{selected_arch}\n\n"
             f"Target Source File: '{source_filename}'\n"
             f"Target Unit Test File: '{test_filename}'\n\n"
+            f"The repository language is {lang.upper()}; never switch language or framework. "
+            f"Make the MINIMAL change that satisfies the instructions: preserve existing behaviour, names and tests, and add "
+            f"tests for the new behaviour only. Do not add unrelated features. "
             f"Generate a JSON object mapping repository-relative allowlisted paths to complete code strings in {lang.upper()}. "
             f"You MUST generate production-grade code for '{source_filename}' AND write complete, idiomatic unit test cases "
             f"in '{test_filename}' pulling famous test libraries (e.g., testify/assert for Go, unittest/pytest for Python, jest for Node)."
@@ -208,8 +244,10 @@ class PolyglotCoderAgent(BaseAgent):
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
 
-    def fix(self, current_files: Dict[str, str], error_log: str, contract: str) -> Dict[str, str]:
+    def fix(self, current_files: Dict[str, str], error_log: str, contract: str, language: Optional[str] = None) -> Dict[str, str]:
+        lang_line = f"The repository language is {language.upper()}; keep every file in that language.\n" if language else ""
         prompt = (
+            f"{lang_line}"
             f"The following code failed test/verification checks:\n"
             f"Current Files:\n{json.dumps(current_files, indent=2)}\n\n"
             f"Verification Failure Log:\n{error_log}\n\n"
@@ -238,16 +276,22 @@ class SecurityAuditorAgent(BaseAgent):
             tier="fast",
         )
 
-    def run(self, files: Dict[str, str]) -> Dict[str, Any]:
+    def run(self, files: Dict[str, str], goal: str = "", language: Optional[str] = None,
+            diff: Optional[str] = None) -> Dict[str, Any]:
         from orchestrator.domain import DomainAdapter
         code_sample = "\n".join(files.values())[:3000]
         domain = DomainAdapter.detect_domain(code_sample)
-        lang = DomainAdapter.detect_language(code_sample, domain)
+        lang = language or DomainAdapter.detect_language(code_sample, domain)
         role_prompt = DomainAdapter.get_agent_domain_prompt("security", domain, lang)
+        scope = review_scope(lang) if (goal or language) else ""
+        diff_block = f"\nUnified diff of this change (audit this):\n{diff}\n" if diff else ""
         prompt = (
             f"{role_prompt}\n"
-            f"Inspect these generated {lang.upper()} files for {domain.display_name} security vulnerabilities, "
-            f"privilege/data leaks, memory issues, injection, and regulatory compliance:\n{json.dumps(files, indent=2)}"
+            f"{scope}\n"
+            + (f"Stated goal / PRD:\n{goal}\n" if goal else "")
+            + f"{diff_block}"
+            f"Inspect these generated {lang.upper()} files for security vulnerabilities introduced by the change "
+            f"(injection, unsafe deserialization, secrets, path traversal, resource exhaustion, privilege/data leaks):\n{json.dumps(files, indent=2)}"
         )
         raw = self.call(prompt, json_mode=True)
         return json.loads(raw)
@@ -421,11 +465,17 @@ class CodeReviewAgent(BaseAgent):
         hld_val = hld or kwargs.get("hld_spec", "")
         code_sample = "\n".join(file_map.values())[:3000]
         domain = DomainAdapter.detect_domain(f"{hld_val} {code_sample}")
-        lang = DomainAdapter.detect_language(f"{hld_val} {code_sample}", domain)
+        lang = kwargs.get("language") or DomainAdapter.detect_language(f"{hld_val} {code_sample}", domain)
         role_prompt = DomainAdapter.get_agent_domain_prompt("code_review", domain, lang)
+        goal_text = kwargs.get("goal") or ""
+        diff_text = kwargs.get("diff") or ""
+        scope = review_scope(lang) if (goal_text or kwargs.get("language")) else ""
         prompt = (
             f"{role_prompt}\n"
-            f"HLD Context:\n{hld_val[:1500]}\n\n"
+            f"{scope}\n"
+            + (f"Stated goal / PRD:\n{goal_text}\n\n" if goal_text else "")
+            + (f"Unified diff of this change:\n{diff_text}\n\n" if diff_text else "")
+            + f"HLD Context (background only, may be inaccurate):\n{hld_val[:1500]}\n\n"
             f"LLD Context:\n{lld[:1500]}\n\n"
             f"Generated Files & Unit Tests:\n{json.dumps(file_map, indent=2)}\n\n"
             f"Perform an adversarial, unbiased code review for {domain.display_name} in {lang.upper()}. Check syntax, error handling, security, performance, and unit test assertions. "
