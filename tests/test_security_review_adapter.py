@@ -103,8 +103,9 @@ def test_explicit_gemini_key_wins_over_google_api_key(monkeypatch):
         def generate_content(self, **kwargs):
             return SimpleNamespace(text='{"findings": []}')
 
-    def fake_client(*, api_key):
+    def fake_client(*, api_key, http_options=None):
         captured["api_key"] = api_key
+        captured["http_options"] = http_options
         return SimpleNamespace(models=FakeModels())
 
     fake_genai = SimpleNamespace(Client=fake_client)
@@ -115,6 +116,7 @@ def test_explicit_gemini_key_wins_over_google_api_key(monkeypatch):
 
     assert result == {"findings": []}
     assert captured["api_key"] == "intended-gemini-key"
+    assert captured["http_options"] == {"timeout": 45_000}
     assert "GOOGLE_API_KEY" not in __import__("os").environ
 
 
