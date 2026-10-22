@@ -208,7 +208,9 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
             models.append(fallback_model)
 
         empty_diagnostics = []
-        for candidate_model in models:
+        provider_errors = []
+        retryable_statuses = {408, 429, 500, 502, 503, 504}
+        for model_index, candidate_model in enumerate(models):
             try:
                 response = client.models.generate_content(
                     model=candidate_model,
@@ -216,9 +218,8 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
                     config={"response_mime_type": "application/json"},
                 )
             except Exception as exc:
-                # Provider errors often include the actionable HTTP status (for example
-                # 400 invalid model, 403 permission, or 429 quota). Preserve only a short,
-                # scrubbed diagnostic; never log request headers, credentials, or payloads.
+                # Provider errors often include an actionable HTTP status. Preserve only
+                # a short, scrubbed diagnostic; never log credentials or request payloads.
                 status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
                 detail = getattr(exc, "message", None) or str(exc)
                 try:
@@ -227,9 +228,25 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
                 except Exception:
                     safe_detail = "provider diagnostic omitted because redaction was unavailable"
                 status_text = f", status={status}" if isinstance(status, (int, str)) else ""
-                raise ReviewError(
-                    f"Gemini review request failed ({type(exc).__name__}{status_text}): {safe_detail}"
-                ) from exc
+                error = (
+                    f"Gemini review request failed (model={candidate_model}, "
+                    f"{type(exc).__name__}{status_text}): {safe_detail}"
+                )
+                try:
+                    retryable = int(status) in retryable_statuses
+                except (TypeError, ValueError, OverflowError):
+                    retryable = False
+                # A transient primary-model failure gets one bounded fallback attempt.
+                # Authentication/configuration errors fail immediately; no finding is
+                # ever inferred from a failed or incomplete review.
+                if retryable and model_index + 1 < len(models):
+                    provider_errors.append(error)
+                    continue
+                if provider_errors:
+                    provider_errors.append(error)
+                    raise ReviewError("Both primary and fallback Gemini review attempts failed: "
+                                      + " | ".join(provider_errors)) from exc
+                raise ReviewError(error) from exc
 
             text, diagnostic = _response_text(response)
             if text:
