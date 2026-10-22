@@ -37,7 +37,10 @@ class ReviewError(RuntimeError):
     """A review could not be completed safely."""
 
 
-def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = None) -> str:
+def _raw_git_diff(
+    repo_root: Path, base: str, head: str, paths: list[str] | None = None,
+    context_lines: int = 3,
+) -> str:
     # Ref names are passed as argv (never through a shell) and constrained so
     # untrusted request data cannot become an option or arbitrary command.
     for ref in (base, head):
@@ -47,7 +50,9 @@ def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = N
             raise ReviewError("Review scope contains an invalid Git ref.")
     try:
         result = subprocess.run(
-            ["git", "diff", "--no-ext-diff", "--unified=3", f"{base}...{head}", "--", *[f":(literal){path}" for path in (paths or [])]],
+            ["git", "diff", "--no-ext-diff", f"--unified={context_lines}",
+             f"{base}...{head}", "--",
+             *[f":(literal){path}" for path in (paths or [])]],
             cwd=str(repo_root), capture_output=True, text=True, timeout=30, check=False,
             shell=False,
         )
@@ -55,7 +60,11 @@ def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = N
         raise ReviewError("Unable to obtain the requested Git diff.") from exc
     if result.returncode:
         raise ReviewError("Unable to obtain the requested Git diff.")
-    diff = result.stdout
+    return result.stdout
+
+
+def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = None) -> str:
+    diff = _raw_git_diff(repo_root, base, head, paths)
     if len(diff) > MAX_DIFF_CHARS:
         raise ReviewError(
             f"Diff exceeds the {MAX_DIFF_CHARS}-character review limit; split the change."
@@ -64,9 +73,9 @@ def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = N
 
 
 def _changed_paths(repo_root: Path, base: str, head: str) -> list[str]:
-    """List changed repository paths without invoking a shell."""
+    """List changed repository paths, including deletions, without invoking a shell."""
     result = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", f"{base}...{head}", "--"],
+        ["git", "diff", "--name-only", "--diff-filter=ACDMR", f"{base}...{head}", "--"],
         cwd=str(repo_root), capture_output=True, text=True, timeout=30, check=False,
         shell=False,
     )
@@ -79,6 +88,60 @@ def _changed_paths(repo_root: Path, base: str, head: str) -> list[str]:
             raise ReviewError("Changed path list contains an invalid repository path.")
         paths.append(value)
     return paths
+
+
+def _split_diff_into_chunks(diff: str, max_chars: int = MAX_DIFF_CHARS) -> list[str]:
+    """Split one file's unified diff at hunk boundaries without omitting any hunk."""
+    if len(diff) <= max_chars:
+        return [diff] if diff else []
+    lines = diff.splitlines(keepends=True)
+    hunk_starts = [i for i, line in enumerate(lines) if line.startswith("@@ ")]
+    if not hunk_starts:
+        raise ReviewError("A file diff exceeds the review limit and has no splittable hunks.")
+    prefix = "".join(lines[:hunk_starts[0]])
+    if len(prefix) >= max_chars:
+        raise ReviewError("Diff metadata exceeds the per-request security review limit.")
+    hunks = []
+    for index, start in enumerate(hunk_starts):
+        end = hunk_starts[index + 1] if index + 1 < len(hunk_starts) else len(lines)
+        hunks.append("".join(lines[start:end]))
+
+    chunks: list[str] = []
+    current = prefix
+    for hunk in hunks:
+        if len(prefix) + len(hunk) > max_chars:
+            if len(current) > len(prefix):
+                chunks.append(current)
+            raise ReviewError(
+                "A single changed hunk exceeds the per-request security review limit; "
+                "the review cannot safely continue without a narrower change."
+            )
+        if len(current) + len(hunk) > max_chars:
+            chunks.append(current)
+            current = prefix + hunk
+        else:
+            current += hunk
+    if len(current) > len(prefix):
+        chunks.append(current)
+    return chunks
+
+
+def _review_oversized_path(
+    repo_root: Path, base: str, head: str, path: str, api_key: str, model: str,
+) -> list[dict[str, Any]]:
+    """Review every hunk of an oversized file in bounded, independently identified requests."""
+    diff = _raw_git_diff(repo_root, base, head, [path], context_lines=0)
+    chunks = _split_diff_into_chunks(diff)
+    if not chunks and diff.strip():
+        raise ReviewError(f"Changed file {path!r} could not be split for security review.")
+    findings: list[dict[str, Any]] = []
+    for chunk in chunks:
+        if len(chunk) > MAX_DIFF_CHARS:
+            raise ReviewError(f"Security review chunk for {path!r} exceeds the configured limit.")
+        findings.extend(_normalize_findings(_request_review(chunk, api_key, model)))
+        if len(findings) > MAX_FINDINGS:
+            raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
+    return findings
 
 
 def _batched_review(
@@ -97,9 +160,12 @@ def _batched_review(
             if "exceeds the" not in str(exc):
                 raise
             if len(group) == 1:
-                raise ReviewError(
-                    f"Changed file {group[0]!r} exceeds the per-file security review limit."
-                ) from None
+                findings.extend(_review_oversized_path(
+                    repo_root, base, head, group[0], api_key, model
+                ))
+                if len(findings) > MAX_FINDINGS:
+                    raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
+                return
             midpoint = len(group) // 2
             review_group(group[:midpoint])
             review_group(group[midpoint:])
@@ -109,22 +175,46 @@ def _batched_review(
         payload = _request_review(diff, api_key, model)
         findings.extend(_normalize_findings(payload))
         if len(findings) > MAX_FINDINGS:
-            del findings[MAX_FINDINGS:]
+            raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
 
     # Greedy grouping limits provider calls while ensuring every changed path is reviewed.
     batch: list[str] = []
     for path in paths:
+        if not batch:
+            try:
+                _git_diff(repo_root, base, head, [path])
+            except ReviewError as exc:
+                if "exceeds the" not in str(exc):
+                    raise
+                findings.extend(_review_oversized_path(
+                    repo_root, base, head, path, api_key, model
+                ))
+                if len(findings) > MAX_FINDINGS:
+                    raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
+            else:
+                batch = [path]
+            continue
+
         candidate = batch + [path]
         try:
             _git_diff(repo_root, base, head, candidate)
         except ReviewError as exc:
             if "exceeds the" not in str(exc):
                 raise
-            if batch:
-                review_group(batch)
-            batch = [path]
-            # Validate a single file now so oversized files fail closed explicitly.
-            _git_diff(repo_root, base, head, batch)
+            review_group(batch)
+            try:
+                _git_diff(repo_root, base, head, [path])
+            except ReviewError as single_exc:
+                if "exceeds the" not in str(single_exc):
+                    raise
+                findings.extend(_review_oversized_path(
+                    repo_root, base, head, path, api_key, model
+                ))
+                if len(findings) > MAX_FINDINGS:
+                    raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
+                batch = []
+            else:
+                batch = [path]
         else:
             batch = candidate
     if batch:
