@@ -38,8 +38,38 @@ class PIIScrubber:
             "[REDACTED_GITHUB_TOKEN]",
         ),
         (
+            "GITHUB_FINE_GRAINED_TOKEN",
+            re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+            "[REDACTED_GITHUB_TOKEN]",
+        ),
+        (
+            "STRIPE_KEY",
+            re.compile(r"\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}\b|\bwhsec_[A-Za-z0-9_]{16,}\b"),
+            "[REDACTED_STRIPE_KEY]",
+        ),
+        (
+            "SLACK_TOKEN",
+            re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"),
+            "[REDACTED_SLACK_TOKEN]",
+        ),
+        (
+            "JWT",
+            re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+            "[REDACTED_JWT]",
+        ),
+        (
+            "BASIC_AUTH",
+            re.compile(r"\bBasic\s+[A-Za-z0-9+/=]{16,}", re.IGNORECASE),
+            "Basic [REDACTED_CREDENTIALS]",
+        ),
+        (
+            "URL_CREDENTIALS",
+            re.compile(r"(?<=://)[^/\s:@]+:[^/\s@]+(?=@)"),
+            "[REDACTED_CREDENTIALS]",
+        ),
+        (
             "AWS_KEY",
-            re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+            re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
             "[REDACTED_AWS_KEY]",
         ),
         (
@@ -49,8 +79,14 @@ class PIIScrubber:
         ),
         (
             "KEY_VALUE_SECRET",
-            re.compile(r"(?i)\b(password|passwd|secret|client_secret|api_key|access_token|auth_token)\b\s*[:=]\s*['\"]?([^\s,'\"}\n]+)", re.IGNORECASE),
-            r"\1: [REDACTED_SECRET]",
+            # Also matches JSON form ("password": "x") and keeps the quoting so structured logs stay valid.
+            re.compile(
+                r"(?P<k>\b(?:password|passwd|pwd|secret|client_secret|secret_key|private_key|api[_-]?key|apikey|"
+                r"access_token|auth_token|refresh_token|aws_secret_access_key|authorization|token)\b)"
+                r"(?P<q1>['\"]?)(?P<sep>\s*[:=]\s*)(?P<q2>['\"]?)(?!\[REDACTED|Bearer\b|Basic\b)(?P<v>[^\s,'\"}\n]+)",
+                re.IGNORECASE,
+            ),
+            r"\g<k>\g<q1>\g<sep>\g<q2>[REDACTED_SECRET]",
         ),
 
         # 2. PII (Personally Identifiable Information)
@@ -68,6 +104,21 @@ class PIIScrubber:
             "CREDIT_CARD",
             re.compile(r"\b(?:\d{4}[ -]?){3}\d{4}\b"),
             "[REDACTED_CREDIT_CARD]",
+        ),
+        (
+            "AADHAAR",
+            re.compile(r"(?<!\d)\d{4}[ -]\d{4}[ -]\d{4}(?!\d)"),
+            "[REDACTED_AADHAAR]",
+        ),
+        (
+            "PAN",
+            re.compile(r"\b[A-Z]{5}[0-9]{4}[A-Z]\b"),
+            "[REDACTED_PAN]",
+        ),
+        (
+            "IN_PHONE_NUMBER",
+            re.compile(r"(?<!\d)(?:\+91[-\s]?)[6-9]\d{9}(?!\d)|(?<![\d.])[6-9]\d{9}(?![\d.])"),
+            "[REDACTED_PHONE]",
         ),
         (
             "PHONE_NUMBER",
@@ -93,6 +144,29 @@ class PIIScrubber:
         for name, pattern, replacement in cls.PATTERNS:
             scrubbed = pattern.sub(replacement, scrubbed)
         return scrubbed
+
+    _SECRET_KEY = re.compile(
+        r"(password|passwd|pwd|secret|api[_-]?key|apikey|access_token|auth_token|refresh_token|private_key|"
+        r"authorization|credential|^token$)", re.IGNORECASE,
+    )
+
+    @classmethod
+    def scrub_structure(cls, value):
+        """Scrub nested data: values under secret-looking keys are masked outright, other strings are pattern-scrubbed."""
+        if isinstance(value, dict):
+            out = {}
+            for k, v in value.items():
+                if isinstance(k, str) and cls._SECRET_KEY.search(k) and not isinstance(v, (dict, list)):
+                    specific = cls.scrub(v) if isinstance(v, str) else v
+                    out[k] = specific if specific != v else "[REDACTED_SECRET]"
+                else:
+                    out[k] = cls.scrub_structure(v)
+            return out
+        if isinstance(value, (list, tuple)):
+            return [cls.scrub_structure(v) for v in value]
+        if isinstance(value, str):
+            return cls.scrub(value)
+        return value
 
     @classmethod
     def audit_findings(cls, text: str) -> Dict[str, int]:

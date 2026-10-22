@@ -63,6 +63,11 @@ class ASCMProactiveMentor:
         )
         prompt = f"Builder goal: {raw_input}\nRepository: {self.repo_path.name}"
         try:
+            from orchestrator.mentor.assistant.consent import ConsentGate
+
+            gate = ConsentGate(str(self.history_dir / "assistant_consent.json"))
+            if not gate.check("gemini", "analyse your stated goal", "your goal text and repository name"):
+                raise PermissionError("no consent to send the goal to a cloud model; using deterministic guidance")
             from google import genai
             client = genai.Client()
             model_name = os.getenv("GEMINI_MODEL") or os.getenv("LLM_MODEL") or "gemini-3.5-flash-lite"

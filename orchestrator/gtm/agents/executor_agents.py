@@ -120,11 +120,9 @@ class MarketingExecutor:
         logger.info(f"[EXECUTOR]    Tags: {', '.join(tags)}")
         logger.info(f"[EXECUTOR]    Length: {len(content)} chars")
 
-        # Mock: would call actual CMS API
-        post_id = f"blog_{hash(title) % 10000}"
-        logger.info(f"[EXECUTOR] ✅ Published with ID: {post_id}")
-
-        return post_id
+        # No CMS integration is wired here (see gtm/channels/cms_adapter.py): nothing was published.
+        logger.warning("[EXECUTOR] ⚠️ Blog post NOT published (no CMS integration); returning no post id")
+        return ""
 
     async def schedule_social_post(self, platform: str, content: str, scheduled_for: Optional[str] = None) -> str:
         """📱 EXECUTOR: Schedule social post"""
@@ -138,7 +136,10 @@ class MarketingExecutor:
             scheduled_for=scheduled_for
         )
 
-        logger.info(f"[EXECUTOR] ✅ Scheduled post ID: {post_id}")
+        if post_id:
+            logger.info(f"[EXECUTOR] ✅ Scheduled post ID: {post_id}")
+        else:
+            logger.warning("[EXECUTOR] ⚠️ Post was NOT scheduled (outreach not authorized, or no provider)")
 
         return post_id
 
@@ -163,8 +164,8 @@ class AdExecutor:
         # google_ads_client = GoogleAdsClient.load_from_storage()
         # campaign_id = create_campaign(google_ads_client, ...)
 
-        campaign_id = "gads_campaign_12345"
-        logger.info(f"[EXECUTOR] ✅ Google Ads campaign created: {campaign_id}")
+        campaign_id = ""  # no Google Ads API integration: nothing was launched
+        logger.warning("[EXECUTOR] ⚠️ Google Ads campaign NOT created (no Ads API integration)")
 
         return campaign_id
 
@@ -178,8 +179,8 @@ class AdExecutor:
         # linkedin_client = LinkedinClient(access_token=...)
         # campaign_id = create_campaign(linkedin_client, ...)
 
-        campaign_id = "li_campaign_67890"
-        logger.info(f"[EXECUTOR] ✅ LinkedIn Ads campaign created: {campaign_id}")
+        campaign_id = ""  # no LinkedIn Ads API integration: nothing was launched
+        logger.warning("[EXECUTOR] ⚠️ LinkedIn campaign NOT created (no Ads API integration)")
 
         return campaign_id
 
@@ -200,10 +201,8 @@ class SEOExecutor:
         # In production: call content writer API (Copy.ai, Jasper, etc.)
         # OR dispatch to human writer + track in content queue
 
-        content_id = f"seo_content_{hash(keyword) % 10000}"
-        logger.info(f"[EXECUTOR] ✅ Content created: {content_id}")
-
-        return content_id
+        logger.warning("[EXECUTOR] ⚠️ SEO content NOT created (no writer integration); brief recorded only")
+        return ""
 
     async def acquire_backlink(self, target_site: str, pitch: str) -> bool:
         """🔗 EXECUTOR: Reach out for backlink"""
@@ -213,9 +212,9 @@ class SEOExecutor:
         # In production: send outreach email + track response
         # Could use same Smartlead setup as SalesAgent
 
-        logger.info(f"[EXECUTOR] ✅ Backlink outreach sent (manual follow-up needed)")
+        logger.warning("[EXECUTOR] ⚠️ Backlink outreach NOT sent (not implemented); do this manually")
 
-        return True
+        return False
 
 
 # ============================================================================

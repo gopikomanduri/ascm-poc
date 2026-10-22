@@ -53,6 +53,10 @@ class CryptoSettlementEngine:
         inv = self._invoices.get(invoice_id)
         if not inv:
             raise KeyError(f"Invoice '{invoice_id}' not found.")
+        if inv.get("status") == "SETTLED":
+            raise ValueError(f"Invoice '{invoice_id}' is already settled.")
+        if int(time.time()) > inv.get("expires_at", 0):
+            raise ValueError(f"Invoice '{invoice_id}' has expired.")
         inv["status"] = "SETTLED"
         inv["tx_hash"] = tx_hash
         inv["confirmations"] = 1

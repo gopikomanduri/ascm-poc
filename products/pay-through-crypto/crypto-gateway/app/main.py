@@ -81,6 +81,15 @@ class CryptoGatewayHandler(BaseHTTPRequestHandler):
             sig = payload.get("signature", "")
             tx_hash = payload.get("tx_hash", "")
 
+            # Look up the invoice first so a bad request cannot burn a legitimate nonce / tx hash.
+            invoice = SETTLEMENT.get_invoice(inv_id)
+            if invoice is None:
+                self._send_json(404, {"status": "REJECTED", "reason": f"unknown invoice '{inv_id}'"})
+                return
+            if invoice.get("status") == "SETTLED" or int(time.time()) > invoice.get("expires_at", 0):
+                self._send_json(409, {"status": "REJECTED", "reason": "invoice already settled or expired"})
+                return
+
             valid, msg = VERIFIER.verify_payment_submission(inv_id, amount, payer, nonce, timestamp, sig, tx_hash)
             if valid:
                 try:
@@ -88,14 +97,13 @@ class CryptoGatewayHandler(BaseHTTPRequestHandler):
                     self._send_json(200, {
                         "status": "SETTLED",
                         "message": msg,
+                        # This reference gateway checks an HMAC-signed submission only. It does not query a
+                        # blockchain, so it must not be used to release goods or funds in production.
+                        "verification": "signature_only_not_on_chain",
                         "invoice": settled_inv,
                     })
-                except KeyError:
-                    self._send_json(200, {
-                        "status": "VERIFIED_STANDALONE",
-                        "message": msg,
-                        "tx_hash": tx_hash,
-                    })
+                except (KeyError, ValueError) as ex:
+                    self._send_json(409, {"status": "REJECTED", "reason": str(ex)})
             else:
                 self._send_json(422, {"status": "REJECTED", "reason": msg})
         else:

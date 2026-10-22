@@ -102,14 +102,19 @@ class SignedSession:
 
 # ── OAuth handler ───────────────────────────────────────────────────────────────
 
+# The dashboard builds a new handler per request, so CSRF state and the fallback signing key must be shared.
+_SHARED_STATES: dict = {}
+_PROCESS_SECRET = secrets.token_hex(32)
+
+
 class GitHubOAuthHandler:
 
     def __init__(self, session_secret: Optional[str] = None):
         self._client_id     = os.environ.get("GITHUB_CLIENT_ID", "")
         self._client_secret = os.environ.get("GITHUB_CLIENT_SECRET", "")
-        self._secret        = session_secret or os.environ.get("ASCM_SECRET_KEY", secrets.token_hex(32))
+        self._secret        = session_secret or os.environ.get("ASCM_SECRET_KEY", _PROCESS_SECRET)
         self._session       = SignedSession(self._secret)
-        self._states: dict  = {}  # in-memory CSRF state store (resets on restart — fine for pilot)
+        self._states: dict  = _SHARED_STATES  # in-memory CSRF state store (resets on restart)
 
     @property
     def configured(self) -> bool:
@@ -215,6 +220,7 @@ class GitHubOAuthHandler:
         cookie_header = (
             "Set-Cookie",
             f"ascm_session={cookie_value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000"
+            + ("; Secure" if base_url.startswith("https://") else "")
         )
         send_redirect("/onboarding?github_connected=1", [cookie_header])
 
@@ -253,10 +259,11 @@ class GitHubOAuthHandler:
             data=data,
             headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:  # nosec B310 - fixed https://github.com URL
             result = json.loads(resp.read())
         if "access_token" not in result:
-            raise ValueError(f"No access_token in response: {result}")
+            # Do not echo the provider response: it can contain tokens or internal detail.
+            raise ValueError(f"GitHub did not return an access token ({result.get('error', 'unknown error')})")
         return result["access_token"]
 
     def _fetch_user(self, token: str) -> dict:
@@ -277,7 +284,7 @@ class GitHubOAuthHandler:
                 "User-Agent":    "ASCM/0.1",
             },
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:  # nosec B310 - fixed https://api.github.com URL
             return json.loads(resp.read())
 
     def _parse_session_cookie(self, cookie_header: str) -> Optional[dict]:

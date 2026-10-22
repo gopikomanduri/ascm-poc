@@ -263,8 +263,8 @@ class OpenOutreachLeadAdapter:
             except Exception as e:
                 logger.warning(f"[REAL API] NeverBounce failed: {str(e)}")
 
-        logger.info(f"[FALLBACK] Using default score 0.92 for {email}")
-        return 0.92
+        logger.info(f"[UNVERIFIED] No deliverability check for {email}; scoring 0.0 (unknown), not a guess")
+        return 0.0
 
 
 class AIMarketingSkillsAdapter:
@@ -442,6 +442,10 @@ You can grab a time on my calendar here: {cal_link}
 Looking forward to connecting!
 """
 
+        if not outreach_authorized():
+            logger.warning(f"[BLOCKED] Booking email to {recipient_email} not sent: {OUTREACH_BLOCK_REASON}")
+            return False
+
         smartlead_api_key = os.getenv("SMARTLEAD_API_KEY")
         if smartlead_api_key:
             try:
@@ -465,8 +469,8 @@ Looking forward to connecting!
             except Exception as e:
                 logger.warning(f"[REAL API] Smartlead failed: {str(e)}")
 
-        logger.info(f"[FALLBACK] Cal.com booking link logged (not sent): {cal_link}")
-        return True
+        logger.warning(f"[NOT SENT] Cal.com booking link was not delivered (no provider configured or call failed): {cal_link}")
+        return False
 
     async def schedule_social_post(
         self, platform: str, content: str, scheduled_for: Optional[datetime] = None
@@ -474,6 +478,9 @@ Looking forward to connecting!
         """
         Schedule social media post via REAL Buffer API.
         """
+        if not outreach_authorized():
+            logger.warning(f"[BLOCKED] Post to {platform} not scheduled: {OUTREACH_BLOCK_REASON}")
+            return ""
         logger.info(f"[REAL API] Composio: Scheduling post on {platform}")
 
         buffer_api_key = os.getenv("BUFFER_API_KEY")
@@ -503,9 +510,8 @@ Looking forward to connecting!
             except Exception as e:
                 logger.warning(f"[REAL API] Buffer failed: {str(e)}")
 
-        post_id = f"post_{datetime.now().timestamp()}_fallback"
-        logger.info(f"[FALLBACK] Post logged (not scheduled): {post_id}")
-        return post_id
+        logger.warning(f"[NOT POSTED] Post to {platform} was not scheduled (no provider configured or call failed)")
+        return ""
 
     async def send_email_sequence_step(
         self,
@@ -518,6 +524,10 @@ Looking forward to connecting!
         logger.info(
             f"[REAL API] Composio: Sending sequence step {step_number} to {recipient_email}"
         )
+
+        if not outreach_authorized():
+            logger.warning(f"[BLOCKED] Sequence step {step_number} to {recipient_email} not sent: {OUTREACH_BLOCK_REASON}")
+            return False
 
         smartlead_api_key = os.getenv("SMARTLEAD_API_KEY")
         if smartlead_api_key:
@@ -544,8 +554,19 @@ Looking forward to connecting!
             except Exception as e:
                 logger.warning(f"[REAL API] Smartlead failed: {str(e)}")
 
-        logger.info(f"[FALLBACK] Sequence step {step_number} logged (not sent): {subject}")
-        return True
+        logger.warning(f"[NOT SENT] Sequence step {step_number} to {recipient_email} was not delivered")
+        return False
+
+
+OUTREACH_BLOCK_REASON = (
+    "autonomous outreach is disabled. Drafts only; a human approves each send. "
+    "Set ASCM_ALLOW_AUTONOMOUS_OUTREACH=1 only for an approved, reviewed campaign."
+)
+
+
+def outreach_authorized() -> bool:
+    """Contacting customers or posting publicly requires explicit authorization (a draft is not a send)."""
+    return os.getenv("ASCM_ALLOW_AUTONOMOUS_OUTREACH", "").lower() in ("1", "true", "yes")
 
 
 class SentimentClassifier:
@@ -602,18 +623,22 @@ class SentimentClassifier:
         ],
     }
 
+    # Most specific / most protective first: a decline must never be read as interest.
+    PRIORITY = ("NEGATIVE", "OUT_OF_OFFICE", "NOT_NOW", "OBJECTION", "INTERESTED")
+
     @staticmethod
     def classify(email_body: str) -> str:
-        """Classify email sentiment."""
-        body_lower = email_body.lower()
+        """Classify email sentiment (whole-word matching; decline signals win over interest signals)."""
+        import re as _re
+        body_lower = (email_body or "").lower()
 
-        for sentiment, keywords in SentimentClassifier.SENTIMENT_KEYWORDS.items():
-            for keyword in keywords:
-                if keyword in body_lower:
+        for sentiment in SentimentClassifier.PRIORITY:
+            for keyword in SentimentClassifier.SENTIMENT_KEYWORDS[sentiment]:
+                if _re.search(rf"(?<![a-z]){_re.escape(keyword)}(?![a-z])", body_lower):
                     return sentiment
 
-        # Default: OBJECTION if no clear signal
-        return "OBJECTION"
+        # No clear signal is not an objection; a human decides.
+        return "UNCLEAR"
 
     @staticmethod
     def should_suppress_from_founder(sentiment: str) -> bool:

@@ -305,6 +305,40 @@ class ASCMGatewayExecutor(AgentExecutor):
             await updater.cancel()
 
 
+def _install_access_control(app: FastAPI, host: str) -> None:
+    """Reject DNS-rebinding, browser cross-origin calls and (when configured/required) unauthenticated callers.
+
+    A2A clients are programs, not browsers, so any request carrying an Origin header is refused.
+    """
+    import hmac
+
+    from starlette.responses import JSONResponse
+
+    token = os.environ.get("ASCM_A2A_TOKEN", "")
+    remote = host not in {"127.0.0.1", "localhost", "::1"}
+    if remote and not token:
+        raise ValueError("ASCM_A2A_TOKEN is required when the A2A gateway is reachable beyond loopback.")
+    allowed_hosts = {"127.0.0.1", "localhost", "::1", "[::1]"} | {
+        h.strip().lower() for h in os.environ.get("ASCM_A2A_ALLOWED_HOSTS", "").split(",") if h.strip()
+    }
+
+    @app.middleware("http")
+    async def _access_control(request, call_next):
+        if request.headers.get("origin"):
+            return JSONResponse({"error": "browser cross-origin requests are not allowed"}, status_code=403)
+        host_header = request.headers.get("host", "").lower()
+        bare = host_header.split("]")[0] + "]" if host_header.startswith("[") else host_header.rsplit(":", 1)[0] if host_header.count(":") == 1 else host_header
+        if not remote and bare not in allowed_hosts:
+            return JSONResponse({"error": "host not allowed"}, status_code=403)
+        # The public agent card is discoverable; everything else needs the token whenever one is configured.
+        if token and not request.url.path.startswith("/.well-known/"):
+            supplied = request.headers.get("authorization", "")
+            expected = f"Bearer {token}"
+            if not hmac.compare_digest(supplied.encode(), expected.encode()):
+                return JSONResponse({"error": "missing or invalid bearer token"}, status_code=401)
+        return await call_next(request)
+
+
 def create_app(host: str | None = None, port: int | None = None) -> FastAPI:
     """Create the ASCM A2A 1.0 JSON-RPC application."""
     host = host or os.environ.get("ASCM_A2A_HOST", "127.0.0.1")
@@ -318,6 +352,7 @@ def create_app(host: str | None = None, port: int | None = None) -> FastAPI:
         agent_card=card,
     )
     app = FastAPI(title="ASCM A2A Gateway", version="1.0.0")
+    _install_access_control(app, host)
     add_a2a_routes_to_fastapi(
         app,
         agent_card_routes=create_agent_card_routes(agent_card=card),
