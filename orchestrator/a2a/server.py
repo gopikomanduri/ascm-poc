@@ -40,6 +40,9 @@ from a2a.types import (
 
 logger = logging.getLogger("ASCM.A2A")
 
+# Only this exact discovery endpoint is intentionally public when token auth is enabled.
+PUBLIC_AGENT_CARD_PATH = "/.well-known/agent-card.json"
+
 # Keep aliases stable even if Python class names or module paths change.
 AGENT_ALIASES = {
     # Keep this list aligned with implemented classes in orchestrator.agents.all_agents.
@@ -331,7 +334,7 @@ def _install_access_control(app: FastAPI, host: str) -> None:
         if not remote and bare not in allowed_hosts:
             return JSONResponse({"error": "host not allowed"}, status_code=403)
         # The public agent card is discoverable; everything else needs the token whenever one is configured.
-        if token and not request.url.path.startswith("/.well-known/"):
+        if token and request.url.path != PUBLIC_AGENT_CARD_PATH:
             supplied = request.headers.get("authorization", "")
             expected = f"Bearer {token}"
             if not hmac.compare_digest(supplied.encode(), expected.encode()):
