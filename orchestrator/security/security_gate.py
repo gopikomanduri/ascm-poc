@@ -92,7 +92,7 @@ def scan_paths(paths: list[Path], repo_root: Path) -> list[dict[str, Any]]:
     return findings
 
 
-def run_model_review(paths: list[Path], repo_root: Path, timeout: int = 300, base_ref: str | None = None) -> dict[str, Any]:
+def run_model_review(paths: list[Path], repo_root: Path, timeout: int = 600, base_ref: str | None = None) -> dict[str, Any]:
     """Run the Gemini-backed structured security review for the branch diff."""
     if not os.environ.get("GEMINI_API_KEY", "").strip():
         return {"status": "not_configured", "passed": False,
