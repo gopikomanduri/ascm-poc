@@ -819,6 +819,50 @@ class OrchestratorEngine:
         GLOBAL_DASHBOARD_STATE.update_agent("CodeReviewAgent", "completed", f"Patch approved (Score: {score}/100)")
         return [], report
 
+    @staticmethod
+    def _revision_original_context(repo_path: str, patch: Dict[str, str], max_files: int = 4) -> str:
+        """Build revision context only from regular files safely contained in the repository.
+
+        Patch filenames are untrusted until the sandbox validates them. Never read a path
+        supplied by a rejected patch unless it is a safe, repository-relative regular file.
+        """
+        base_dir = Path(repo_path).resolve()
+        originals = []
+        for name in sorted(patch)[:max_files]:
+            if not isinstance(name, str):
+                continue
+            rel_path = Path(name)
+            if rel_path.is_absolute() or not name or ".." in rel_path.parts:
+                continue
+
+            candidate = base_dir / rel_path
+            # Reject symlinks in every component, including a symlinked parent directory.
+            current = base_dir
+            unsafe_symlink = False
+            for part in rel_path.parts:
+                current = current / part
+                if current.is_symlink():
+                    unsafe_symlink = True
+                    break
+            if unsafe_symlink or not candidate.is_file():
+                continue
+            try:
+                resolved = candidate.resolve(strict=True)
+                resolved.relative_to(base_dir)
+            except (OSError, RuntimeError, ValueError):
+                continue
+
+            try:
+                content = resolved.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            if content:
+                originals.append(
+                    f"\\n--- ORIGINAL {name} (everything it exports must still exist unless the goal says otherwise):\\n"
+                    f"{content[:6000]}\\n"
+                )
+        return "".join(originals)
+
     def _gate_and_revise(self, repo_path, contract, patch, security_agent, reviewer_agent, coder_agent, review=True):
         """Run all gates; on rejection give the coder ASCM_GEN_REVISIONS (default 1) chance(s) to fix the findings.
 
@@ -834,11 +878,7 @@ class OrchestratorEngine:
             if attempt == revisions:
                 break
             self._log(f"[+] Asking the coder to revise '{contract.name}' (revision {attempt + 1}/{revisions})...")
-            originals = "".join(
-                f"\n--- ORIGINAL {name} (everything it exports must still exist unless the goal says otherwise):\n"
-                f"{self._read_text(Path(repo_path) / name)[:6000]}\n"
-                for name in sorted(patch)[:4] if self._read_text(Path(repo_path) / name)
-            )
+            originals = self._revision_original_context(repo_path, patch)
             fixed = coder_agent.fix(
                 patch,
                 "Your previous patch was rejected. Fix ALL of these problems and return the COMPLETE corrected files "
