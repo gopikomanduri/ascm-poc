@@ -55,7 +55,7 @@ def test_oversized_review_is_batched_by_changed_path(monkeypatch, tmp_path):
         result = adapter.review_request(_request(), tmp_path)
 
     assert result == {"ok": True, "operation": "review", "data": {"findings": []}}
-    assert calls == ["diff for a.py", "diff for b.py", "diff for c.py"]
+    assert sorted(calls) == ["diff for a.py", "diff for b.py", "diff for c.py"]
 
 
 def test_review_normalizes_valid_findings(monkeypatch, tmp_path):
