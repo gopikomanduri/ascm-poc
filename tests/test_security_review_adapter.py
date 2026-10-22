@@ -204,3 +204,28 @@ def test_response_text_can_be_extracted_from_candidate_parts():
     text, diagnostic = adapter._response_text(response)
     assert text == '{"findings": []}'
     assert diagnostic == ""
+
+
+def test_transient_primary_provider_error_retries_with_fallback_model(monkeypatch):
+    monkeypatch.setenv("ASCM_SECURITY_REVIEW_FALLBACK_MODEL", "gemini-3.6-flash")
+    calls = []
+
+    class FakeServerError(Exception):
+        code = 504
+        message = "Deadline expired before operation could complete."
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            calls.append(kwargs["model"])
+            if kwargs["model"] == "gemini-3.8-flash":
+                raise FakeServerError("Deadline expired before operation could complete.")
+            return SimpleNamespace(text='{"findings": []}')
+
+    fake_genai = SimpleNamespace(Client=lambda **kwargs: SimpleNamespace(models=FakeModels()))
+    monkeypatch.setitem(sys.modules, "google", SimpleNamespace(genai=fake_genai))
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    result = adapter._request_review("diff --git ...", "test-key", "gemini-3.8-flash")
+
+    assert result == {"findings": []}
+    assert calls == ["gemini-3.8-flash", "gemini-3.6-flash"]
