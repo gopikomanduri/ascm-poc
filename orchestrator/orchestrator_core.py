@@ -828,7 +828,7 @@ class OrchestratorEngine:
         """
         base_dir = Path(repo_path).resolve()
         originals = []
-        for name in sorted(patch)[:max_files]:
+        for name in sorted(patch, key=lambda item: str(item))[:max_files]:
             if not isinstance(name, str):
                 continue
             rel_path = Path(name)
@@ -858,8 +858,8 @@ class OrchestratorEngine:
                 continue
             if content:
                 originals.append(
-                    f"\\n--- ORIGINAL {name} (everything it exports must still exist unless the goal says otherwise):\\n"
-                    f"{content[:6000]}\\n"
+                    f"\n--- ORIGINAL {name} (everything it exports must still exist unless the goal says otherwise):\n"
+                    f"{content[:6000]}\n"
                 )
         return "".join(originals)
 
