@@ -283,6 +283,5 @@ def test_split_diff_preserves_all_hunks_and_file_headers():
 
     assert len(chunks) > 1
     assert all(chunk.startswith(header) for chunk in chunks)
-    assert "".join(chunk.count("@@") * "@" for chunk in []) == ""
     assert sum(chunk.count("@@ -") for chunk in chunks) == 3
     assert all(len(chunk) <= len(header) + 35 for chunk in chunks)
