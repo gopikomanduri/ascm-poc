@@ -1,9 +1,13 @@
 """
 MR-Bench: The Multi-Repository AI Engineering Benchmark
 ========================================================
-The first benchmark designed to evaluate AI coding agents on
-cross-repository coordination tasks — the dimension that SWE-bench,
-HumanEval, and MBPP explicitly exclude.
+A task set for cross-repository coordination, plus a repository-readiness heuristic.
+
+IMPORTANT: the scorer in this file does NOT run any agent. It inspects reference implementations that
+already exist in this repository (keyword presence in SKILLS.md, whether the expected directories exist,
+whether tests run, and security-related substrings in source). Scores therefore describe the repository
+fixtures, are easy to inflate, and are NOT comparable to SWE-bench or any other agent benchmark.
+A real MR-Bench result requires running agents on hidden task repositories with executable acceptance tests.
 
 Benchmark Design
 ----------------
@@ -713,8 +717,8 @@ def run_benchmark(task_ids: Optional[List[str]] = None) -> BenchmarkRun:
     run = BenchmarkRun(
         run_id=f"MR-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
         run_date=datetime.now(timezone.utc).isoformat(),
-        llm_provider=os.environ.get("ASCM_LLM_PROVIDER", "gemini"),
-        llm_model=os.environ.get("ASCM_LLM_MODEL", "gemini-2.5-flash"),
+        llm_provider=os.environ.get("ASCM_LLM_PROVIDER", "n/a (no agent was run)"),
+        llm_model=os.environ.get("ASCM_LLM_MODEL", "n/a"),
     )
 
     tasks_to_run = BENCHMARK_TASKS
@@ -792,9 +796,12 @@ def publish_results(run: BenchmarkRun):
         "",
         "## What Is MR-Bench?",
         "",
-        "MR-Bench is the **first benchmark designed to evaluate AI coding agents on",
-        "cross-repository coordination tasks** — the dimension that SWE-bench, HumanEval,",
-        "and MBPP explicitly exclude (all single-repo, single-file tasks).",
+        "> ⚠️ **This is not an agent benchmark result.** No agent was run. The score is a heuristic over the",
+        "> repository's reference fixtures (SKILLS.md keywords, directory presence, test execution, source",
+        "> substrings) and must not be compared with SWE-bench or other agent scores.",
+        "",
+        "MR-Bench is a task set for **cross-repository coordination** (SWE-bench, HumanEval and MBPP",
+        "are single-repo, single-file).",
         "",
         "Real enterprise software is multi-repository. A single feature spans a backend API,",
         "a consumer SDK, and a web portal. No existing AI agent benchmark measures this.",
@@ -852,18 +859,10 @@ def publish_results(run: BenchmarkRun):
         "",
         "## Comparison with Other Agents",
         "",
-        "| Agent | SWE-bench (single-repo) | MR-Bench (multi-repo) | Multi-repo native? |",
-        "|---|---|---|---|",
-        f"| **ASCM** | ❌ Not run | **{run.mean_score}/100** | ✅ Yes (built for this) |",
-        "| Devin (Cognition) | ~13.86% | ❌ Not run | ❌ Single-repo sandbox |",
-        "| SWE-agent | ~12–18% | ❌ Not run | ❌ Single-repo |",
-        "| OpenHands | ~12–18% | ❌ Not run | ⚠️ Partial |",
-        "| GitHub Copilot Workspace | ❌ Not published | ❌ Not run | ❌ Single-repo |",
-        "",
-        "> **Note**: MR-Bench scores for other agents are `❌ Not run` because they were not",
-        "> designed for multi-repo tasks. We invite any agent team to submit scores on the",
-        "> same 20 tasks. Benchmark spec and task definitions are open-source:",
-        "> `tools/mr_bench.py` in the ASCM repository.",
+        "No comparison is made. Other agents have not been run on these tasks, and SWE-bench percentages",
+        "measure a different thing (resolving single-repo issues with hidden tests), so placing them beside",
+        "this heuristic score would be misleading. To compare agents, run them on the same hidden task",
+        "repositories with executable acceptance tests.",
         "",
         "## Methodology & Limitations",
         "",

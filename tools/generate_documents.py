@@ -151,17 +151,17 @@ def create_docx(output_path: Path):
     add_bullet("ProductAgent", "Conducts interactive requirement grilling until stakeholder specification confidence reaches >= 90%, eliminating ambiguous prompts before architecture starts.")
     add_bullet("ArchitectAgent", "Formulates High-Level Design (HLD), Low-Level Design (LLD), dependency Directed Acyclic Graphs (DAGs), and cross-repo schema contracts.")
     add_bullet("CoderAgent", "Polyglot code generation (Go, Python, TypeScript) with mandatory Test-Driven Development (TDD) requiring complete unit tests before milestone sign-off.")
-    add_bullet("CriticAgent (Adversarial Reviewer)", "Employs an independent, different LLM than the Coder (e.g., Claude 3.5 auditing Gemini 2.5 Flash), eliminating confirmation bias and cutting defect escape rates by 59.1%.")
+    add_bullet("CriticAgent (Adversarial Reviewer)", "Employs an independent, different LLM than the Coder (e.g., Claude 3.5 auditing Gemini 2.5 Flash), aiming to reduce same-model confirmation bias (the size of the effect has not been measured).")
     add_bullet("BusinessStrategyAgent", "Formulates commercial unit economics, competitive battlecards, and go-to-market plans for the detected vertical domain.")
 
     add_h2("2.3 Mathematical Proofs & Multi-Repo Benchmark (MR-Bench)")
     add_p(
-        "ASCM is the only AI engineering platform backed by 6 formal mathematical theorems (tools/ascm_math_proofs.py) validated over 500,000 Monte Carlo simulation trials:"
+        "ASCM includes simple probability models of its design hypotheses (tools/ascm_math_proofs.py). Every input is an assumption, not a measurement, so these are illustrations and not evidence of outcomes:"
     )
-    add_bullet("Theorem 1 (Independent Critic)", "Proves that auditing code with an independent model cuts bug escapes by 59.1% by eliminating shared model blindspots.")
-    add_bullet("Theorem 2 (Multi-Repo Coordination)", "Proves atomic cross-repo contract synchronization reduces breaking contract outages from 78.4% down to ~0%.")
-    add_bullet("Theorem 3 (Blueprint Token Bounds)", "Proves architectural pattern reuse cuts LLM token consumption by 36% to 63%.")
-    add_bullet("MR-Bench (tools/mr_bench.py)", "The industry's first multi-repository coordination benchmark evaluating AI agents on distributed multi-repo feature delivery.")
+    add_bullet("Model 1 (Independent reviewer)", "Illustrates how lower reviewer correlation would reduce escaped defects, under assumed correlation values; not measured.")
+    add_bullet("Model 2 (Multi-repo coordination)", "Illustrates how per-repo break probability compounds across repositories, under an assumed rate; not measured.")
+    add_bullet("Model 3 (Blueprint reuse)", "Illustrates token savings as a function of an assumed reuse hit rate; not measured.")
+    add_bullet("MR-Bench (tools/mr_bench.py)", "A task set for multi-repository coordination with a repository-readiness heuristic. It does not run agents yet, so its score is not comparable to other benchmarks.")
 
     add_h2("2.4 Local-First Security & Sandbox")
     add_p("ASCM operates 100% locally on the developer's laptop with air-gapped security:")
@@ -468,11 +468,11 @@ def create_pdf(output_path: Path):
     story.append(Paragraph("• <b>ProductAgent</b>: Interactive grilling until requirement confidence reaches >= 90%.", bullet_style))
     story.append(Paragraph("• <b>ArchitectAgent</b>: Produces HLD, LLD, task DAGs, and cross-repo capability contracts.", bullet_style))
     story.append(Paragraph("• <b>CoderAgent</b>: Polyglot code generation (Go, Python, TypeScript) with mandatory Test-Driven Development (TDD).", bullet_style))
-    story.append(Paragraph("• <b>CriticAgent</b>: Audits code using an independent model (e.g. Claude 3.5 reviewing Gemini 2.5), cutting bug escapes by 59.1% by eliminating confirmation bias.", bullet_style))
+    story.append(Paragraph("• <b>CriticAgent</b>: Audits code using an independent model (e.g. Claude 3.5 reviewing Gemini 2.5), aiming to reduce same-model confirmation bias (effect not yet measured).", bullet_style))
     story.append(Paragraph("• <b>BusinessStrategyAgent</b>: Formulates unit economics, competitive battlecards, and GTM plans.", bullet_style))
 
     story.append(Paragraph("<b>2.3 Mathematical Proofs & Benchmarks</b>:", h2_style))
-    story.append(Paragraph("ASCM is validated by 6 formal theorems (tools/ascm_math_proofs.py) over 500k Monte Carlo trials: Theorem 1 proves 59.1% bug reduction via independent review; Theorem 2 proves 0% breaking contracts via atomic sync; Theorem 3 proves 36-63% token savings via architectural blueprints. MR-Bench (tools/mr_bench.py) is the first multi-repo AI benchmark.", body_style))
+    story.append(Paragraph("ASCM includes assumption-driven probability models (tools/ascm_math_proofs.py) and a task set with a repository-readiness heuristic (tools/mr_bench.py). Neither is empirical evidence of defect reduction, savings or agent performance; live-agent measurement is planned.", body_style))
 
     story.append(Paragraph("<b>2.4 Local-First Security & Sandbox</b>:", h2_style))
     story.append(Paragraph("Strict execution sandbox (sandbox.py), SHA-256 tamper-evident JSONL audit logger, PII secret scrubber, and pre-flight P50/P90 token cost forecaster.", body_style))

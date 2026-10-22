@@ -1,3 +1,7 @@
+> ⚠️ **Status: assumption-driven illustration, not empirical evidence.** Every probability below is an
+> assumed input that was not measured from ASCM runs; the Monte Carlo sections re-sample the same
+> assumptions. Do not cite these figures as results. See `tools/ascm_math_proofs.py` for the full caveats.
+
 # ASCM Mathematical Foundations Whitepaper
 > **Version**: 0.1 | **Status**: Verifiable — all proofs reproducible via `python tools/ascm_math_proofs.py`
 

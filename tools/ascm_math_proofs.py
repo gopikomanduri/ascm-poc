@@ -1,13 +1,21 @@
 """
 ASCM Mathematical Foundations
 ==============================
-Rigorous probabilistic proofs for ASCM's core architectural claims.
+Parameterised probability models for ASCM's architectural hypotheses.
 
-All theorems are implemented as verifiable Python functions with:
-  - Full mathematical derivation (inline comments)
+IMPORTANT - READ BEFORE QUOTING ANY NUMBER FROM THIS FILE
+  Every probability used here (defect rates, reviewer correlation, test catch rates, per-repo break rates,
+  reuse hit rates) is an ASSUMED INPUT. None was measured from ASCM runs. The output numbers are the
+  arithmetic consequence of those assumptions, not evidence that ASCM achieves them. The Monte Carlo
+  sections re-sample the same assumptions, so agreement with the closed form checks the code, not reality.
+  Do not present these figures as results, "proofs" of defect reduction, or ROI. Replace the assumed
+  inputs with measured rates (see tools/mr_bench.py once it runs real agents) before making any claim.
+
+The module provides:
+  - Closed-form models with the derivation in comments
   - Parameter sensitivity analysis
-  - Monte Carlo validation against closed-form solutions
-  - CLI runner that produces a publishable report
+  - Monte Carlo sampling of the same models (a code check, not an empirical validation)
+  - CLI runner that produces a report clearly labelled as an assumption-driven illustration
 
 Run:
   python tools/ascm_math_proofs.py              # Print all proofs + results
@@ -643,9 +651,9 @@ def theorem_6_combined_bound(
             "conclusion": "Even with parameters 20% worse than estimated, ASCM still provides meaningful improvement",
         },
         "investor_summary": (
-            "All three improvements are mathematically derived, not empirically claimed. "
-            "They hold for ANY LLM defect rate p, validated by Monte Carlo simulation. "
-            "The improvement ratios are independent of p — robust to model uncertainty."
+            "These ratios follow arithmetically from ASSUMED inputs (reviewer correlation, test catch rate, "
+            "human catch rate). They are not measured results and the baseline (no tests, no review) is a "
+            "deliberate strawman. Use them to explore sensitivity, not as evidence of defect reduction."
         ),
     }
 
@@ -678,20 +686,25 @@ def run_all_proofs(verbose: bool = True) -> dict:
 def publish_whitepaper(results: dict) -> str:
     lines = [
         "# ASCM Mathematical Foundations Whitepaper",
-        "> **Version**: 0.1 | **Status**: Verifiable — all proofs reproducible via `python tools/ascm_math_proofs.py`",
+        "> **Version**: 0.1 | **Status**: Assumption-driven illustration, NOT empirical evidence",
+        ">",
+        "> **Every probability in this document is an assumed input; none was measured from ASCM.** The results",
+        "> are the arithmetic consequence of those assumptions. The Monte Carlo runs re-sample the same",
+        "> assumptions, so they check the code, not the real world. Do not cite these numbers as results.",
         "",
         "## Executive Summary",
         "",
-        "This document presents six mathematical theorems that provide rigorous,",
-        "independently verifiable bounds on ASCM's architectural claims.",
-        "Each theorem is:",
-        "- Derived from first principles (probability theory, Bayesian inference, expected value)",
-        "- Validated by Monte Carlo simulation (500k+ trials per theorem)",
-        "- Conservative — holds under ±20% parameter uncertainty",
-        "- Independent of the underlying LLM's specific defect rate",
+        "This document works through six simple probability models of ASCM's design hypotheses.",
+        "Each model:",
+        "- States its assumed inputs explicitly",
+        "- Derives the consequence in closed form (probability theory, Bayesian update, expected value)",
+        "- Re-samples the same model by Monte Carlo as a check on the arithmetic",
+        "- Shows sensitivity to ±20% changes in the assumed inputs",
         "",
-        "These are not empirical claims that require customer data to substantiate.",
-        "They are mathematical bounds that follow from the architecture itself.",
+        "Reading guide: the ratios are only as good as the assumed inputs. Several are structural to the model",
+        "rather than informative (a result that is 'independent of the defect rate' is a property of multiplying",
+        "probabilities, not evidence about any LLM), and independence between pipeline stages is itself an",
+        "assumption that real model errors often violate.",
         "",
         "---",
         "",

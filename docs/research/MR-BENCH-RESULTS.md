@@ -1,11 +1,14 @@
+> ⚠️ **This is not an agent benchmark result.** No agent was run. The score is a heuristic over this
+> repository's reference fixtures and must not be compared with SWE-bench or any other agent score.
+> The comparison table that previously appeared here was removed because the metrics are not comparable.
+
 # MR-Bench Results — ASCM
 > **Run ID**: `MR-20260925-233406` | **Date**: 2026-09-25 | **Agent**: ASCM 0.1-poc
 > **LLM**: gemini / gemini-2.5-flash
 
 ## What Is MR-Bench?
 
-MR-Bench is the **first benchmark designed to evaluate AI coding agents on
-cross-repository coordination tasks** — the dimension that SWE-bench, HumanEval,
+MR-Bench is a task set for **cross-repository coordination** — the dimension that SWE-bench, HumanEval,
 and MBPP explicitly exclude (all single-repo, single-file tasks).
 
 Real enterprise software is multi-repository. A single feature spans a backend API,
@@ -81,18 +84,7 @@ a consumer SDK, and a web portal. No existing AI agent benchmark measures this.
 
 ## Comparison with Other Agents
 
-| Agent | SWE-bench (single-repo) | MR-Bench (multi-repo) | Multi-repo native? |
-|---|---|---|---|
-| **ASCM** | ❌ Not run | **37.5/100** | ✅ Yes (built for this) |
-| Devin (Cognition) | ~13.86% | ❌ Not run | ❌ Single-repo sandbox |
-| SWE-agent | ~12–18% | ❌ Not run | ❌ Single-repo |
-| OpenHands | ~12–18% | ❌ Not run | ⚠️ Partial |
-| GitHub Copilot Workspace | ❌ Not published | ❌ Not run | ❌ Single-repo |
-
-> **Note**: MR-Bench scores for other agents are `❌ Not run` because they were not
-> designed for multi-repo tasks. We invite any agent team to submit scores on the
-> same 20 tasks. Benchmark spec and task definitions are open-source:
-> `tools/mr_bench.py` in the ASCM repository.
+None. Other agents were not run on these tasks, and SWE-bench percentages measure a different thing, so no comparison is made.
 
 ## Methodology & Limitations
 
