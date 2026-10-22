@@ -10,13 +10,50 @@ class GitService:
     @staticmethod
     def ensure_clean_repo(repo_path: str) -> None:
         result = GitService._run(repo_path, ["status", "--porcelain"])
-        if result.stdout.strip():
+        dirty = [
+            line for line in result.stdout.splitlines()
+            if line.strip() and ".ascm_history" not in line and "PULL_REQUEST.md" not in line
+        ]
+        if dirty:
             raise RuntimeError("repository has uncommitted changes")
 
     @staticmethod
     def get_current_branch(repo_path: str) -> str:
         result = GitService._run(repo_path, ["branch", "--show-current"], check=False)
         return result.stdout.strip() or "main"
+
+    @staticmethod
+    def exclude_locally(repo_path: str, pattern: str = ".ascm_history/") -> None:
+        """Keep ASCM's own state out of `git status` via .git/info/exclude (never touches the repo's .gitignore)."""
+        exclude = Path(repo_path) / ".git" / "info" / "exclude"
+        try:
+            exclude.parent.mkdir(parents=True, exist_ok=True)
+            current = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
+            if pattern not in current.splitlines():
+                exclude.write_text(current + ("" if current.endswith("\n") or not current else "\n") + pattern + "\n", encoding="utf-8")
+        except OSError:
+            pass
+
+    @staticmethod
+    def branch_exists(repo_path: str, branch: str) -> bool:
+        return GitService._run(repo_path, ["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"], check=False).returncode == 0
+
+    @staticmethod
+    def restore(repo_path: str, original_branch: str, files: list[str], delete_branch: Optional[str] = None) -> None:
+        """Undo uncommitted writes and return to the original branch (best effort, never raises)."""
+        root = Path(repo_path).resolve()
+        for rel in files:
+            target = (root / rel).resolve()
+            if not target.is_relative_to(root):
+                continue
+            tracked = GitService._run(repo_path, ["ls-files", "--error-unmatch", "--", rel], check=False).returncode == 0
+            if tracked:
+                GitService._run(repo_path, ["checkout", "--", rel], check=False)
+            elif target.is_file():
+                target.unlink()
+        GitService._run(repo_path, ["switch", original_branch], check=False)
+        if delete_branch and delete_branch != original_branch:
+            GitService._run(repo_path, ["branch", "-D", delete_branch], check=False)
 
     @staticmethod
     def create_branch(repo_path: str, goal: str) -> str:
@@ -44,10 +81,12 @@ class GitService:
         role: str = "provider",
         linked_repos: Optional[List[Dict[str, str]]] = None,
         prd_summary: str = "",
+        verification: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Generates a standardized, cross-linked Markdown Pull Request description.
         """
+        v = verification or {}
         lines = [
             f"# Feature: {goal}",
             "",
@@ -76,10 +115,11 @@ class GitService:
         lines.extend([
             "",
             "## 🛡️ Verification & Quality Assurance",
-            "- [x] Multi-file AST boundary validation passed (Sandbox)",
-            "- [x] Native language test suite passed",
-            "- [x] Static analysis / compile diagnostics verified",
-            "- [x] Peer code review and architectural specification approved",
+            "- [x] Sandbox path validation passed",
+            f"- [{'x' if v.get('tests_passed') else ' '}] Native test suite passed"
+            + (" (no tests detected)" if v.get("no_tests_detected") else ""),
+            f"- [{'x' if v.get('vet_passed') else ' '}] Static analysis / compile diagnostics",
+            "- [ ] Human review of the diff (required before merge)",
             "",
             "*Generated autonomously by Outcode*",
         ])
@@ -104,9 +144,11 @@ class GitService:
         """
         if not shutil.which("gh"):
             return None
-        result = GitService._run(
-            repo_path,
+        result = subprocess.run(
             ["gh", "pr", "create", "--head", branch, "--title", title, "--body", body],
+            cwd=Path(repo_path),
+            capture_output=True,
+            text=True,
             check=False,
         )
         if result.returncode == 0:

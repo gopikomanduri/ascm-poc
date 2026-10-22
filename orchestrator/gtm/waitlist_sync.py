@@ -44,8 +44,12 @@ class WaitlistSyncAgent:
         """
         Pulls latest waitlist from Google Cloud Run and updates local .ascm_waitlist.json.
         """
-        admin_key = os.environ.get("ADMIN_KEY") or os.environ.get("WAITLIST_ADMIN_KEY", "outcode-secret-2026")
-        api_url = f"{self.remote_url}/api/waitlist?key={admin_key}"
+        admin_key = os.environ.get("ADMIN_KEY") or os.environ.get("WAITLIST_ADMIN_KEY", "")
+        if not admin_key:
+            return {"status": "error", "message": "ADMIN_KEY is not configured; waitlist sync skipped."}
+        if not self.remote_url.startswith("https://"):
+            return {"status": "error", "message": "Waitlist sync requires an https:// remote URL."}
+        api_url = f"{self.remote_url}/api/waitlist"
         try:
             req = urllib.request.Request(
                 api_url,
@@ -54,7 +58,7 @@ class WaitlistSyncAgent:
                     "X-Admin-Key": admin_key
                 }
             )
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310 - scheme checked as https above
                 remote_data = json.loads(resp.read().decode("utf-8"))
         except Exception as e:
             return {"status": "error", "message": f"Could not reach {api_url}: {e}"}

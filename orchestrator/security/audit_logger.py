@@ -112,8 +112,9 @@ class AuditLogger:
         # Sanitize details
         raw_details = details
         if isinstance(raw_details, (dict, list)):
-            details_str = json.dumps(raw_details)
-            scrubbed_str = PIIScrubber.scrub(details_str)
+            # Mask by key first (structured {"password": "..."} has no "key=value" text for a regex to find).
+            structured = PIIScrubber.scrub_structure(raw_details)
+            scrubbed_str = PIIScrubber.scrub(json.dumps(structured, default=str))
             try:
                 scrubbed_details = json.loads(scrubbed_str)
             except Exception:
@@ -126,7 +127,7 @@ class AuditLogger:
         # Metadata is caller-controlled too; scrub it before either log sink sees it.
         raw_metadata = metadata or {}
         try:
-            metadata_text = json.dumps(raw_metadata, ensure_ascii=False)
+            metadata_text = json.dumps(PIIScrubber.scrub_structure(raw_metadata), ensure_ascii=False, default=str)
             safe_metadata_text = PIIScrubber.scrub(metadata_text)
             scrubbed_metadata = json.loads(safe_metadata_text)
             if not isinstance(scrubbed_metadata, dict):

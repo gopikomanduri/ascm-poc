@@ -49,8 +49,11 @@ class GovernanceAndWorkflowAgentsTests(unittest.TestCase):
 
         # Test run method required by gtm_workflows.py
         result = agent.run(files={"test_auth.py": "def test_ok(): pass"})
-        self.assertTrue(result.get("passed"))
-        self.assertGreaterEqual(result.get("coverage_percentage", 0), 70)
+        # QAAgent does not execute tests, so it must never report a pass or invent coverage.
+        self.assertFalse(result.get("passed"))
+        self.assertFalse(result.get("executed"))
+        self.assertEqual(result.get("verdict"), "NOT_VERIFIED")
+        self.assertIsNone(result.get("coverage_percentage"))
 
         # Test check_sla_gates
         sla_res = agent.check_sla_gates(
@@ -89,6 +92,8 @@ class GovernanceAndWorkflowAgentsTests(unittest.TestCase):
         oncall_res = oncall.run(alert={"id": "alert-101", "severity": "HIGH"})
         self.assertIn("received", oncall_res)
         self.assertIn("proposed_fix", oncall_res)
+        self.assertEqual(oncall_res["root_cause_analysis"]["root_causes"], [])  # nothing invented
+        self.assertFalse(oncall.execute_fix("fix-1", approval=True)["incident_resolved"])
 
 
 if __name__ == "__main__":

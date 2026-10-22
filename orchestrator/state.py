@@ -15,6 +15,7 @@ class TaskItem(BaseModel):
     description: str
     assigned_agent: str = "coder"  # coder, database, security, etc.
     target_file: str = ""
+    repo: str = ""  # repo name or path this task targets; empty = every provider repo
     status: Literal["pending", "in_progress", "completed", "failed"] = "pending"
 
 class SharedBlackboard(BaseModel):
@@ -45,4 +46,9 @@ class SharedBlackboard(BaseModel):
     code_review_report: Dict[str, Any] = Field(default_factory=dict)
     user_strategy_feedback: str = ""
     user_arch_review_feedback: str = ""
+    # Incremental-run cache (restored by OrchestratorEngine._load_incremental_cache)
+    incremental_providers: List[str] = Field(default_factory=list)
+    incremental_consumers: List[str] = Field(default_factory=list)
+    pending_tasks: List[TaskItem] = Field(default_factory=list)
+    architecture_plan: Dict[str, Any] = Field(default_factory=dict)
     user_code_review_feedback: str = ""

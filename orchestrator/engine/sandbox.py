@@ -20,8 +20,12 @@ class SandboxEngine:
             if path.is_absolute() or ".." in path.parts:
                 raise PathViolationError(f"path traversal detected: '{rel_path}'")
             normalized = path.as_posix()
-            if _is_protected(normalized):
+            if _is_protected(normalized, allowed_paths):
                 raise PathViolationError(f"protected path: '{rel_path}'")
+            if content == "" or len(content.encode("utf-8")) > MAX_FILE_BYTES:
+                raise PathViolationError(
+                    f"generated content for '{rel_path}' is empty or larger than {MAX_FILE_BYTES} bytes"
+                )
             if not _is_allowed(normalized, allowed_paths):
                 raise PathViolationError(
                     f"[SECURITY VIOLATION] Agent attempted to write to protected file: '{normalized}'. "
@@ -40,6 +44,9 @@ class SandboxEngine:
         for rel_path, content in files.items():
             target = base_dir / Path(rel_path)
             target.parent.mkdir(parents=True, exist_ok=True)
+            # Re-check after mkdir: a symlinked directory or file must not redirect the write.
+            if target.is_symlink() or not target.parent.resolve().is_relative_to(base_dir):
+                raise PathViolationError(f"refusing to write through a symlink: '{rel_path}'")
             target.write_text(content, encoding="utf-8")
             print(f"    [+] Safely updated: {rel_path}")
 
@@ -54,5 +61,32 @@ def _is_allowed(path: str, allowed_paths: List[str]) -> bool:
     return False
 
 
-def _is_protected(path: str) -> bool:
-    return any(part in {".git", ".agents", ".codex"} for part in Path(path).parts)
+MAX_FILE_BYTES = 512 * 1024
+
+_PROTECTED_DIRS = {".git", ".agents", ".codex"}
+# The agent's own permissions: it must never be able to widen its allowlist.
+_CONTRACT_FILES = {"skill.md", "skills.md"}
+# Files that make a repo execute code (CI, hooks, build/test config, secrets). Writable only when the contract
+# lists the exact file in allowed_paths; a directory prefix such as "src/" or "./" is not enough.
+_EXEC_CONFIG_DIRS = {".github", ".husky", ".circleci", ".gitlab"}
+_EXEC_CONFIG_FILES = {
+    "makefile", "conftest.py", "setup.py", "pyproject.toml", "tox.ini", "noxfile.py", "package.json",
+    "dockerfile", "docker-compose.yml", "docker-compose.yaml", ".gitlab-ci.yml", "jenkinsfile",
+}
+
+
+def _is_protected(path: str, allowed_paths: List[str] = ()) -> bool:
+    parts = [part.lower() for part in Path(path).parts]  # case-insensitive: ".GIT" is ".git" on macOS/Windows
+    name = parts[-1] if parts else ""
+    if any(part in _PROTECTED_DIRS for part in parts):
+        return True
+    if name in _CONTRACT_FILES or name.endswith(".arch.md"):
+        return True
+    explicit = {a.rstrip("/").lower() for a in allowed_paths if not a.endswith("/")}
+    is_exec_config = (
+        any(part in _EXEC_CONFIG_DIRS for part in parts)
+        or name in _EXEC_CONFIG_FILES
+        or name == ".env" or name.startswith(".env.")
+        or name.endswith(".pem") or name.endswith(".key")
+    )
+    return is_exec_config and Path(path).as_posix().lower() not in explicit

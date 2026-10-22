@@ -21,6 +21,13 @@ logger = logging.getLogger("DomainKnowledgeEngine")
 DEFAULT_DOMAINS_CACHE_DIR = Path(__file__).resolve().parent.parent.parent / ".ascm_domains"
 
 
+
+def _safe_domain_id(value: str) -> str:
+    """Domain ids can come from an LLM; never let one contain path separators or dots."""
+    import re as _re
+    return _re.sub(r"[^a-z0-9_]+", "_", str(value).lower()).strip("_")[:60] or "custom_domain"
+
+
 class DomainProfile(BaseModel):
     domain_id: str
     display_name: str
@@ -145,7 +152,7 @@ class DomainKnowledgeEngine:
         Populates local disk cache with built-in profiles if not already present.
         """
         for domain_id, profile in BUILTIN_PROFILES.items():
-            file_path = self.cache_dir / f"{domain_id.lower()}.json"
+            file_path = self.cache_dir / f"{_safe_domain_id(domain_id)}.json"
             if not file_path.exists():
                 try:
                     with open(file_path, "w", encoding="utf-8") as f:
@@ -157,7 +164,7 @@ class DomainKnowledgeEngine:
         """
         Loads a domain profile from the local disk cache.
         """
-        file_path = self.cache_dir / f"{domain_id.lower()}.json"
+        file_path = self.cache_dir / f"{_safe_domain_id(domain_id)}.json"
         if file_path.exists():
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
@@ -171,7 +178,7 @@ class DomainKnowledgeEngine:
         """
         Persists a newly created or enriched domain profile to disk.
         """
-        file_path = self.cache_dir / f"{profile.domain_id.lower()}.json"
+        file_path = self.cache_dir / f"{_safe_domain_id(profile.domain_id)}.json"
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(profile.model_dump(), f, indent=2)

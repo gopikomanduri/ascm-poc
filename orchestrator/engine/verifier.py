@@ -31,6 +31,17 @@ class VerificationResult(BaseModel):
             parts.append(f"=== Static Analysis / Lint Failure Output ({self.language}) ===\n{self.vet_output.strip()}")
         return "\n\n".join(parts) if parts else "Verification failed without specific error log."
 
+_SECRET_ENV = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE)", re.I)
+
+
+def scrubbed_env() -> Dict[str, str]:
+    """Environment for running LLM-generated code: no API keys, tokens or credentials."""
+    return {k: v for k, v in os.environ.items() if not _SECRET_ENV.search(k)}
+
+
+VERIFIER_TIMEOUT_SECONDS = int(os.environ.get("ASCM_VERIFIER_TIMEOUT", "300"))
+
+
 class VerifierEngine:
     @staticmethod
     def detect_language(repo_path: str) -> str:
@@ -73,12 +84,21 @@ class VerifierEngine:
             ]
             sandboxed = True
 
-        result = subprocess.run(
-            final_cmd,
-            cwd=repo_path if not sandboxed else None,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                final_cmd,
+                cwd=repo_path if not sandboxed else None,
+                capture_output=True,
+                text=True,
+                timeout=VERIFIER_TIMEOUT_SECONDS,
+                env=scrubbed_env(),
+            )
+        except subprocess.TimeoutExpired as exc:
+            out = exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+            result = subprocess.CompletedProcess(
+                final_cmd, 124, stdout=out,
+                stderr=f"Verification timed out after {VERIFIER_TIMEOUT_SECONDS}s",
+            )
         return result, sandboxed
 
     @staticmethod
@@ -135,15 +155,11 @@ class VerifierEngine:
         failed_count = sum(1 for c in cases if c["status"] == "FAIL")
         total = len(cases)
 
-        if total == 0:
-            total = 1
-            passed_count = 1 if tests_passed else 0
+        no_tests_detected = total == 0
+        if no_tests_detected:
+            # Do not fabricate a passing test: report that none were detected so the
+            # human gate can see the suite did not demonstrably exercise anything.
             failed_count = 0 if tests_passed else 1
-            cases.append({
-                "name": f"{lang.capitalize()}TestSuite",
-                "status": "PASS" if tests_passed else "FAIL",
-                "duration": "completed",
-            })
 
         return {
             "framework": framework or ("testify / go test" if lang == "go" else "pytest / unittest" if lang == "python" else "jest / npm test"),
@@ -151,6 +167,7 @@ class VerifierEngine:
             "passed_count": passed_count,
             "failed_count": failed_count,
             "test_cases": cases,
+            "no_tests_detected": no_tests_detected,
         }
 
     @staticmethod

@@ -28,7 +28,11 @@ class OnCallAgent(BaseAgent):
         received = self.receive_alert(active_alert)
         logs = kwargs.get("logs", ["Incident triggered by system alert"])
         rca = self.analyze_logs(received.get("alert_id", "alert-default"), logs)
-        fix = self.propose_fix(rca["root_causes"][0], rca["affected_services"])
+        if rca["root_causes"]:
+            fix = self.propose_fix(rca["root_causes"][0], rca["affected_services"])
+        else:
+            fix = {"status": "no_fix_proposed", "reason": rca.get("reason", "no root cause identified"),
+                   "user_approval_required": True}
         return {
             "received": received,
             "root_cause_analysis": rca,
@@ -44,12 +48,14 @@ class OnCallAgent(BaseAgent):
         }
 
     def analyze_logs(self, alert_id: str, logs: List[str]) -> Dict[str, Any]:
-        """Analyze logs for root cause."""
+        """Log analysis is not implemented. No root cause is claimed rather than inventing one."""
         return {
             "alert_id": alert_id,
-            "root_causes": ["Database connection timeout", "Memory pressure"],
-            "affected_services": ["payment-api", "settlement-service"],
-            "time_to_diagnosis_sec": 45,
+            "status": "analysis_not_performed",
+            "root_causes": [],
+            "affected_services": [],
+            "reason": "automated log analysis is not implemented; investigate manually",
+            "log_lines_received": len(logs),
         }
 
     def propose_fix(self, root_cause: str, affected_services: List[str]) -> Dict[str, Any]:
@@ -65,11 +71,12 @@ class OnCallAgent(BaseAgent):
     def execute_fix(self, fix_id: str, approval: bool) -> Dict[str, Any]:
         """Execute fix if approved."""
         if not approval:
-            return {"status": "pending_approval"}
+            return {"status": "pending_approval", "executed": False}
 
         return {
             "fix_id": fix_id,
-            "status": "executed",
-            "mttr_sec": 120,
-            "incident_resolved": True,
+            "status": "not_executed",
+            "executed": False,
+            "incident_resolved": False,
+            "reason": "automated remediation is not implemented; apply the fix manually and verify it",
         }

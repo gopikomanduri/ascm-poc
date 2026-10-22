@@ -220,8 +220,9 @@ class GTMExecutionWorkflow:
             logger.info("─" * 80)
             logger.info("Awaiting founder approval before execution...")
 
-            # Mock: Auto-approve for testing
-            self.gate_approved = True
+            if not self.gate_approved:
+                logger.info("Strategy ready. Awaiting founder approval; nothing has been executed.")
+                return {"status": "AWAITING_FOUNDER_APPROVAL", "gate_approved": False}
             logger.info("✅ Founder approved! Proceeding with execution...\n")
 
             # ================================================================

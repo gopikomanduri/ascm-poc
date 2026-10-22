@@ -402,7 +402,7 @@ def build_marketing_agent_pptx(output_path: Path):
     add_card_text(s4, Inches(0.8), Inches(1.9), Inches(5.6), Inches(4.7), "The Winning Hook & Narrative", [
         "Hook: 'Why 90% of engineering teams using Copilot/Cursor are NOT shipping 5x faster.'",
         "The Diagnosis: 'Single-Repo Myopia' — AI assistants generate code in isolation, breaking cross-repo contracts.",
-        "The Data: 78.4% of breaking microservice bugs occur during downstream integration.",
+        "The problem: changes to one service can break its consumers in other repositories; teams usually catch this late, in integration.",
         "The Proof: 2-phase adversarial critic architecture that validates all repos atomically."
     ], C_MKTG_ACCENT2)
 
@@ -1029,7 +1029,7 @@ if __name__ == "__main__":
                     "items": [
                         "Hook: 'Why 90% of engineering teams using Copilot/Cursor are NOT shipping 5x faster.'",
                         "The Diagnosis: 'Single-Repo Myopia' — AI assistants generate code in isolation, breaking cross-repo contracts.",
-                        "The Data: 78.4% of breaking microservice bugs occur during downstream integration.",
+                        "The problem: changes to one service can break its consumers in other repositories; teams usually catch this late, in integration.",
                         "The Proof: 2-phase adversarial critic architecture that validates all repos atomically."
                     ]
                 },

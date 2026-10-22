@@ -7,6 +7,12 @@ on:
     branches: [ main, 'feat/**' ]
   workflow_dispatch:
 
+# Avoid duplicate expensive model-assisted security reviews for successive commits
+# to the same PR; only the newest run needs to consume CI and provider capacity.
+concurrency:
+  group: ascm-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

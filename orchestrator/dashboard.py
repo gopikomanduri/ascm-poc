@@ -1,3 +1,4 @@
+import hmac
 import json
 import mimetypes
 import os
@@ -6,7 +7,8 @@ import threading
 import time
 import uuid
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from orchestrator import dashboard_security
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
@@ -677,11 +679,29 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
+    def _authorized(self, method: str, path: str) -> bool:
+        verdict = dashboard_security.authorize(method, path, self.headers, self.headers.get("Cookie", ""))
+        if verdict is None and method == "POST" and path in dashboard_security.PUBLIC_POST_PATHS:
+            if not dashboard_security.PUBLIC_RATE_LIMITER.allow(f"{self.client_address[0]}:{path}"):
+                verdict = (429, "Too many requests; slow down.")
+        if verdict is None:
+            return True
+        status, reason = verdict
+        if method == "POST":  # consume the body so the client sees the 4xx instead of a reset connection
+            try:
+                self.rfile.read(max(0, min(int(self.headers.get("Content-Length", 0)), dashboard_security.MAX_BODY_BYTES)))
+            except (ValueError, OSError):
+                pass
+        self._send_json({"status": "error", "message": reason}, status=status)
+        return False
+
     def do_GET(self):
         from urllib.parse import urlparse, parse_qs
         from orchestrator.auth.github_oauth import GitHubOAuthHandler
         parsed_url = urlparse(self.path)
         path = parsed_url.path
+        if not self._authorized("GET", path):
+            return
         query_params = parse_qs(parsed_url.query)
         query_flat = {k: v[0] for k, v in query_params.items()}  # flatten for OAuth
 
@@ -746,7 +766,6 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/runs":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             history_list = list_historical_runs()
             self.wfile.write(json.dumps(history_list).encode("utf-8"))
@@ -754,7 +773,6 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/state":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             
             run_id = query_params.get("run_id", [None])[0]
@@ -853,10 +871,11 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/waitlist":
             from urllib.parse import parse_qs
-            admin_key = os.environ.get("ADMIN_KEY") or os.environ.get("WAITLIST_ADMIN_KEY", "outcode-secret-2026")
+            # No built-in default: with no ADMIN_KEY configured the endpoint stays closed.
+            admin_key = os.environ.get("ADMIN_KEY") or os.environ.get("WAITLIST_ADMIN_KEY", "")
             query = parse_qs(parsed_url.query)
             provided_key = self.headers.get("X-Admin-Key") or (query.get("key", [None])[0])
-            if not provided_key or provided_key != admin_key:
+            if not admin_key or not provided_key or not hmac.compare_digest(provided_key.encode(), admin_key.encode()):
                 self.send_response(403)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
@@ -896,17 +915,24 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        # No CORS: the dashboard UI is same-origin, so cross-origin preflights are simply refused.
+        self.send_response(204)
         self.end_headers()
 
     def do_POST(self):
         from urllib.parse import urlparse
         parsed_url = urlparse(self.path)
         path = parsed_url.path
-        content_length = int(self.headers.get("Content-Length", 0))
+        if not self._authorized("POST", path):
+            return
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            self._send_json({"status": "error", "message": "Invalid Content-Length"}, status=400)
+            return
+        if content_length < 0 or content_length > dashboard_security.MAX_BODY_BYTES:
+            self._send_json({"status": "error", "message": "Request body too large"}, status=413)
+            return
         body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
         try:
             payload = json.loads(body)
@@ -998,13 +1024,19 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
             self._send_json(res)
         elif path == "/api/product/analyze-repo":
             from orchestrator.product_wizard import RepoAnalyzer
-            repo_path = payload.get("repo_path", "")
-            custom_skills = payload.get("custom_skills_path")
-            res = RepoAnalyzer.analyze_repo(repo_path, custom_skills)
+            safe = dashboard_security.confine_to_workspace(payload.get("repo_path", ""))
+            if safe is None:
+                self._send_json({"status": "error", "message": "repo_path must be inside the allowed workspace."}, status=400)
+                return
+            res = RepoAnalyzer.analyze_repo(str(safe), None)
             self._send_json(res)
         elif path == "/api/product/create-skills-md":
             from orchestrator.product_wizard import RepoAnalyzer
-            repo_path = payload.get("repo_path", "")
+            safe = dashboard_security.confine_to_workspace(payload.get("repo_path", ""))
+            if safe is None:
+                self._send_json({"status": "error", "message": "repo_path must be inside the allowed workspace."}, status=400)
+                return
+            repo_path = str(safe)
             role = payload.get("role", "provider")
             paths = payload.get("allowed_paths", [])
             desc = payload.get("description", "")
@@ -1045,12 +1077,21 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/action/launch":
             goal = payload.get("goal", "").strip()
             repos = payload.get("repos", [])
-            auto_approve = bool(payload.get("auto_approve", False))
+            # A web request can never pre-approve its own changes: approval stays a separate human action.
+            auto_approve = False
             if not goal:
                 self._send_json({"status": "error", "message": "Goal cannot be empty"}, status=400)
                 return
             if not repos:
                 repos = [str(Path.cwd().resolve())]
+            if not isinstance(repos, list):
+                self._send_json({"status": "error", "message": "repos must be a list"}, status=400)
+                return
+            confined = [dashboard_security.confine_to_workspace(r) for r in repos]
+            if any(c is None or not c.is_dir() for c in confined):
+                self._send_json({"status": "error", "message": "Every repo must be a directory inside the allowed workspace (ASCM_WORKSPACE_ROOTS)."}, status=400)
+                return
+            repos = [str(c) for c in confined]
 
             def _run_bg():
                 from orchestrator.orchestrator_core import OrchestratorEngine
@@ -1069,14 +1110,15 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
     def _send_json(self, data: Dict[str, Any], status: int = 200):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode("utf-8"))
+        self.wfile.write(json.dumps(dashboard_security.redact_secrets(data)).encode("utf-8"))
 
     def _serve_static_file(self, filename: str) -> None:
         """Read a file from STATIC_DIR and write it to the response."""
-        file_path = STATIC_DIR / filename
-        if not file_path.exists() or not file_path.is_file():
+        static_root = STATIC_DIR.resolve()
+        file_path = (STATIC_DIR / filename).resolve()
+        # Confine to static/: "static/../.env" and symlink escapes must never be served.
+        if not file_path.is_relative_to(static_root) or not file_path.is_file():
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"Not found")
@@ -1098,17 +1140,18 @@ class DashboardHTTPRequestHandler(BaseHTTPRequestHandler):
 
 
 class DashboardServer:
-    def __init__(self, host: str = "0.0.0.0", port: int = 8080):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8080):
         self.host = host
         self.port = port
-        self.server: Optional[HTTPServer] = None
+        self.server: Optional[ThreadingHTTPServer] = None
         self.thread: Optional[threading.Thread] = None
         self.actual_port = port
 
     def start(self) -> int:
         for p in range(self.port, self.port + 10):
             try:
-                self.server = HTTPServer((self.host, p), DashboardHTTPRequestHandler)
+                self.server = ThreadingHTTPServer((self.host, p), DashboardHTTPRequestHandler)
+                self.server.daemon_threads = True
                 self.actual_port = p
                 break
             except OSError:

@@ -40,10 +40,11 @@ success "Python $PY_VER ✓"
 # ── Clone ─────────────────────────────────────────────────────────────────────
 if [[ -d "$INSTALL_DIR/.git" ]]; then
     info "ASCM already cloned at $INSTALL_DIR — pulling latest..."
-    git -C "$INSTALL_DIR" pull --quiet origin main
+    git -C "$INSTALL_DIR" pull --quiet origin "${ASCM_REF:-main}"
 else
     info "Cloning ASCM to $INSTALL_DIR ..."
-    git clone --depth=1 --quiet "$REPO_URL" "$INSTALL_DIR"
+    # Pin a release with ASCM_REF=<tag> (recommended) instead of tracking the moving main branch.
+    git clone --depth=1 --quiet --branch "${ASCM_REF:-main}" "$REPO_URL" "$INSTALL_DIR"
 fi
 success "Repository ready ✓"
 
@@ -63,6 +64,7 @@ success "Dependencies installed ✓"
 # ── .env setup ────────────────────────────────────────────────────────────────
 if [[ ! -f "$INSTALL_DIR/.env" ]]; then
     cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
+    chmod 600 "$INSTALL_DIR/.env"   # holds API keys: owner read/write only
     info "Created $INSTALL_DIR/.env. An LLM API key is optional; background monitoring and basic prompts work without one."
 else
     info ".env already exists — skipping."

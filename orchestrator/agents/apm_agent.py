@@ -31,6 +31,8 @@ class APMAgent(BaseAgent):
         """Define SLOs (Service Level Objectives)."""
         return {
             "domain": domain,
+            "source": "default_template",
+            "derived_from_measurements": False,
             "slos": {
                 "p99_latency_ms": 500,
                 "availability_pct": 99.9,
@@ -41,6 +43,7 @@ class APMAgent(BaseAgent):
     def configure_alerts(self, slos: Dict[str, Any]) -> Dict[str, Any]:
         """Configure alerting rules."""
         return {
+            "source": "default_template",
             "alerts": [
                 {"name": "high_latency", "threshold": 1000, "severity": "WARNING"},
                 {"name": "high_error_rate", "threshold": 1.0, "severity": "CRITICAL"},

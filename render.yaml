@@ -1,9 +1,16 @@
 services:
   - type: web
     name: outcode-landing
-    runtime: python
-    buildCommand: "pip install --no-cache-dir pydantic || true"
-    startCommand: "python3 dashboard_server.py"
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
     envVars:
       - key: PORT
         value: 10000
+      # Secrets: set these in the Render dashboard, never in this file.
+      - key: ADMIN_KEY
+        sync: false
+      - key: ASCM_SECRET_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

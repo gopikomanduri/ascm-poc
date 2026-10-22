@@ -31,13 +31,18 @@ class CrossPlatformNotifier:
         # 1. macOS (Darwin)
         if platform.startswith("darwin"):
             try:
-                safe_title = title.replace('"', '\\"')
-                safe_msg = message.replace('"', '\\"')
-                safe_app = app_name.replace('"', '\\"')
+                # Values are passed as argv, never interpolated into the script text, so
+                # file/directory names from the workspace cannot inject AppleScript.
                 apple_script = (
-                    f'display notification "{safe_msg}" with title "{safe_title}" subtitle "{safe_app}"'
+                    "on run argv\n"
+                    "display notification (item 1 of argv) with title (item 2 of argv) subtitle (item 3 of argv)\n"
+                    "end run"
                 )
-                res = subprocess.run(["osascript", "-e", apple_script], capture_output=True, timeout=3)
+                res = subprocess.run(
+                    ["osascript", "-e", apple_script, "--", str(message), str(title), str(app_name)],
+                    capture_output=True,
+                    timeout=3,
+                )
                 return res.returncode == 0
             except Exception as e:
                 logger.debug(f"macOS notification failed: {e}")
@@ -51,7 +56,7 @@ class CrossPlatformNotifier:
                 $notify = new-object system.windows.forms.notifyicon
                 $notify.icon = [system.drawing.systemicons]::Information
                 $notify.visible = $true
-                $notify.showballoontip(10, '{title}', '{message}', [system.windows.forms.tooltipicon]::Info)
+                $notify.showballoontip(10, $env:ASCM_NOTIFY_TITLE, $env:ASCM_NOTIFY_MESSAGE, [system.windows.forms.tooltipicon]::Info)
                 Start-Sleep -Seconds 2
                 $notify.dispose()
                 """
@@ -59,6 +64,7 @@ class CrossPlatformNotifier:
                     ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
                     capture_output=True,
                     timeout=5,
+                    env={**os.environ, "ASCM_NOTIFY_TITLE": str(title), "ASCM_NOTIFY_MESSAGE": str(message)},
                 )
                 return res.returncode == 0
             except Exception as e:

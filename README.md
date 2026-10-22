@@ -1,6 +1,6 @@
 # ASCM — AI Engineering Squad for Multi-Repo Codebases
 
-> **Five specialized AI agents. One autonomous sprint. Human approval at every gate.**
+> **Specialized AI agents. One coordinated sprint. Human approval before anything is written.**
 
 ASCM coordinates a squad of AI agents — Product, Architect, Coder, Adversarial Critic, and Security Auditor — to deliver features across **multiple repositories simultaneously**, with a human approval gate before any code is committed.
 
@@ -43,7 +43,7 @@ Git branch        → Feature branch created, PR raised
 If you are a software engineer exploring this repository, here is how ASCM is architected:
 
 ### 1. The Core Architecture
-ASCM is not an autocomplete plugin or a chatbot wrapper. It is an **autonomous, local-first multi-repo orchestrator**:
+ASCM is not an autocomplete plugin or a chatbot wrapper. It is a **human-governed, local multi-repo orchestrator** (nothing is written or committed until a person approves the diff):
 - **Multi-Repo Contract Synchronization**: In microservice and multi-repo architectures, modifying an API endpoint breaks consumer services unless both repositories are updated in lockstep. ASCM reads and writes cross-repo contracts (`SKILLS.md` and schema definitions), synchronizing provider APIs (Go/Python) and consumer clients/SDKs (TypeScript/Python) **in a single atomic sprint**.
 - **Role-Specialized Agent Pipeline (`orchestrator/agents/`)**:
   - `ProductAgent`: Interactive requirement clarification. Grills the user for specifications until requirement ambiguity is eliminated (confidence threshold $\ge 90\%$).
@@ -90,10 +90,10 @@ If you are an investor, founder, or engineering executive, here is the commercia
 
 ### 1. The Market Void: Single-Repo AI Fails at Enterprise Scale
 - Today's coding assistants (Copilot, Cursor, Devin) operate inside a **single repository or single file**.
-- However, 85%+ of modern tech companies operate **distributed microservices or multi-repo codebases** (e.g., Backend API + Mobile App + Web Portal + Data Pipeline).
+- However, many teams operate **distributed microservices or multi-repo codebases** (no market-share figure is claimed; sizing this is part of customer discovery) (e.g., Backend API + Mobile App + Web Portal + Data Pipeline).
 - When a developer uses existing AI to modify a backend API, the AI cannot see or update the frontend client or consumer SDK. This causes **silent breaking contract changes, integration outages, and broken CI pipelines** — turning senior engineers into full-time AI code cleanup crews.
 
-### 2. Concrete ROI & Defect Reduction (Backed by Math)
+### 2. ROI & Defect Reduction (hypotheses, not yet measured)
 - **Research hypotheses, not production guarantees**: mathematical simulations and benchmark scores in this repository are model-based results. They are not independent empirical evidence of zero outages, specific defect reductions, or customer ROI.
 - **Reuse and cost optimization**: blueprint reuse is intended to reduce repeated work; savings must be measured on representative customer workloads before making quantified claims.
 - **Deployment and compliance**: local models can support offline deployments, but ASCM does not by itself establish HIPAA, SOC 2, or other regulatory compliance. Customers must validate their full deployment and controls.
@@ -115,7 +115,7 @@ If you are an investor, founder, or engineering executive, here is the commercia
 - Domain adapter: auto-detects FinTech / CAD/CAM / MedTech / Legal / Web3 / Robotics
 - Blueprint engine: reuses prior architectural patterns (cost savings are a hypothesis to measure on representative workloads)
 - Pre-flight cost radar: P50/P90 token forecaster with circuit breakers
-- Mandatory TDD: tests required before milestone confirmation
+- Tests are required to count as verified: a green run with zero detected tests is treated as a failure
 - Structured local audit logging with PII/credential scrubbing and bounded rotation
 - PII scrubber: redacts known secret and personal-data patterns; it cannot guarantee detection of every sensitive value
 - Air-gapped local SLM mode via Ollama (Qwen 2.5 Coder, Phi-4)
@@ -127,23 +127,9 @@ If you are an investor, founder, or engineering executive, here is the commercia
 | **Pay-Through-Crypto** | Web3 Infrastructure | 2 | 4 ✅ |
 | **CNC CAD/CAM Engine** | Advanced Manufacturing | 1 | 2 ✅ |
 
-### Mathematical Foundations
-The repository includes mathematical models and simulations for these architectural hypotheses; they are not independent empirical validation of production outcomes:
-- **Independent Critic Theorem**: 59.1% defect escape reduction vs same-model review (500k Monte Carlo trials)
-- **Multi-Repo Coordination**: P(breaking change) = 78.4% uncoordinated → ~0% with ASCM
-- **Defect Escape Equation**: 16.7× improvement, **p-independent** (holds for any LLM)
-
-```bash
-python tools/ascm_math_proofs.py --publish   # Verify all proofs yourself
-```
-
-### MR-Bench — The Multi-Repo Benchmark
-The first benchmark for multi-repo AI coordination tasks (SWE-bench only tests single-repo).
-20 tasks across 4 tiers, 4 dimensions scored per task.
-
-```bash
-python tools/mr_bench.py --run-all --publish   # Run the benchmark
-```
+### Research Artifacts (assumption-driven, not evidence)
+- `tools/ascm_math_proofs.py` works through simple probability models of ASCM's design hypotheses. **Every input probability is assumed, not measured**, and the Monte Carlo runs re-sample the same assumptions. The outputs are illustrations, not results: do not quote them as defect reduction or ROI.
+- `tools/mr_bench.py` defines 20 multi-repo tasks and a **repository-readiness heuristic**. It does not run any agent and is not comparable to SWE-bench. A real benchmark needs agents run against hidden task repositories with executable acceptance tests (planned).
 
 ---
 
@@ -214,7 +200,7 @@ docker run -p 8080:8080 \
 |---|---|---|
 | Google Gemini | gemini-2.5-flash, gemini-1.5-flash | Cloud |
 | OpenAI | gpt-4o, gpt-4o-mini | Cloud |
-| Anthropic Claude | claude-3-5-sonnet, claude-3-5-haiku | Cloud |
+| Anthropic Claude | any Claude model id via `ANTHROPIC_MODEL` | Cloud |
 | Ollama | qwen2.5-coder, phi4, deepseek-coder-v2 | 100% local / air-gapped |
 
 ---

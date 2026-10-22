@@ -317,11 +317,13 @@ class GTMActivities:
 
         # In production, calls git service
         logger.info(f"Deployed {len(files)} files to {repo_name}")
+        # Deployment is performed by OrchestratorEngine/GitService after human approval, not by this activity.
         return {
-            "status": "deployed",
+            "status": "not_deployed",
             "files_count": len(files),
-            "commit_hash": "abc123def456",
-            "pr_url": f"https://github.com/{repo_name}/pull/1",
+            "commit_hash": None,
+            "pr_url": None,
+            "reason": "use OrchestratorEngine (approved, verified commit) to deploy",
         }
 
 
@@ -358,6 +360,10 @@ class GTMStandaloneWorkflow:
             "meetings_booked": 0,
         }
 
+    def approve(self) -> None:
+        """Founder approval signal. Until this is called the workflow stops after strategy generation."""
+        self.gate_approved = True
+
     async def run(
         self,
         execution_mode: str,  # GTM_ONLY, SALES_ONLY, MARKETING_ONLY
@@ -389,11 +395,16 @@ class GTMStandaloneWorkflow:
                 logger.info(f"✓ Marketing strategy: {len(marketing_strategy.get('content_pillars', []))} pillars")
 
             # Phase 2: Approval Gate
+            if approval_gate_enabled and not self.gate_approved:
+                logger.info("Phase 2: strategy generated; awaiting founder approval. Nothing has been sent.")
+                return {
+                    "status": "AWAITING_FOUNDER_APPROVAL",
+                    "mode": execution_mode,
+                    "campaign_stats": self.campaign_stats,
+                    "meetings_booked": 0,
+                    "campaign_duration_days": campaign_duration_days,
+                }
             if approval_gate_enabled:
-                logger.info("Phase 2: Awaiting founder approval...")
-                # In production: wait for signal from founder via API
-                # await workflow.wait_condition(lambda: self.gate_approved, timeout=timedelta(days=14))
-                self.gate_approved = True  # Mock approval for now
                 logger.info("✓ Founder approved GTM strategy")
 
             # Phase 3: Lead Discovery & Outbound (Sales Phase)
@@ -417,47 +428,15 @@ class GTMStandaloneWorkflow:
                         body="Hi there! I noticed...",
                         campaign_id=self.workflow_id or "demo",
                     )
-                    logger.info(f"✓ Dispatched to {lead['email']}")
-                    self.campaign_stats["sequences_dispatched"] += 1
+                    if result.get("success"):
+                        logger.info(f"✓ Dispatched to {lead['email']}")
+                        self.campaign_stats["sequences_dispatched"] += 1
+                    else:
+                        logger.warning(f"✗ NOT sent to {lead['email']} (outreach not authorized or provider failed)")
 
-            # Phase 4: Inbound Reply Loop (30-day listening period)
-            logger.info("Phase 4: Reply Loop (30 days)")
-            end_time = None  # In production: workflow.now() + timedelta(days=campaign_duration_days)
-            max_iterations = 10  # Demo limit
-            iteration = 0
-
-            while iteration < max_iterations:
-                iteration += 1
-
-                # Demo: Simulate inbound reply
-                if iteration == 3:
-                    demo_reply = {
-                        "email": "prospect1@company.com",
-                        "name": "John Doe",
-                        "subject": "Re: Quick question",
-                        "body": "Let's schedule a call! Tuesday works for me.",
-                    }
-
-                    classification = await GTMActivities.activity_classify_inbound_reply(
-                        reply_body=demo_reply["body"],
-                        prospect_email=demo_reply["email"],
-                        prospect_name=demo_reply["name"],
-                        cal_com_link=cal_com_link,
-                    )
-
-                    self.campaign_stats["replies_received"] += 1
-                    logger.info(f"✓ Classified reply: {classification['sentiment']}")
-
-                    if classification["sentiment"] == "INTERESTED":
-                        self.campaign_stats["meetings_booked"] += 1
-                        await GTMActivities.activity_notify_founder_slack(
-                            message=f"🔥 WARM LEAD: {demo_reply['name']} from {demo_reply['email']} scheduled a meeting!"
-                        )
-                        logger.info(f"✓ Meeting booked! Founder notified.")
-                    elif classification.get("suppressed_from_founder"):
-                        logger.info(f"✓ Negative reply silently suppressed from founder")
-
-                await asyncio.sleep(0.5)  # Demo timing
+            # Phase 4: Inbound replies arrive through the signed outcome webhook
+            # (orchestrator/gtm/integrations/outcome_webhook.py); this workflow never invents replies or meetings.
+            logger.info("Phase 4: replies are event-driven; none are simulated here")
 
             # Phase 5: Completion Report
             logger.info("Phase 5: Campaign Completion")

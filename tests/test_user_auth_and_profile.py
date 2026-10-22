@@ -1,4 +1,6 @@
 import json
+import os
+from unittest import mock
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +10,9 @@ from orchestrator.auth.user_manager import UserManager
 
 class UserAuthAndProfileTests(unittest.TestCase):
     def setUp(self):
+        patcher = mock.patch.dict(os.environ, {"ASCM_DEV_MODE": "1"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.tmpdir = tempfile.TemporaryDirectory()
         self.store_path = Path(self.tmpdir.name) / "test_users.json"
         self.mgr = UserManager(store_path=self.store_path)

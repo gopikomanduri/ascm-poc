@@ -1,6 +1,6 @@
 import json
 import os
-import random
+import secrets
 import re
 import threading
 import time
@@ -60,6 +60,7 @@ class UserManager:
             }
             tmp = self.store_path.with_suffix(".tmp")
             tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            os.chmod(tmp, 0o600)  # the store can hold API keys: owner read/write only
             tmp.replace(self.store_path)
         except OSError as err:
             AUDIT_LOGGER.log_security_event("USER_STORE_SAVE_ERROR", {"error": str(err)}, severity="WARN")
@@ -92,7 +93,7 @@ class UserManager:
                 "message": "Invalid identifier. Please provide a valid email address or mobile number.",
             }
 
-        otp = f"{random.randint(100000, 999999)}"
+        otp = f"{secrets.randbelow(900000) + 100000}"
         expires_at = time.time() + 300  # 5 minutes validity
 
         with self.lock:
@@ -111,12 +112,15 @@ class UserManager:
             details={"recipient": scrubbed, "channel": "email" if "@" in ident else "sms"},
         )
 
-        return {
+        response = {
             "status": "ok",
             "message": f"Verification code sent to {ident}.",
-            "dev_otp": otp,  # Exposed for local developer testing / automated flows
             "expires_in_sec": 300,
         }
+        # The code is only echoed back in explicit local dev mode; no delivery channel is wired up yet.
+        if os.environ.get("ASCM_DEV_MODE", "").lower() in ("1", "true", "yes"):
+            response["dev_otp"] = otp
+        return response
 
     def verify_otp(
         self,
@@ -141,7 +145,7 @@ class UserManager:
                 del self.otp_cache[ident]
                 return {"status": "error", "message": "Verification code has expired. Please request a new one."}
 
-            if entry["otp"] != clean_otp and clean_otp != "123456":  # 123456 fallback dev code
+            if not secrets.compare_digest(str(entry["otp"]), clean_otp):
                 return {"status": "error", "message": "Invalid verification code. Please check and retry."}
 
             # OTP is valid; consume it

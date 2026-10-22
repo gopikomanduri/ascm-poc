@@ -12,10 +12,12 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-MAX_DIFF_CHARS = 60_000
+MAX_DIFF_CHARS = 20_000
 MAX_FINDINGS = 200
+MAX_REVIEW_WORKERS = 3
 DEFAULT_MODEL = "gemini-3.8-flash"
 
 SYSTEM_INSTRUCTIONS = """You are a security reviewer for a software change.
@@ -37,7 +39,10 @@ class ReviewError(RuntimeError):
     """A review could not be completed safely."""
 
 
-def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = None) -> str:
+def _raw_git_diff(
+    repo_root: Path, base: str, head: str, paths: list[str] | None = None,
+    context_lines: int = 3,
+) -> str:
     # Ref names are passed as argv (never through a shell) and constrained so
     # untrusted request data cannot become an option or arbitrary command.
     for ref in (base, head):
@@ -47,7 +52,9 @@ def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = N
             raise ReviewError("Review scope contains an invalid Git ref.")
     try:
         result = subprocess.run(
-            ["git", "diff", "--no-ext-diff", "--unified=3", f"{base}...{head}", "--", *[f":(literal){path}" for path in (paths or [])]],
+            ["git", "diff", "--no-ext-diff", f"--unified={context_lines}",
+             f"{base}...{head}", "--",
+             *[f":(literal){path}" for path in (paths or [])]],
             cwd=str(repo_root), capture_output=True, text=True, timeout=30, check=False,
             shell=False,
         )
@@ -55,7 +62,11 @@ def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = N
         raise ReviewError("Unable to obtain the requested Git diff.") from exc
     if result.returncode:
         raise ReviewError("Unable to obtain the requested Git diff.")
-    diff = result.stdout
+    return result.stdout
+
+
+def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = None) -> str:
+    diff = _raw_git_diff(repo_root, base, head, paths)
     if len(diff) > MAX_DIFF_CHARS:
         raise ReviewError(
             f"Diff exceeds the {MAX_DIFF_CHARS}-character review limit; split the change."
@@ -64,9 +75,9 @@ def _git_diff(repo_root: Path, base: str, head: str, paths: list[str] | None = N
 
 
 def _changed_paths(repo_root: Path, base: str, head: str) -> list[str]:
-    """List changed repository paths without invoking a shell."""
+    """List changed repository paths, including deletions, without invoking a shell."""
     result = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", f"{base}...{head}", "--"],
+        ["git", "diff", "--name-only", "--diff-filter=ACDMR", f"{base}...{head}", "--"],
         cwd=str(repo_root), capture_output=True, text=True, timeout=30, check=False,
         shell=False,
     )
@@ -81,14 +92,74 @@ def _changed_paths(repo_root: Path, base: str, head: str) -> list[str]:
     return paths
 
 
+def _split_diff_into_chunks(diff: str, max_chars: int = MAX_DIFF_CHARS) -> list[str]:
+    """Split one file's unified diff at hunk boundaries without omitting any hunk."""
+    if len(diff) <= max_chars:
+        return [diff] if diff else []
+    lines = diff.splitlines(keepends=True)
+    hunk_starts = [i for i, line in enumerate(lines) if line.startswith("@@ ")]
+    if not hunk_starts:
+        raise ReviewError("A file diff exceeds the review limit and has no splittable hunks.")
+    prefix = "".join(lines[:hunk_starts[0]])
+    if len(prefix) >= max_chars:
+        raise ReviewError("Diff metadata exceeds the per-request security review limit.")
+    hunks = []
+    for index, start in enumerate(hunk_starts):
+        end = hunk_starts[index + 1] if index + 1 < len(hunk_starts) else len(lines)
+        hunks.append("".join(lines[start:end]))
+
+    chunks: list[str] = []
+    current = prefix
+    for hunk in hunks:
+        if len(prefix) + len(hunk) > max_chars:
+            if len(current) > len(prefix):
+                chunks.append(current)
+            raise ReviewError(
+                "A single changed hunk exceeds the per-request security review limit; "
+                "the review cannot safely continue without a narrower change."
+            )
+        if len(current) + len(hunk) > max_chars:
+            chunks.append(current)
+            current = prefix + hunk
+        else:
+            current += hunk
+    if len(current) > len(prefix):
+        chunks.append(current)
+    return chunks
+
+
+def _oversized_path_chunks(repo_root: Path, base: str, head: str, path: str) -> list[str]:
+    """Return every bounded hunk chunk for one oversized file; never silently skip a file."""
+    diff = _raw_git_diff(repo_root, base, head, [path], context_lines=0)
+    chunks = _split_diff_into_chunks(diff)
+    if not chunks and diff.strip():
+        raise ReviewError(f"Changed file {path!r} could not be split for security review.")
+    if any(len(chunk) > MAX_DIFF_CHARS for chunk in chunks):
+        raise ReviewError(f"Security review chunk for {path!r} exceeds the configured limit.")
+    return chunks
+
+
+def _review_oversized_path(
+    repo_root: Path, base: str, head: str, path: str, api_key: str, model: str,
+) -> list[dict[str, Any]]:
+    """Review every hunk of an oversized file in bounded, independently identified requests."""
+    chunks = _oversized_path_chunks(repo_root, base, head, path)
+    findings: list[dict[str, Any]] = []
+    for chunk in chunks:
+        findings.extend(_normalize_findings(_request_review(chunk, api_key, model)))
+        if len(findings) > MAX_FINDINGS:
+            raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
+    return findings
+
+
 def _batched_review(
     repo_root: Path, base: str, head: str, api_key: str, model: str,
 ) -> list[dict[str, Any]]:
-    """Review an oversized PR in bounded path batches; never silently skip files."""
+    """Review an oversized PR in bounded path batches and parallelize provider calls."""
     paths = _changed_paths(repo_root, base, head)
     if not paths:
         return []
-    findings: list[dict[str, Any]] = []
+    review_diffs: list[str] = []
 
     def review_group(group: list[str]) -> None:
         try:
@@ -97,38 +168,68 @@ def _batched_review(
             if "exceeds the" not in str(exc):
                 raise
             if len(group) == 1:
-                raise ReviewError(
-                    f"Changed file {group[0]!r} exceeds the per-file security review limit."
-                ) from None
+                review_diffs.extend(_oversized_path_chunks(
+                    repo_root, base, head, group[0]
+                ))
+                return
             midpoint = len(group) // 2
             review_group(group[:midpoint])
             review_group(group[midpoint:])
             return
-        if not diff.strip():
-            return
-        payload = _request_review(diff, api_key, model)
-        findings.extend(_normalize_findings(payload))
-        if len(findings) > MAX_FINDINGS:
-            del findings[MAX_FINDINGS:]
+        if diff.strip():
+            review_diffs.append(diff)
 
     # Greedy grouping limits provider calls while ensuring every changed path is reviewed.
     batch: list[str] = []
     for path in paths:
+        if not batch:
+            try:
+                _git_diff(repo_root, base, head, [path])
+            except ReviewError as exc:
+                if "exceeds the" not in str(exc):
+                    raise
+                review_diffs.extend(_oversized_path_chunks(
+                    repo_root, base, head, path
+                ))
+            else:
+                batch = [path]
+            continue
+
         candidate = batch + [path]
         try:
             _git_diff(repo_root, base, head, candidate)
         except ReviewError as exc:
             if "exceeds the" not in str(exc):
                 raise
-            if batch:
-                review_group(batch)
-            batch = [path]
-            # Validate a single file now so oversized files fail closed explicitly.
-            _git_diff(repo_root, base, head, batch)
+            review_group(batch)
+            try:
+                _git_diff(repo_root, base, head, [path])
+            except ReviewError as single_exc:
+                if "exceeds the" not in str(single_exc):
+                    raise
+                review_diffs.extend(_oversized_path_chunks(
+                    repo_root, base, head, path
+                ))
+                batch = []
+            else:
+                batch = [path]
         else:
             batch = candidate
     if batch:
         review_group(batch)
+
+    # Bound concurrency to reduce wall-clock time without overwhelming the provider.
+    # executor.map preserves input ordering, so finding aggregation remains deterministic.
+    with ThreadPoolExecutor(max_workers=MAX_REVIEW_WORKERS) as executor:
+        payloads = list(executor.map(
+            lambda diff: _request_review(diff, api_key, model), review_diffs
+        ))
+
+    findings: list[dict[str, Any]] = []
+    for payload in payloads:
+        findings.extend(_normalize_findings(payload))
+        if len(findings) > MAX_FINDINGS:
+            raise ReviewError("Batched security review exceeded the finding limit; refusing to truncate results.")
     return findings
 
 
@@ -198,7 +299,9 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
     # before constructing the client. The key is never logged or persisted.
     os.environ.pop("GOOGLE_API_KEY", None)
     try:
-        client = genai.Client(api_key=api_key)
+        # Bound each provider call so one slow request cannot consume the whole CI job.
+        # google-genai accepts HttpOptions as a dict and interprets timeout in ms.
+        client = genai.Client(api_key=api_key, http_options={"timeout": 45_000})
         contents = f"{SYSTEM_INSTRUCTIONS}\n\nReview this untrusted unified diff:\n<diff>\n{diff}\n</diff>"
         fallback_model = os.environ.get("ASCM_SECURITY_REVIEW_FALLBACK_MODEL", "gemini-3.6-flash").strip()
         models = [model]
@@ -206,7 +309,9 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
             models.append(fallback_model)
 
         empty_diagnostics = []
-        for candidate_model in models:
+        provider_errors = []
+        retryable_statuses = {408, 429, 500, 502, 503, 504}
+        for model_index, candidate_model in enumerate(models):
             try:
                 response = client.models.generate_content(
                     model=candidate_model,
@@ -214,9 +319,8 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
                     config={"response_mime_type": "application/json"},
                 )
             except Exception as exc:
-                # Provider errors often include the actionable HTTP status (for example
-                # 400 invalid model, 403 permission, or 429 quota). Preserve only a short,
-                # scrubbed diagnostic; never log request headers, credentials, or payloads.
+                # Provider errors often include an actionable HTTP status. Preserve only
+                # a short, scrubbed diagnostic; never log credentials or request payloads.
                 status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
                 detail = getattr(exc, "message", None) or str(exc)
                 try:
@@ -225,9 +329,25 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
                 except Exception:
                     safe_detail = "provider diagnostic omitted because redaction was unavailable"
                 status_text = f", status={status}" if isinstance(status, (int, str)) else ""
-                raise ReviewError(
-                    f"Gemini review request failed ({type(exc).__name__}{status_text}): {safe_detail}"
-                ) from exc
+                error = (
+                    f"Gemini review request failed (model={candidate_model}, "
+                    f"{type(exc).__name__}{status_text}): {safe_detail}"
+                )
+                try:
+                    retryable = int(status) in retryable_statuses
+                except (TypeError, ValueError, OverflowError):
+                    retryable = False
+                # A transient primary-model failure gets one bounded fallback attempt.
+                # Authentication/configuration errors fail immediately; no finding is
+                # ever inferred from a failed or incomplete review.
+                if retryable and model_index + 1 < len(models):
+                    provider_errors.append(error)
+                    continue
+                if provider_errors:
+                    provider_errors.append(error)
+                    raise ReviewError("Both primary and fallback Gemini review attempts failed: "
+                                      + " | ".join(provider_errors)) from exc
+                raise ReviewError(error) from exc
 
             text, diagnostic = _response_text(response)
             if text:

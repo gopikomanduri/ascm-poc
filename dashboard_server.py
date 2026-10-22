@@ -13,7 +13,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="ASCM Decoupled Standalone Dashboard Process"
     )
-    parser.add_argument("--host", default="0.0.0.0", help="Host interface to bind (default: 0.0.0.0)")
+    # Loopback by default: the dashboard has write endpoints. Hosted platforms inject $PORT and need 0.0.0.0.
+    parser.add_argument("--host", default="0.0.0.0" if os.environ.get("PORT") else "127.0.0.1",  # nosec B104 - hosted platforms need it; write routes stay gated
+                        help="Host interface to bind (default: 127.0.0.1, or 0.0.0.0 when $PORT is set)")
     # Railway (and Render/Heroku) injects $PORT — respect it, fall back to --port arg
     default_port = int(os.environ.get("PORT", 8080))
     parser.add_argument("--port", type=int, default=default_port, help="Port for web dashboard (default: $PORT or 8080)")
