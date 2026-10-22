@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-MAX_DIFF_CHARS = 60_000
+MAX_DIFF_CHARS = 20_000
 MAX_FINDINGS = 200
 DEFAULT_MODEL = "gemini-3.8-flash"
 
@@ -198,7 +198,9 @@ def _request_review(diff: str, api_key: str, model: str) -> Any:
     # before constructing the client. The key is never logged or persisted.
     os.environ.pop("GOOGLE_API_KEY", None)
     try:
-        client = genai.Client(api_key=api_key)
+        # Bound each provider call so one slow request cannot consume the whole CI job.
+        # google-genai accepts HttpOptions as a dict and interprets timeout in ms.
+        client = genai.Client(api_key=api_key, http_options={"timeout": 45_000})
         contents = f"{SYSTEM_INSTRUCTIONS}\n\nReview this untrusted unified diff:\n<diff>\n{diff}\n</diff>"
         fallback_model = os.environ.get("ASCM_SECURITY_REVIEW_FALLBACK_MODEL", "gemini-3.6-flash").strip()
         models = [model]
