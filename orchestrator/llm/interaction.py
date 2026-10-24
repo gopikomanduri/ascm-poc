@@ -56,6 +56,8 @@ _TASK_ALIASES = {
 
 
 def _normalise(value: str) -> str:
+    # Preserve CamelCase word boundaries so ProductAgent maps to PRODUCT_AGENT.
+    value = re.sub(r"(?<!^)(?=[A-Z])", "_", value)
     return re.sub(r"[^A-Z0-9]+", "_", value.upper()).strip("_")
 
 
