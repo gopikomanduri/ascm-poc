@@ -3,7 +3,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from orchestrator.agents.base import OllamaProvider
+from orchestrator.agents.base import BaseAgent, OllamaProvider
 from orchestrator.llm.interaction import LLMInteractionLayer, provider_for_agent, resolve_route
 
 
@@ -65,6 +65,24 @@ class LLMInteractionRoutingTests(unittest.TestCase):
                 LLMInteractionLayer()
         with self.assertRaises(ValueError):
             LLMInteractionLayer(routes={"default": {"provider": "ollama", "secret": "no"}})
+
+    def test_base_agent_uses_interaction_layer_route(self):
+        env = {
+            "ASCM_LLM_ROUTES_JSON": json.dumps({
+                "BaseAgent": {"provider": "ollama", "model": "qwen2.5:1.5b"}
+            }),
+            "LLM_PROVIDER": "",
+            "GEMINI_API_KEY": "",
+            "GOOGLE_API_KEY": "",
+            "OPENAI_API_KEY": "",
+            "ANTHROPIC_API_KEY": "",
+            "OLLAMA_HOST": "http://localhost:11434",
+            "OLLAMA_MODEL": "",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            agent = BaseAgent()
+            self.assertIsInstance(agent.provider, OllamaProvider)
+            self.assertEqual(agent.model_name, "qwen2.5:1.5b")
 
     def test_describe_route_does_not_claim_implicit_fallback(self):
         layer = LLMInteractionLayer(routes={
