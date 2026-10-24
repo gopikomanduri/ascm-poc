@@ -491,7 +491,12 @@ class GTMStatusAgent:
     def run(self) -> None:
         while not self.stop.is_set():
             status = read_json(self.status_path, {})
-            if status and int(status.get("testing_rounds", 0) or 0) > 0:
+            # A completed simulation session still needs a GTM status/permission
+            # assessment even if Product Agent failed before completing a round.
+            if status and (
+                int(status.get("testing_rounds", 0) or 0) > 0
+                or int(status.get("sessions_completed", 0) or 0) > 0
+            ):
                 # Keep checking every poll, but request a social approval only once per
                 # repository commit. Test-round counters are deliberately not triggers.
                 fingerprint = self.status_fingerprint(status)
@@ -1345,7 +1350,11 @@ class ContinuousFounderTestingRuntime:
                 ))
                 previous_rounds = self.rounds_completed
                 result = self.run_product_session(focus)
-                if self.rounds_completed > previous_rounds and not self.stop.is_set():
+                # Mentor is an independent specialist: still ask it to review the
+                # explicit founder goal when Product Agent fails, while keeping product
+                # round acceptance false. This prevents one broken handoff from silently
+                # suppressing all other specialist evidence.
+                if not self.stop.is_set():
                     self.run_mentor_review(focus)
                 session_count += 1
                 self._answer_permission_requests()
