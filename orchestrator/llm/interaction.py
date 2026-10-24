@@ -86,7 +86,17 @@ class LLMInteractionLayer:
     """Central routing facade used by agents; provider implementations remain reusable."""
 
     def __init__(self, routes: Optional[dict[str, dict[str, Any]]] = None):
-        self.routes = _parse_routes() if routes is None else routes
+        candidate_routes = _parse_routes() if routes is None else routes
+        if not isinstance(candidate_routes, dict):
+            raise ValueError("LLM routes must be a JSON object keyed by agent or task")
+        self.routes: dict[str, dict[str, Any]] = {}
+        for key, value in candidate_routes.items():
+            if not isinstance(key, str) or not isinstance(value, dict):
+                raise ValueError("Each LLM route must map a string key to an object")
+            unknown = set(value) - {"provider", "model", "tier", "task"}
+            if unknown:
+                raise ValueError(f"Unknown route fields for {key}: {', '.join(sorted(unknown))}")
+            self.routes[key] = value
 
     @staticmethod
     def infer_task(agent_name: str) -> str:
