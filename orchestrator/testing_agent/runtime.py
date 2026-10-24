@@ -357,14 +357,40 @@ class ASCMJsonRpcClient:
             raise RuntimeError(f"A2A {agent_id} request failed: {body['error']}")
         result = body.get("result", {})
         task = result.get("task", result) if isinstance(result, dict) else result
+        if not isinstance(task, dict):
+            raise RuntimeError(f"A2A {agent_id} response did not contain a task object.")
+
+        # A failed A2A task carries an error artifact as ordinary text. Never pass that
+        # transport error to a specialist-specific parser as though it were an LLM answer.
+        status = task.get("status", {})
+        state = status.get("state", "") if isinstance(status, dict) else ""
+        state_text = str(state).lower()
+        artifacts = task.get("artifacts", [])
+        error_artifacts = [
+            artifact for artifact in artifacts
+            if isinstance(artifact, dict) and str(artifact.get("name", "")).lower() == "error"
+        ]
+        if any(marker in state_text for marker in ("failed", "canceled", "rejected")) or error_artifacts:
+            error_text = self._collect_text(error_artifacts or artifacts)
+            detail = error_text[-1].strip() if error_text else f"task state={state!r}"
+            raise RuntimeError(f"A2A {agent_id} task failed: {detail}")
+
         # Task history contains the founder's prompt as well as the agent's reply.
-        # Prefer the response artifacts explicitly so we never answer with our own prompt.
-        artifacts = task.get("artifacts", []) if isinstance(task, dict) else []
-        texts = self._collect_text(artifacts)
+        # Prefer named response artifacts, and never treat an error artifact as success.
+        response_artifacts = [
+            artifact for artifact in artifacts
+            if isinstance(artifact, dict)
+            and str(artifact.get("name", "")).lower() != "error"
+        ]
+        named_responses = [
+            artifact for artifact in response_artifacts
+            if str(artifact.get("name", "")).lower().endswith("-response")
+        ]
+        texts = self._collect_text(named_responses or response_artifacts)
         if not texts:
-            texts = self._collect_text(task)
+            texts = self._collect_text(task.get("status", {}))
         if not texts:
-            raise RuntimeError(f"A2A {agent_id} response contained no text artifact.")
+            raise RuntimeError(f"A2A {agent_id} response contained no text response artifact.")
         return texts[-1].strip()
 
 
