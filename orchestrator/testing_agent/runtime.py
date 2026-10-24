@@ -1399,10 +1399,17 @@ class ContinuousFounderTestingRuntime:
                 # before the acceptance evaluator snapshots the journey.
                 goal.snapshot()
                 if sessions > 0 and session_count >= sessions:
-                    deadline = time.monotonic() + min(5.0, max(2.0, self.poll_interval))
+                    # Wait for both the default-deny permission record and the GTM
+                    # specialist's completed/not-applicable assessment. Provider calls are
+                    # bounded by the live workflow; missing evidence still remains a failure.
+                    deadline = time.monotonic() + min(35.0, max(5.0, self.poll_interval))
                     while not self.stop.is_set() and time.monotonic() < deadline:
                         current_size = permission_log.stat().st_size if permission_log.exists() else 0
-                        if current_size > initial_permission_log_size:
+                        gtm_assessed = any(
+                            event.event_type in {"gtm_assessment_completed", "gtm_not_applicable"}
+                            for event in self.journey_events
+                        )
+                        if current_size > initial_permission_log_size and gtm_assessed:
                             break
                         self.stop.wait(0.1)
                 # Re-evaluate acceptance only after GTM's draft, specialist assessment,
