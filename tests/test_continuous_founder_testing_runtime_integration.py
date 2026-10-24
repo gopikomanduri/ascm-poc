@@ -2,7 +2,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from orchestrator.testing_agent.runtime import ContinuousFounderTestingRuntime
+from orchestrator.testing_agent.runtime import ASCMJsonRpcClient, ContinuousFounderTestingRuntime
 
 
 class FakeASCMClient:
@@ -79,3 +79,37 @@ def test_single_terminal_runtime_runs_goal_gtm_and_testing_agents_together(tmp_p
     review_path = Path(records[-1]["gtm_review_path"])
     assert "Internal GTM review" in review_path.read_text()
     assert list((tmp_path / "artifacts" / "gtm_cycles").glob("*.md"))
+
+
+
+def test_a2a_client_does_not_misparse_failed_task_error_as_agent_output():
+    class FailedTaskResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "result": {
+                    "task": {
+                        "status": {"state": "TASK_STATE_FAILED"},
+                        "artifacts": [{
+                            "name": "error",
+                            "parts": [{"text": "ASCM specialist 'product' failed: Gemini quota exhausted (402)."}],
+                        }],
+                    }
+                }
+            }
+
+    class FakeHTTPClient:
+        def post(self, url, **kwargs):
+            assert url.endswith("/a2a/jsonrpc")
+            return FailedTaskResponse()
+
+    client = ASCMJsonRpcClient("http://127.0.0.1:8090", http_client=FakeHTTPClient())
+    try:
+        client.send("product", "Return a JSON product assessment", "session-1")
+    except RuntimeError as exc:
+        assert "A2A product task failed" in str(exc)
+        assert "Gemini quota exhausted (402)" in str(exc)
+    else:
+        raise AssertionError("Failed A2A tasks must not be returned as successful agent text")
