@@ -283,7 +283,10 @@ class FounderProfile:
             return self.problem
         if any(k in q for k in ("metric", "success", "outcome", "measure", "conversion")):
             return self.success_metrics
-        return "I cannot answer that from the current simulation profile. Record it as an open question, state the assumption, and propose the cheapest experiment that could resolve it; do not fabricate a fact."
+        question_excerpt = " ".join(question.split())[:240]
+        return (f"I do not have verified information to answer this question: {question_excerpt} "
+                "Keep it unresolved rather than infer a fact. Cheapest next step: ask 5-10 target users "
+                "the same question and record their answers with permission; no result is claimed yet.")
 
     def decide_permission(self, action: str) -> dict[str, Any]:
         """Return a simulated response. This is never a real founder authorization."""
@@ -533,9 +536,16 @@ class GTMStatusAgent:
                             self.journey_events.append(JourneyEvent(
                                 "gtm_assessment_completed", "gtm_agent",
                                 evidence_ref=f"gtm-review:{request_id}",
+                                details={"status": "completed", "request_id": request_id},
                             ))
                         except Exception as exc:
                             gtm_review = f"GTM specialist unavailable: {type(exc).__name__}: {exc}"
+                            self.journey_events.append(JourneyEvent(
+                                "gtm_assessment_not_applicable", "gtm_status_agent",
+                                evidence_ref=f"gtm-review-unavailable:{request_id}",
+                                details={"status": "not_applicable", "reason": "specialist_unavailable",
+                                         "error_type": type(exc).__name__, "request_id": request_id},
+                            ))
                             if self.story_log is not None:
                                 self.story_log.record(
                                     "GTM STATUS AGENT", "GTM AGENT", "request_failed",
@@ -649,6 +659,7 @@ class ContinuousFounderTestingRuntime:
         self.last_mentor_review = ""
         self.journey_events: list[JourneyEvent] = []
         self.open_questions: list[str] = []
+        self._cached_self_healing_assessment: dict[str, Any] | None = None
 
     def _product_prompt(self, area: str) -> str:
         transcript = json.dumps(self.transcript[-24:], ensure_ascii=False)
@@ -1124,7 +1135,16 @@ class ContinuousFounderTestingRuntime:
         }
 
     def _attach_self_healing_assessment(self, report: dict[str, Any]) -> dict[str, Any]:
-        """Launch the self-healing assessment using this Testing Agent report as input."""
+        """Assess once per runtime session; final serialization must not rerun repairs."""
+        if self._cached_self_healing_assessment is not None:
+            assessment = json.loads(json.dumps(self._cached_self_healing_assessment))
+            report["self_healing_controller"] = assessment
+            report["acceptance_passed"] = (
+                report.get("acceptance_passed") is True and assessment.get("status") == "aligned"
+            )
+            if isinstance(report.get("acceptance"), dict):
+                report["acceptance"]["passed"] = report["acceptance_passed"]
+            return report
         assessment = assess_testing_results(
             report,
             self.journey_events,
@@ -1215,6 +1235,7 @@ class ContinuousFounderTestingRuntime:
                 "reason": "ASCM_CODE_REPAIR_ENABLED=0 explicitly disabled autonomous repair.",
                 "human_merge_required": True,
             }
+        self._cached_self_healing_assessment = json.loads(json.dumps(assessment))
         report["self_healing_controller"] = assessment
         # Intent drift is a product acceptance failure even if ordinary tests are green.
         report["acceptance_passed"] = (
@@ -1329,20 +1350,18 @@ class ContinuousFounderTestingRuntime:
                     "external_publishing_enabled": False,
                     "simulated_founder_only": True,
                 }
-                report = self._attach_self_healing_assessment(report)
-                atomic_json(self.report_path, report)
-                # Force a fresh status snapshot after every completed session so a
-                # finite CI run exercises the GTM permission handoff as well.
+                # Finite runs must capture parallel GTM assessment and consent-gate evidence
+                # before the acceptance evaluator snapshots the journey.
                 goal.snapshot()
                 if sessions > 0 and session_count >= sessions:
-                    # Finite CI runs must allow the parallel GTM agent to request a
-                    # simulated permission and record the response before shutdown.
                     deadline = time.monotonic() + min(5.0, max(2.0, self.poll_interval))
                     while not self.stop.is_set() and time.monotonic() < deadline:
                         current_size = permission_log.stat().st_size if permission_log.exists() else 0
                         if current_size > initial_permission_log_size:
                             break
                         self.stop.wait(0.1)
+                report = self._attach_self_healing_assessment(report)
+                atomic_json(self.report_path, report)
                 if sessions == 0 or session_count < sessions:
                     deadline = time.monotonic() + max(1.0, self.poll_interval)
                     while not self.stop.is_set() and time.monotonic() < deadline:
