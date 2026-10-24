@@ -216,11 +216,34 @@ class GeminiProvider(BaseLLMProvider):
                     return response.text.strip()
                 except self.ServerError as err:
                     last_exception = err
+                    detail = str(err).lower()
+                    # Billing, quota, authentication, and request-timeout failures are not
+                    # model-selection problems. Stop here instead of trying every candidate
+                    # model and allowing the outer A2A deadline to expire.
+                    fatal_markers = (
+                        "402", "billing", "payment", "insufficient credit",
+                        "429", "resource_exhausted", "quota",
+                        "401", "403", "api_key_invalid", "permission_denied",
+                        "timeout", "timed out", "deadline exceeded",
+                    )
+                    if any(marker in detail for marker in fatal_markers):
+                        raise RuntimeError(f"Gemini request cannot proceed: {err}") from err
+                    if attempt == 1:
+                        break
                     time.sleep(1.0 * (attempt + 1))
                 except Exception as err:
                     last_exception = err
+                    detail = str(err).lower()
+                    fatal_markers = (
+                        "402", "billing", "payment", "insufficient credit",
+                        "429", "resource_exhausted", "quota",
+                        "401", "403", "api_key_invalid", "permission_denied",
+                        "timeout", "timed out", "deadline exceeded",
+                    )
+                    if any(marker in detail for marker in fatal_markers):
+                        raise RuntimeError(f"Gemini request cannot proceed: {err}") from err
                     break
-            if last_exception and any(k in str(last_exception).lower() for k in ["401", "403", "api_key_invalid", "permission_denied"]):
+            if last_exception and any(k in str(last_exception).lower() for k in ["401", "402", "403", "429", "billing", "quota", "api_key_invalid", "permission_denied", "timeout", "timed out", "deadline exceeded"]):
                 break
         raise RuntimeError(f"All candidate Gemini models failed. Last error: {last_exception}") from last_exception
 
