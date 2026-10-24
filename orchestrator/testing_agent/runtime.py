@@ -1402,7 +1402,7 @@ class ContinuousFounderTestingRuntime:
                     # Wait for both the default-deny permission record and the GTM
                     # specialist's completed/not-applicable assessment. Provider calls are
                     # bounded by the live workflow; missing evidence still remains a failure.
-                    deadline = time.monotonic() + min(35.0, max(5.0, self.poll_interval))
+                    deadline = time.monotonic() + max(5.0, min(35.0, self.poll_interval * 7))
                     while not self.stop.is_set() and time.monotonic() < deadline:
                         current_size = permission_log.stat().st_size if permission_log.exists() else 0
                         gtm_assessed = any(
