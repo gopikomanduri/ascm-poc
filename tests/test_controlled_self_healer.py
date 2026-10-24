@@ -247,12 +247,12 @@ def test_corrupt_retry_ledger_fails_closed(tmp_path):
     assert _claim_attempt(tmp_path, "finding-123") is False
 
 
-def test_repair_ledger_allows_only_bounded_repeat_sessions(tmp_path):
+def test_repair_ledger_allows_one_bounded_session_per_finding(tmp_path):
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
     key = "finding-bounded"
     assert _claim_attempt(tmp_path, key) is True
-    assert _claim_attempt(tmp_path, key) is True
-    assert _claim_attempt(tmp_path, key) is True
+    # The repair session itself owns the three verifier-driven proposals.
+    # A duplicate assessment must not start a second session for the same finding.
     assert _claim_attempt(tmp_path, key) is False
 
 
