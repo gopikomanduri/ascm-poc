@@ -165,13 +165,10 @@ class LLMInteractionLayer:
         }
 
 
-_DEFAULT_LAYER = LLMInteractionLayer()
-
-
 def provider_for_agent(agent_name: str, tier: str = "primary", model: Optional[str] = None) -> BaseLLMProvider:
-    """Compatibility-friendly entry point for agent constructors."""
-    return _DEFAULT_LAYER.provider_for_agent(agent_name, tier=tier, model=model)
+    """Compatibility-friendly entry point for agent constructors; reads current environment."""
+    return LLMInteractionLayer().provider_for_agent(agent_name, tier=tier, model=model)
 
 
 def resolve_route(agent_name: str, tier: str = "primary", model: Optional[str] = None) -> dict[str, str]:
-    return _DEFAULT_LAYER.describe_route(agent_name, tier=tier, model=model)
+    return LLMInteractionLayer().describe_route(agent_name, tier=tier, model=model)
