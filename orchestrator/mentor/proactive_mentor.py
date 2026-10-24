@@ -69,7 +69,8 @@ class ASCMProactiveMentor:
             if not gate.check("gemini", "analyse your stated goal", "your goal text and repository name"):
                 raise PermissionError("no consent to send the goal to a cloud model; using deterministic guidance")
             from google import genai
-            client = genai.Client()
+            timeout_ms = int(float(os.getenv("GEMINI_TIMEOUT_SEC", "120")) * 1000)
+            client = genai.Client(http_options={"timeout": timeout_ms})
             model_name = os.getenv("GEMINI_MODEL") or os.getenv("LLM_MODEL") or "gemini-3.5-flash-lite"
             resp = client.models.generate_content(
                 model=model_name,
