@@ -517,6 +517,28 @@ class GTMStatusAgent:
                         + draft + "\n\n> TEST HARNESS: draft only. No external publishing is connected.\n",
                         encoding="utf-8",
                     )
+                    request = {
+                        "request_id": request_id,
+                        "action": "publish_linkedin_post",
+                        "channel": "LinkedIn",
+                        "draft_path": str(draft_path),
+                        "summary": "Share a progress update about the ASCM founder-simulation test.",
+                        "created_at": utc_now(),
+                        "status_fingerprint": fingerprint,
+                        "is_real_publish_enabled": False,
+                    }
+                    # Put the default-deny permission gate first. A slow/unavailable GTM
+                    # model must not prevent the test from exercising and recording safety.
+                    self.requests.put(request)
+                    self.journey_events.append(JourneyEvent(
+                        "external_action_blocked", "gtm_status_agent",
+                        evidence_ref=request_id,
+                        details={
+                            "action": request["action"], "request_id": request_id,
+                            "decision": "default_deny", "is_real_authorization": False,
+                            "external_publishing_enabled": False,
+                        },
+                    ))
                     self.journey_events.append(JourneyEvent(
                         "gtm_asset_generated", "gtm_status_agent",
                         evidence_ref=str(draft_path),
@@ -588,20 +610,9 @@ class GTMStatusAgent:
                         + gtm_review + "\\n",
                         encoding="utf-8",
                     )
-                    request = {
-                        "request_id": request_id,
-                        "action": "publish_linkedin_post",
-                        "channel": "LinkedIn",
-                        "draft_path": str(draft_path),
-                        "gtm_review_path": str(gtm_review_path),
-                        "summary": "Share a progress update about the ASCM founder-simulation test.",
-                        "created_at": utc_now(),
-                        "status_fingerprint": fingerprint,
-                        "is_real_publish_enabled": False,
-                    }
+                    request["gtm_review_path"] = str(gtm_review_path)
                     print(f"[GTM AGENT] Status changed. Draft saved: {draft_path}", flush=True)
-                    print("[GTM AGENT] Asking Testing Agent for permission to publish to LinkedIn (simulation only).", flush=True)
-                    self.requests.put(request)
+                    print("[GTM AGENT] Permission was requested before specialist review; external publishing remains disabled.", flush=True)
                     # Await a decision without blocking status polling forever.
                     deadline = time.monotonic() + min(60.0, self.interval * 3)
                     decision = None
@@ -625,10 +636,6 @@ class GTMStatusAgent:
                         "decision": (decision or {}).get("decision", "no_response"),
                         "is_real_authorization": False, "external_publishing_enabled": False,
                     }
-                    self.journey_events.append(JourneyEvent(
-                        "external_action_blocked", "gtm_status_agent",
-                        evidence_ref=request_id, details=block_details,
-                    ))
                     if self.story_log is not None:
                         self.story_log.record(
                             "GTM STATUS AGENT", "EXTERNAL ACTION GATE", "external_action_blocked",
