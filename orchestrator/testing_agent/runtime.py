@@ -1189,12 +1189,33 @@ class ContinuousFounderTestingRuntime:
             workspace=self.workspace,
         )
         repair_enabled = os.getenv("ASCM_CODE_REPAIR_ENABLED", "1") == "1"
+        failure_text = " ".join(
+            str(item) for item in report.get("open_findings", [])
+        ).lower()
+        provider_unavailable = any(marker in failure_text for marker in (
+            "handoff deadline exceeded", "gemini request cannot proceed",
+            "402", "billing", "insufficient credit", "resource_exhausted",
+            "quota", "timed out", "timeout", "could not connect to ollama",
+            "failed to communicate with", "api key",
+        ))
         if repair_enabled and assessment.get("status") == "blocked_p0":
             assessment["code_repair"] = {
                 "status": "blocked_p0",
                 "reason": "P0 consent/security finding: stop and escalate; automatic code repair is prohibited.",
                 "human_merge_required": True,
             }
+        elif repair_enabled and assessment.get("status") == "remediation_required" and provider_unavailable:
+            # Provider outages, quota exhaustion and handoff timeouts are infrastructure
+            # failures, not source-code findings. Do not invoke the coder three more times
+            # against the same unavailable provider; preserve evidence and ask for recovery.
+            assessment["code_repair"] = {
+                "status": "blocked_provider_unavailable",
+                "reason": "A2A/LLM provider failure detected. Restore provider availability and rerun the live test before attempting code repair.",
+                "human_merge_required": True,
+            }
+            assessment["repair_status"] = "blocked_provider_unavailable"
+            assessment["repair_verified"] = False
+            assessment["repair_attempts_used"] = 0
         elif repair_enabled and assessment.get("status") == "remediation_required":
             # One finding per report; the repair runner allows up to three verifier-driven iterations in one isolated worktree.
             candidate = next((item for item in assessment.get("findings", []) if item.get("severity") != "P0"), None)
