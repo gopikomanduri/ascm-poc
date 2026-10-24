@@ -249,7 +249,10 @@ class ASCMGatewayExecutor(AgentExecutor):
                 agent_id: (lambda handoff, selected=agent_id: {"answer": _run_specialist(selected, handoff.goal)})
                 for agent_id in AGENT_ALIASES
             }
-            coordinator = A2ACoordinator(handlers=handlers, max_attempts=2)
+            # Each specialist/provider owns its bounded retry policy. Retrying the entire
+            # handler can duplicate expensive LLM calls and hold an A2A task open
+            # until the outer deadline, so one dispatch is the safe default.
+            coordinator = A2ACoordinator(handlers=handlers, max_attempts=1)
         self.coordinator = coordinator
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
@@ -281,7 +284,7 @@ class ASCMGatewayExecutor(AgentExecutor):
                 correlation_id=context_id,
             )
             coordinated = await __import__("asyncio").to_thread(
-                self.coordinator.dispatch, handoff, timeout_seconds=120.0
+                self.coordinator.dispatch, handoff, timeout_seconds=90.0
             )
             answer = coordinated["answer"]
         except Exception as exc:
