@@ -1350,6 +1350,9 @@ class ContinuousFounderTestingRuntime:
                     "external_publishing_enabled": False,
                     "simulated_founder_only": True,
                 }
+                # Publish the current round before asking Goal/GTM agents to snapshot
+                # status; otherwise they can read a missing/stale report and report 0 rounds.
+                atomic_json(self.report_path, report)
                 # Finite runs must capture parallel GTM assessment and consent-gate evidence
                 # before the acceptance evaluator snapshots the journey.
                 goal.snapshot()
