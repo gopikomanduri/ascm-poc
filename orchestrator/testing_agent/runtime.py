@@ -659,7 +659,6 @@ class ContinuousFounderTestingRuntime:
         self.last_mentor_review = ""
         self.journey_events: list[JourneyEvent] = []
         self.open_questions: list[str] = []
-        self._cached_self_healing_assessment: dict[str, Any] | None = None
 
     def _product_prompt(self, area: str) -> str:
         transcript = json.dumps(self.transcript[-24:], ensure_ascii=False)
@@ -1145,16 +1144,7 @@ class ContinuousFounderTestingRuntime:
         }
 
     def _attach_self_healing_assessment(self, report: dict[str, Any]) -> dict[str, Any]:
-        """Assess once per runtime session; final serialization must not rerun repairs."""
-        if self._cached_self_healing_assessment is not None:
-            assessment = json.loads(json.dumps(self._cached_self_healing_assessment))
-            report["self_healing_controller"] = assessment
-            report["acceptance_passed"] = (
-                report.get("acceptance_passed") is True and assessment.get("status") == "aligned"
-            )
-            if isinstance(report.get("acceptance"), dict):
-                report["acceptance"]["passed"] = report["acceptance_passed"]
-            return report
+        """Assess one completed report; the caller avoids duplicate finalization."""
         assessment = assess_testing_results(
             report,
             self.journey_events,
@@ -1245,7 +1235,6 @@ class ContinuousFounderTestingRuntime:
                 "reason": "ASCM_CODE_REPAIR_ENABLED=0 explicitly disabled autonomous repair.",
                 "human_merge_required": True,
             }
-        self._cached_self_healing_assessment = json.loads(json.dumps(assessment))
         report["self_healing_controller"] = assessment
         # Intent drift is a product acceptance failure even if ordinary tests are green.
         report["acceptance_passed"] = (
@@ -1408,8 +1397,16 @@ class ContinuousFounderTestingRuntime:
                 "external_publishing_enabled": False,
                 "simulated_founder_only": True,
             }
-            report = self._attach_self_healing_assessment(report)
-            atomic_json(self.report_path, report)
+            previous_report = read_json(self.report_path, None)
+            if (isinstance(previous_report, dict)
+                    and previous_report.get("session_id") == self.session_id
+                    and previous_report.get("sessions_completed", 0) >= session_count):
+                # The last completed loop iteration already ran the assessment and
+                # wrote the report. Reuse it instead of consuming repair budget twice.
+                report = previous_report
+            else:
+                report = self._attach_self_healing_assessment(report)
+                atomic_json(self.report_path, report)
             print(f"[TESTING AGENT] Report written to {self.report_path}", flush=True)
         return report
 
