@@ -22,6 +22,10 @@ jobs:
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Fail quickly and explicitly when the provider is unavailable; don't spend
+      # the whole live-test window cycling models or retrying a billing/quota error.
+      GEMINI_TIMEOUT_SEC: "30"
+      ASCM_LLM_RETRIES: "0"
       PYTHONUNBUFFERED: "1"
     steps:
       - name: Checkout test branch
