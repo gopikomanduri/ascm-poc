@@ -94,3 +94,12 @@ def test_handler_returning_after_deadline_is_timed_out():
     with pytest.raises(HandoffError, match="deadline exceeded"):
         coordinator.dispatch(task, timeout_seconds=0.01)
     assert task.status is HandoffStatus.TIMED_OUT
+
+
+def test_handler_failure_preserves_concise_provider_cause():
+    coordinator = A2ACoordinator(
+        handlers={"product": lambda task: (_ for _ in ()).throw(RuntimeError("Gemini quota exhausted (402)"))},
+        max_attempts=1,
+    )
+    with pytest.raises(HandoffError, match="Gemini quota exhausted"):
+        coordinator.dispatch(envelope())

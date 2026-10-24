@@ -1,0 +1,126 @@
+name: ASCM Testing Agent Live Validation
+
+on:
+  push:
+    branches:
+      - feat/testing-agent-live-validation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ascm-testing-agent-live-validation
+  # New branch commits supersede stale live sessions; don't burn model calls
+  # validating an obsolete SHA while the latest acceptance run sits queued.
+  cancel-in-progress: true
+
+jobs:
+  live-founder-simulation:
+    name: Live Testing Agent (A2A + Mentor + Goal + GTM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Fail quickly and explicitly when the provider is unavailable; don't spend
+      # the whole live-test window cycling models or retrying a billing/quota error.
+      GEMINI_TIMEOUT_SEC: "30"
+      ASCM_LLM_RETRIES: "0"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout test branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ASCM dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run bounded live Testing Agent session
+        id: live_run
+        env:
+          PYTHONPATH: .
+          ASCM_CODE_REPAIR_OPEN_PR: "0"
+        run: |
+          python -m orchestrator.testing_agent.runtime \
+            --workspace . \
+            --sessions 1 \
+            --rounds-per-session 4 \
+            --review-delay 0
+
+      - name: Validate report and print objective evidence
+        if: always()
+        env:
+          PYTHONPATH: .
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path(".ascm_history/testing_agent_report.json")
+          if not path.is_file():
+              print("FAIL: Testing Agent did not produce testing_agent_report.json")
+              raise SystemExit(1)
+
+          report = json.loads(path.read_text(encoding="utf-8"))
+          checks = {
+              "one session completed": report.get("sessions_completed", 0) >= 1,
+              "at least one product round completed": report.get("rounds_completed", 0) >= 1,
+              "at least one real Mentor review completed": report.get("mentor_reviews_completed", 0) >= 1,
+              "simulation safety acceptance passed": report.get("simulation_acceptance_passed") is True,
+              "full journey remains honest about missing customer outcomes": (
+                  report.get("acceptance_passed") is True
+                  or any(
+                      item.get("criterion") == "verified_outcome_learning"
+                      and item.get("status") == "not_tested"
+                      for item in report.get("acceptance", {}).get("criteria", [])
+                  )
+              ),
+              "self-healing assessment recorded": isinstance(report.get("self_healing_controller"), dict),
+          }
+          print(json.dumps({
+              "session_id": report.get("session_id"),
+              "sessions_completed": report.get("sessions_completed"),
+              "rounds_completed": report.get("rounds_completed"),
+              "questions_asked": report.get("questions_asked"),
+              "mentor_reviews_completed": report.get("mentor_reviews_completed"),
+              "self_healing": report.get("self_healing"),
+              "self_healing_controller": report.get("self_healing_controller"),
+              "acceptance": report.get("acceptance"),
+              "acceptance_passed": report.get("acceptance_passed"),
+              "simulation_acceptance_passed": report.get("simulation_acceptance_passed"),
+              "checks": checks,
+          }, indent=2, ensure_ascii=False))
+          failed = [name for name, passed in checks.items() if not passed]
+          if failed:
+              print("FAILED CHECKS: " + "; ".join(failed))
+              raise SystemExit(1)
+          print("PASS: live Testing Agent acceptance checks passed.")
+          PY
+
+      - name: Upload Testing Agent evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascm-testing-agent-live-evidence
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            .ascm_history/testing_agent_report.json
+            .ascm_history/testing_agent_status.json
+            .ascm_history/conversation_story.log
+            .ascm_history/conversation_story.jsonl
+            .ascm_history/gtm_permission_requests.jsonl
+            .ascm_history/gtm_outcomes.json
+            .ascm_history/founder_actions.jsonl
+            .ascm_history/founder_action_events.jsonl
+            .ascm_history/testing_agent_a2a.log
+            .ascm_history/agent_terminals/*.log

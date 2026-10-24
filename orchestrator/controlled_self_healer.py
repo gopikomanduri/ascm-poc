@@ -58,6 +58,9 @@ def _claim_attempt(root: Path, key: str) -> bool:
     if not isinstance(data, dict):
         return False
     attempts = data.get(key, [])
+    # One ledger claim represents one bounded repair session; that session runs
+    # up to MAX_REPAIR_ATTEMPTS verifier-driven proposals in its isolated worktree.
+    # A second claim for the same finding must fail closed.
     if not isinstance(attempts, list) or len(attempts) >= 1:
         return False
     attempts.append({"started_at": _now(), "status": "started"})

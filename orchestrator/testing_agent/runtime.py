@@ -283,7 +283,10 @@ class FounderProfile:
             return self.problem
         if any(k in q for k in ("metric", "success", "outcome", "measure", "conversion")):
             return self.success_metrics
-        return "I cannot answer that from the current simulation profile. Record it as an open question, state the assumption, and propose the cheapest experiment that could resolve it; do not fabricate a fact."
+        question_excerpt = " ".join(question.split())[:240]
+        return (f"I do not have verified information to answer this question: {question_excerpt} "
+                "Keep it unresolved rather than infer a fact. Cheapest next step: ask 5-10 target users "
+                "the same question and record their answers with permission; no result is claimed yet.")
 
     def decide_permission(self, action: str) -> dict[str, Any]:
         """Return a simulated response. This is never a real founder authorization."""
@@ -354,14 +357,40 @@ class ASCMJsonRpcClient:
             raise RuntimeError(f"A2A {agent_id} request failed: {body['error']}")
         result = body.get("result", {})
         task = result.get("task", result) if isinstance(result, dict) else result
+        if not isinstance(task, dict):
+            raise RuntimeError(f"A2A {agent_id} response did not contain a task object.")
+
+        # A failed A2A task carries an error artifact as ordinary text. Never pass that
+        # transport error to a specialist-specific parser as though it were an LLM answer.
+        status = task.get("status", {})
+        state = status.get("state", "") if isinstance(status, dict) else ""
+        state_text = str(state).lower()
+        artifacts = task.get("artifacts", [])
+        error_artifacts = [
+            artifact for artifact in artifacts
+            if isinstance(artifact, dict) and str(artifact.get("name", "")).lower() == "error"
+        ]
+        if any(marker in state_text for marker in ("failed", "canceled", "rejected")) or error_artifacts:
+            error_text = self._collect_text(error_artifacts or artifacts)
+            detail = error_text[-1].strip() if error_text else f"task state={state!r}"
+            raise RuntimeError(f"A2A {agent_id} task failed: {detail}")
+
         # Task history contains the founder's prompt as well as the agent's reply.
-        # Prefer the response artifacts explicitly so we never answer with our own prompt.
-        artifacts = task.get("artifacts", []) if isinstance(task, dict) else []
-        texts = self._collect_text(artifacts)
+        # Prefer named response artifacts, and never treat an error artifact as success.
+        response_artifacts = [
+            artifact for artifact in artifacts
+            if isinstance(artifact, dict)
+            and str(artifact.get("name", "")).lower() != "error"
+        ]
+        named_responses = [
+            artifact for artifact in response_artifacts
+            if str(artifact.get("name", "")).lower().endswith("-response")
+        ]
+        texts = self._collect_text(named_responses or response_artifacts)
         if not texts:
-            texts = self._collect_text(task)
+            texts = self._collect_text(task.get("status", {}))
         if not texts:
-            raise RuntimeError(f"A2A {agent_id} response contained no text artifact.")
+            raise RuntimeError(f"A2A {agent_id} response contained no text response artifact.")
         return texts[-1].strip()
 
 
@@ -462,7 +491,12 @@ class GTMStatusAgent:
     def run(self) -> None:
         while not self.stop.is_set():
             status = read_json(self.status_path, {})
-            if status and int(status.get("testing_rounds", 0) or 0) > 0:
+            # A completed simulation session still needs a GTM status/permission
+            # assessment even if Product Agent failed before completing a round.
+            if status and (
+                int(status.get("testing_rounds", 0) or 0) > 0
+                or int(status.get("sessions_completed", 0) or 0) > 0
+            ):
                 # Keep checking every poll, but request a social approval only once per
                 # repository commit. Test-round counters are deliberately not triggers.
                 fingerprint = self.status_fingerprint(status)
@@ -483,6 +517,28 @@ class GTMStatusAgent:
                         + draft + "\n\n> TEST HARNESS: draft only. No external publishing is connected.\n",
                         encoding="utf-8",
                     )
+                    request = {
+                        "request_id": request_id,
+                        "action": "publish_linkedin_post",
+                        "channel": "LinkedIn",
+                        "draft_path": str(draft_path),
+                        "summary": "Share a progress update about the ASCM founder-simulation test.",
+                        "created_at": utc_now(),
+                        "status_fingerprint": fingerprint,
+                        "is_real_publish_enabled": False,
+                    }
+                    # Put the default-deny permission gate first. A slow/unavailable GTM
+                    # model must not prevent the test from exercising and recording safety.
+                    self.requests.put(request)
+                    self.journey_events.append(JourneyEvent(
+                        "external_action_blocked", "gtm_status_agent",
+                        evidence_ref=request_id,
+                        details={
+                            "action": request["action"], "request_id": request_id,
+                            "decision": "default_deny", "is_real_authorization": False,
+                            "external_publishing_enabled": False,
+                        },
+                    ))
                     self.journey_events.append(JourneyEvent(
                         "gtm_asset_generated", "gtm_status_agent",
                         evidence_ref=str(draft_path),
@@ -533,9 +589,16 @@ class GTMStatusAgent:
                             self.journey_events.append(JourneyEvent(
                                 "gtm_assessment_completed", "gtm_agent",
                                 evidence_ref=f"gtm-review:{request_id}",
+                                details={"status": "completed", "request_id": request_id},
                             ))
                         except Exception as exc:
                             gtm_review = f"GTM specialist unavailable: {type(exc).__name__}: {exc}"
+                            self.journey_events.append(JourneyEvent(
+                                "gtm_not_applicable", "gtm_status_agent",
+                                evidence_ref=f"gtm-review-unavailable:{request_id}",
+                                details={"status": "not_applicable", "reason": "specialist_unavailable",
+                                         "error_type": type(exc).__name__, "request_id": request_id},
+                            ))
                             if self.story_log is not None:
                                 self.story_log.record(
                                     "GTM STATUS AGENT", "GTM AGENT", "request_failed",
@@ -547,20 +610,9 @@ class GTMStatusAgent:
                         + gtm_review + "\\n",
                         encoding="utf-8",
                     )
-                    request = {
-                        "request_id": request_id,
-                        "action": "publish_linkedin_post",
-                        "channel": "LinkedIn",
-                        "draft_path": str(draft_path),
-                        "gtm_review_path": str(gtm_review_path),
-                        "summary": "Share a progress update about the ASCM founder-simulation test.",
-                        "created_at": utc_now(),
-                        "status_fingerprint": fingerprint,
-                        "is_real_publish_enabled": False,
-                    }
+                    request["gtm_review_path"] = str(gtm_review_path)
                     print(f"[GTM AGENT] Status changed. Draft saved: {draft_path}", flush=True)
-                    print("[GTM AGENT] Asking Testing Agent for permission to publish to LinkedIn (simulation only).", flush=True)
-                    self.requests.put(request)
+                    print("[GTM AGENT] Permission was requested before specialist review; external publishing remains disabled.", flush=True)
                     # Await a decision without blocking status polling forever.
                     deadline = time.monotonic() + min(60.0, self.interval * 3)
                     decision = None
@@ -584,10 +636,6 @@ class GTMStatusAgent:
                         "decision": (decision or {}).get("decision", "no_response"),
                         "is_real_authorization": False, "external_publishing_enabled": False,
                     }
-                    self.journey_events.append(JourneyEvent(
-                        "external_action_blocked", "gtm_status_agent",
-                        evidence_ref=request_id, details=block_details,
-                    ))
                     if self.story_log is not None:
                         self.story_log.record(
                             "GTM STATUS AGENT", "EXTERNAL ACTION GATE", "external_action_blocked",
@@ -1113,8 +1161,18 @@ class ContinuousFounderTestingRuntime:
              "evidence": list(finding.evidence), "message": finding.message}
             for finding in evaluation.findings
         ]
+        simulation_passed = all(
+            finding.passed or (
+                finding.criterion == "verified_outcome_learning" and finding.status == "not_tested"
+            )
+            for finding in evaluation.findings
+        ) and not self.findings
         return {
+            # Full journey acceptance remains false until real verified customer
+            # outcome evidence exists. Simulation acceptance measures the gates the
+            # harness can actually exercise without fabricating customer outcomes.
             "passed": evaluation.passed and not self.findings,
+            "simulation_passed": simulation_passed,
             "criteria": criteria,
             "runtime_findings": list(self.findings),
             "verified_outcome_counts": evaluation.verified_outcome_counts,
@@ -1124,19 +1182,40 @@ class ContinuousFounderTestingRuntime:
         }
 
     def _attach_self_healing_assessment(self, report: dict[str, Any]) -> dict[str, Any]:
-        """Launch the self-healing assessment using this Testing Agent report as input."""
+        """Assess one completed report; the caller avoids duplicate finalization."""
         assessment = assess_testing_results(
             report,
             self.journey_events,
             workspace=self.workspace,
         )
         repair_enabled = os.getenv("ASCM_CODE_REPAIR_ENABLED", "1") == "1"
+        failure_text = " ".join(
+            str(item) for item in report.get("open_findings", [])
+        ).lower()
+        provider_unavailable = any(marker in failure_text for marker in (
+            "handoff deadline exceeded", "gemini request cannot proceed",
+            "402", "billing", "insufficient credit", "resource_exhausted",
+            "quota", "timed out", "timeout", "could not connect to ollama",
+            "failed to communicate with", "api key",
+        ))
         if repair_enabled and assessment.get("status") == "blocked_p0":
             assessment["code_repair"] = {
                 "status": "blocked_p0",
                 "reason": "P0 consent/security finding: stop and escalate; automatic code repair is prohibited.",
                 "human_merge_required": True,
             }
+        elif repair_enabled and assessment.get("status") == "remediation_required" and provider_unavailable:
+            # Provider outages, quota exhaustion and handoff timeouts are infrastructure
+            # failures, not source-code findings. Do not invoke the coder three more times
+            # against the same unavailable provider; preserve evidence and ask for recovery.
+            assessment["code_repair"] = {
+                "status": "blocked_provider_unavailable",
+                "reason": "A2A/LLM provider failure detected. Restore provider availability and rerun the live test before attempting code repair.",
+                "human_merge_required": True,
+            }
+            assessment["repair_status"] = "blocked_provider_unavailable"
+            assessment["repair_verified"] = False
+            assessment["repair_attempts_used"] = 0
         elif repair_enabled and assessment.get("status") == "remediation_required":
             # One finding per report; the repair runner allows up to three verifier-driven iterations in one isolated worktree.
             candidate = next((item for item in assessment.get("findings", []) if item.get("severity") != "P0"), None)
@@ -1299,7 +1378,11 @@ class ContinuousFounderTestingRuntime:
                 ))
                 previous_rounds = self.rounds_completed
                 result = self.run_product_session(focus)
-                if self.rounds_completed > previous_rounds and not self.stop.is_set():
+                # Mentor is an independent specialist: still ask it to review the
+                # explicit founder goal when Product Agent fails, while keeping product
+                # round acceptance false. This prevents one broken handoff from silently
+                # suppressing all other specialist evidence.
+                if not self.stop.is_set():
                     self.run_mentor_review(focus)
                 session_count += 1
                 self._answer_permission_requests()
@@ -1322,6 +1405,7 @@ class ContinuousFounderTestingRuntime:
                     "last_mentor_review": self.last_mentor_review,
                     "acceptance": self._acceptance_summary(),
                     "acceptance_passed": self._acceptance_summary()["passed"],
+                    "simulation_acceptance_passed": self._acceptance_summary()["simulation_passed"],
                     "last_focus": focus,
                     "last_product_result": result,
                     "open_findings": list(self.findings),
@@ -1329,20 +1413,35 @@ class ContinuousFounderTestingRuntime:
                     "external_publishing_enabled": False,
                     "simulated_founder_only": True,
                 }
-                report = self._attach_self_healing_assessment(report)
+                # Publish the current round before asking Goal/GTM agents to snapshot
+                # status; otherwise they can read a missing/stale report and report 0 rounds.
                 atomic_json(self.report_path, report)
-                # Force a fresh status snapshot after every completed session so a
-                # finite CI run exercises the GTM permission handoff as well.
+                # Finite runs must capture parallel GTM assessment and consent-gate evidence
+                # before the acceptance evaluator snapshots the journey.
                 goal.snapshot()
                 if sessions > 0 and session_count >= sessions:
-                    # Finite CI runs must allow the parallel GTM agent to request a
-                    # simulated permission and record the response before shutdown.
-                    deadline = time.monotonic() + min(5.0, max(2.0, self.poll_interval))
+                    # Wait for both the default-deny permission record and the GTM
+                    # specialist's completed/not-applicable assessment. Provider calls are
+                    # bounded by the live workflow; missing evidence still remains a failure.
+                    deadline = time.monotonic() + max(5.0, min(35.0, self.poll_interval * 7))
                     while not self.stop.is_set() and time.monotonic() < deadline:
                         current_size = permission_log.stat().st_size if permission_log.exists() else 0
-                        if current_size > initial_permission_log_size:
+                        gtm_assessed = any(
+                            event.event_type in {"gtm_assessment_completed", "gtm_not_applicable"}
+                            for event in self.journey_events
+                        )
+                        if current_size > initial_permission_log_size and gtm_assessed:
                             break
                         self.stop.wait(0.1)
+                # Re-evaluate acceptance only after GTM's draft, specialist assessment,
+                # and permission decision have had time to enter the shared journey ledger.
+                report["acceptance"] = self._acceptance_summary()
+                report["acceptance_passed"] = report["acceptance"]["passed"]
+                report["simulation_acceptance_passed"] = report["acceptance"]["simulation_passed"]
+                report = self._attach_self_healing_assessment(report)
+                atomic_json(self.report_path, report)
+                # Publish the final assessment to Goal Agent's status snapshot as well.
+                goal.snapshot()
                 if sessions == 0 or session_count < sessions:
                     deadline = time.monotonic() + max(1.0, self.poll_interval)
                     while not self.stop.is_set() and time.monotonic() < deadline:
@@ -1372,13 +1471,22 @@ class ContinuousFounderTestingRuntime:
                 "last_mentor_review": self.last_mentor_review,
                 "acceptance": self._acceptance_summary(),
                 "acceptance_passed": self._acceptance_summary()["passed"],
+                "simulation_acceptance_passed": self._acceptance_summary()["simulation_passed"],
                 "open_findings": list(self.findings),
                 "open_questions": list(dict.fromkeys(self.open_questions)),
                 "external_publishing_enabled": False,
                 "simulated_founder_only": True,
             }
-            report = self._attach_self_healing_assessment(report)
-            atomic_json(self.report_path, report)
+            previous_report = read_json(self.report_path, None)
+            if (isinstance(previous_report, dict)
+                    and previous_report.get("session_id") == self.session_id
+                    and previous_report.get("sessions_completed", 0) >= session_count):
+                # The last completed loop iteration already ran the assessment and
+                # wrote the report. Reuse it instead of consuming repair budget twice.
+                report = previous_report
+            else:
+                report = self._attach_self_healing_assessment(report)
+                atomic_json(self.report_path, report)
             print(f"[TESTING AGENT] Report written to {self.report_path}", flush=True)
         return report
 
