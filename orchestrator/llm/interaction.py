@@ -105,13 +105,14 @@ class LLMInteractionLayer:
 
     def resolve(self, agent_name: str, tier: str = "primary", model: Optional[str] = None) -> ModelRoute:
         task = self.infer_task(agent_name)
+        # Apply broad defaults first and agent-specific routes last so specificity wins.
         candidates = (
-            agent_name,
-            _normalise(agent_name),
-            task,
-            _TASK_ALIASES.get(task, ""),
-            tier,
             "default",
+            tier,
+            _TASK_ALIASES.get(task, ""),
+            task,
+            _normalise(agent_name),
+            agent_name,
         )
         selected: dict[str, Any] = {}
         for key in candidates:
