@@ -58,8 +58,11 @@ def _claim_attempt(root: Path, key: str) -> bool:
     if not isinstance(data, dict):
         return False
     attempts = data.get(key, [])
-    if not isinstance(attempts, list) or len(attempts) >= 1:
+    if not isinstance(attempts, list) or len(attempts) >= MAX_REPAIR_ATTEMPTS:
         return False
+    # Count bounded repair sessions across invocations. Each session itself may
+    # perform up to MAX_REPAIR_ATTEMPTS verifier-driven patch proposals in an
+    # isolated worktree; the outer ledger prevents unbounded repeat invocations.
     attempts.append({"started_at": _now(), "status": "started"})
     data[key] = attempts
     tmp = path.with_suffix(".tmp")
