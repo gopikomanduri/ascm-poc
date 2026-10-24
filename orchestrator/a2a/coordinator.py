@@ -124,4 +124,12 @@ class A2ACoordinator:
                     continue
         envelope.transition(HandoffStatus.FAILED, error_code=type(last_error).__name__ if last_error else "handler_failed")
         self._audit(envelope, "failed", attempts=self.max_attempts, error_code=envelope.error_code)
-        raise HandoffError(f"A2A handoff failed after {self.max_attempts} attempt(s).") from last_error
+        # Preserve a concise provider/handler cause in the A2A error artifact so
+        # callers can distinguish invalid model output from a provider outage.
+        cause = (
+            f"{type(last_error).__name__}: {str(last_error)[:500]}"
+            if last_error is not None else "unknown handler error"
+        )
+        raise HandoffError(
+            f"A2A handoff failed after {self.max_attempts} attempt(s): {cause}"
+        ) from last_error
