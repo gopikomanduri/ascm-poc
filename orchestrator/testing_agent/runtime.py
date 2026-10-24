@@ -1363,8 +1363,15 @@ class ContinuousFounderTestingRuntime:
                         if current_size > initial_permission_log_size:
                             break
                         self.stop.wait(0.1)
+                # Re-evaluate acceptance only after GTM's draft, specialist assessment,
+                # and permission decision have had time to enter the shared journey ledger.
+                report["acceptance"] = self._acceptance_summary()
+                report["acceptance_passed"] = report["acceptance"]["passed"]
+                report["simulation_acceptance_passed"] = report["acceptance"]["simulation_passed"]
                 report = self._attach_self_healing_assessment(report)
                 atomic_json(self.report_path, report)
+                # Publish the final assessment to Goal Agent's status snapshot as well.
+                goal.snapshot()
                 if sessions == 0 or session_count < sessions:
                     deadline = time.monotonic() + max(1.0, self.poll_interval)
                     while not self.stop.is_set() and time.monotonic() < deadline:
