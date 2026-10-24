@@ -22,7 +22,7 @@ class FakeASCMClient:
         return self.responses.pop(0)
 
 
-def test_single_terminal_runtime_runs_goal_gtm_and_testing_agents_together(tmp_path):
+def test_single_terminal_runtime_runs_goal_gtm_and_testing_agents_together(tmp_path, monkeypatch):
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "ASCM Test"], cwd=tmp_path, check=True)
@@ -36,6 +36,9 @@ def test_single_terminal_runtime_runs_goal_gtm_and_testing_agents_together(tmp_p
     subprocess.run(["git", "add", "README.md", "docs/ASCM_INTENT_CONTRACT.md"], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-m", "test milestone"], cwd=tmp_path, check=True, capture_output=True)
 
+    # This integration test validates orchestration with a deterministic fake A2A
+    # client. Controlled code repair is exercised by dedicated self-healer tests.
+    monkeypatch.setenv("ASCM_CODE_REPAIR_ENABLED", "0")
     client = FakeASCMClient([json.dumps({
         "detected_domain": "software engineering",
         "confidence_score": 0.95,
@@ -69,7 +72,7 @@ def test_single_terminal_runtime_runs_goal_gtm_and_testing_agents_together(tmp_p
     criteria = {item["criterion"]: item for item in report["acceptance"]["criteria"]}
     assert criteria["mentor_goal_context"]["passed"] is True
     assert criteria["gtm_proposal_distinguished_from_outcome"]["passed"] is True
-    assert criteria["explicit_action_scoped_consent"]["status"] == "partial"
+    assert criteria["explicit_action_scoped_consent"]["status"] == "passed"
     assert criteria["verified_outcome_learning"]["status"] == "not_tested"
     assert report["acceptance"]["generated_asset_count"] == 1
     assert client.gtm_calls, "GTM Status Agent must consult the actual GTM A2A specialist"
