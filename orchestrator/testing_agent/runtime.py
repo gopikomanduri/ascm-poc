@@ -541,7 +541,7 @@ class GTMStatusAgent:
                         except Exception as exc:
                             gtm_review = f"GTM specialist unavailable: {type(exc).__name__}: {exc}"
                             self.journey_events.append(JourneyEvent(
-                                "gtm_assessment_not_applicable", "gtm_status_agent",
+                                "gtm_not_applicable", "gtm_status_agent",
                                 evidence_ref=f"gtm-review-unavailable:{request_id}",
                                 details={"status": "not_applicable", "reason": "specialist_unavailable",
                                          "error_type": type(exc).__name__, "request_id": request_id},
