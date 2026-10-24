@@ -633,7 +633,13 @@ class BaseAgent:
         )
         self.tier = tier
         agent_name = self.__class__.__name__
-        self.provider = provider or get_configured_provider(tier=self.tier, agent_name=agent_name, model=model)
+        if provider is not None:
+            self.provider = provider
+        else:
+            # Keep model/provider selection outside individual agents so deployments can
+            # route different tasks to different local or hosted models independently.
+            from orchestrator.llm.interaction import provider_for_agent
+            self.provider = provider_for_agent(agent_name, tier=self.tier, model=model)
         self.provider_name = str(getattr(self.provider, "provider_name", "unknown"))
         raw_m = getattr(self.provider, "model", "default")
         self.model_name = "mock-model" if (hasattr(raw_m, "_mock_return_value") or "Mock" in type(raw_m).__name__) else str(raw_m)
