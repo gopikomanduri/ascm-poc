@@ -247,6 +247,15 @@ def test_corrupt_retry_ledger_fails_closed(tmp_path):
     assert _claim_attempt(tmp_path, "finding-123") is False
 
 
+def test_repair_ledger_allows_only_bounded_repeat_sessions(tmp_path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    key = "finding-bounded"
+    assert _claim_attempt(tmp_path, key) is True
+    assert _claim_attempt(tmp_path, key) is True
+    assert _claim_attempt(tmp_path, key) is True
+    assert _claim_attempt(tmp_path, key) is False
+
+
 
 def test_repair_loop_retries_with_feedback_up_to_three_attempts(tmp_path, monkeypatch):
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
