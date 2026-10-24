@@ -1124,8 +1124,18 @@ class ContinuousFounderTestingRuntime:
              "evidence": list(finding.evidence), "message": finding.message}
             for finding in evaluation.findings
         ]
+        simulation_passed = all(
+            finding.passed or (
+                finding.criterion == "verified_outcome_learning" and finding.status == "not_tested"
+            )
+            for finding in evaluation.findings
+        ) and not self.findings
         return {
+            # Full journey acceptance remains false until real verified customer
+            # outcome evidence exists. Simulation acceptance measures the gates the
+            # harness can actually exercise without fabricating customer outcomes.
             "passed": evaluation.passed and not self.findings,
+            "simulation_passed": simulation_passed,
             "criteria": criteria,
             "runtime_findings": list(self.findings),
             "verified_outcome_counts": evaluation.verified_outcome_counts,
@@ -1343,6 +1353,7 @@ class ContinuousFounderTestingRuntime:
                     "last_mentor_review": self.last_mentor_review,
                     "acceptance": self._acceptance_summary(),
                     "acceptance_passed": self._acceptance_summary()["passed"],
+                    "simulation_acceptance_passed": self._acceptance_summary()["simulation_passed"],
                     "last_focus": focus,
                     "last_product_result": result,
                     "open_findings": list(self.findings),
@@ -1391,6 +1402,7 @@ class ContinuousFounderTestingRuntime:
                 "last_mentor_review": self.last_mentor_review,
                 "acceptance": self._acceptance_summary(),
                 "acceptance_passed": self._acceptance_summary()["passed"],
+                "simulation_acceptance_passed": self._acceptance_summary()["simulation_passed"],
                 "open_findings": list(self.findings),
                 "open_questions": list(dict.fromkeys(self.open_questions)),
                 "external_publishing_enabled": False,
