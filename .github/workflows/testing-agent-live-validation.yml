@@ -10,7 +10,9 @@ permissions:
 
 concurrency:
   group: ascm-testing-agent-live-validation
-  cancel-in-progress: false
+  # New branch commits supersede stale live sessions; don't burn model calls
+  # validating an obsolete SHA while the latest acceptance run sits queued.
+  cancel-in-progress: true
 
 jobs:
   live-founder-simulation:
